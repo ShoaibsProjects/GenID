@@ -754,6 +754,27 @@ func (s *IdentityService) SyncConnector(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+func (s *IdentityService) GetConnectorUsers(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	users, err := s.connMgr.GetConnectorUsers(r.Context(), id)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to list users: %s", err.Error()))
+		return
+	}
+
+	if users == nil {
+		users = []connector.ConnectorUser{}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"connector_id": id,
+		"users":        users,
+		"total":        len(users),
+	})
+}
+
 func (s *IdentityService) TestConnectorConnection(w http.ResponseWriter, r *http.Request) {
 	var cfg connector.ConnectorConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {

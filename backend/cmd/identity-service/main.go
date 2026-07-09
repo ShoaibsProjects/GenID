@@ -255,6 +255,7 @@ func main() {
 	api.HandleFunc("/connectors/{id}/connect", svc.ConnectConnector).Methods("POST")
 	api.HandleFunc("/connectors/{id}/disconnect", svc.DisconnectConnector).Methods("POST")
 	api.HandleFunc("/connectors/{id}/sync", svc.SyncConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/users", svc.GetConnectorUsers).Methods("GET")
 
 	// ─── IAM Lifecycle Management (LCM) ────────────
 	api.HandleFunc("/lcm", svc.ExecuteLCM).Methods("POST")

@@ -192,6 +192,7 @@ func (m *Manager) SyncUsers(ctx context.Context, id string) (*SyncResult, error)
 
 	now := time.Now()
 	result.UsersTotal = len(remoteUsers)
+	result.Users = remoteUsers
 	config.LastSyncAt = &now
 	config.Status = ConnectorStatusConnected
 	config.LastError = ""
@@ -238,6 +239,15 @@ func (m *Manager) GetLastSyncResult(id string) *SyncResult {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.results[id]
+}
+
+// GetConnectorUsers fetches live users from a connector (calls ListUsers on the target).
+func (m *Manager) GetConnectorUsers(ctx context.Context, id string) ([]ConnectorUser, error) {
+	conn, err := m.GetConnector(id)
+	if err != nil {
+		return nil, err
+	}
+	return conn.ListUsers(ctx)
 }
 
 // TestConnection tests a connector configuration without registering it.

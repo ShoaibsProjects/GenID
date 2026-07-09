@@ -174,6 +174,10 @@ export function syncConnector(id: string): Promise<any> {
   return apiRequest<any>(`/api/v1/connectors/${id}/sync`, { method: "POST" })
 }
 
+export function fetchConnectorUsers(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/connectors/${id}/users`)
+}
+
 export function deleteConnector(id: string): Promise<any> {
   return apiRequest<any>(`/api/v1/connectors/${id}`, { method: "DELETE" })
 }

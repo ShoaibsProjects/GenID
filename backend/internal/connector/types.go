@@ -105,21 +105,22 @@ type ConnectorGroup struct {
 
 // SyncResult holds the result of a connector synchronization.
 type SyncResult struct {
-	ConnectorID    string    `json:"connector_id"`
-	ConnectorName  string    `json:"connector_name"`
-	ConnectorType  string    `json:"connector_type"`
-	StartedAt      time.Time `json:"started_at"`
-	CompletedAt    time.Time `json:"completed_at"`
-	UsersCreated   int       `json:"users_created"`
-	UsersUpdated   int       `json:"users_updated"`
-	UsersDeleted   int       `json:"users_deleted"`
-	UsersTotal     int       `json:"users_total"`
-	GroupsCreated  int       `json:"groups_created"`
-	GroupsUpdated  int       `json:"groups_updated"`
-	GroupsDeleted  int       `json:"groups_deleted"`
-	GroupsTotal    int       `json:"groups_total"`
-	Errors         []string  `json:"errors,omitempty"`
-	Success        bool      `json:"success"`
+	ConnectorID    string          `json:"connector_id"`
+	ConnectorName  string          `json:"connector_name"`
+	ConnectorType  string          `json:"connector_type"`
+	StartedAt      time.Time       `json:"started_at"`
+	CompletedAt    time.Time       `json:"completed_at"`
+	UsersCreated   int             `json:"users_created"`
+	UsersUpdated   int             `json:"users_updated"`
+	UsersDeleted   int             `json:"users_deleted"`
+	UsersTotal     int             `json:"users_total"`
+	Users          []ConnectorUser `json:"users,omitempty"`
+	GroupsCreated  int             `json:"groups_created"`
+	GroupsUpdated  int             `json:"groups_updated"`
+	GroupsDeleted  int             `json:"groups_deleted"`
+	GroupsTotal    int             `json:"groups_total"`
+	Errors         []string        `json:"errors,omitempty"`
+	Success        bool            `json:"success"`
 }
 
 // ProvisioningRequest represents a request to provision an identity to a target system.
