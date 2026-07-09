@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { checkAccess as apiCheckAccess } from "@/lib/api"
 
 export default function AccessPage() {
   const [identityId, setIdentityId] = useState("")
@@ -9,12 +10,8 @@ export default function AccessPage() {
 
   async function checkAccess() {
     try {
-      const res = await fetch("/api/v1/access/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identity_id: identityId, resource_id: resourceId, action: "read" }),
-      })
-      setResult(await res.json())
+      const res = await apiCheckAccess({ identity_id: identityId, resource_id: resourceId, action: "read" })
+      setResult(res)
     } catch (e: any) {
       setResult({ error: e.message })
     }

@@ -1,14 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { fetchCAEPEvents } from "@/lib/api"
 
 export default function AuditPage() {
   const [events, setEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch("/api/v1/caep/events")
-      .then((r) => r.json())
+    fetchCAEPEvents()
       .then((d) => setEvents(d.events || []))
       .catch(() => {})
       .finally(() => setLoading(false))

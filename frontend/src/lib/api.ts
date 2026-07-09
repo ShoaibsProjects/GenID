@@ -188,6 +188,36 @@ export function removeRole(data: { identity_id: string; role_id: string }): Prom
   return apiRequest<any>("/api/v1/roles/remove", { method: "POST", body: data })
 }
 
+// ─── Access ──────────────────────────────────────────────
+
+export function checkAccess(data: { identity_id: string; resource_id: string; action: string; tenant_id?: string }): Promise<any> {
+  return apiRequest<any>("/api/v1/access/check", { method: "POST", body: data })
+}
+
+export function grantAccess(data: any): Promise<any> {
+  return apiRequest<any>("/api/v1/access/grant", { method: "POST", body: data })
+}
+
+export function revokeAccess(data: any): Promise<any> {
+  return apiRequest<any>("/api/v1/access/revoke", { method: "POST", body: data })
+}
+
+// ─── CAEP ────────────────────────────────────────────────
+
+export function fetchCAEPEvents(): Promise<any> {
+  return apiRequest<any>("/api/v1/caep/events")
+}
+
+export function broadcastCAEP(data: { event_type: string; identity_id: string; receivers?: string[] }): Promise<any> {
+  return apiRequest<any>("/api/v1/caep/broadcast", { method: "POST", body: data })
+}
+
+// ─── Copilot ─────────────────────────────────────────────
+
+export function copilotQuery(data: { question: string; user_id?: string; tenant_id?: string }): Promise<any> {
+  return apiRequest<any>("/api/v1/copilot/query", { method: "POST", body: data })
+}
+
 // ─── Health ──────────────────────────────────────────────
 
 export function fetchHealth(): Promise<any> {
