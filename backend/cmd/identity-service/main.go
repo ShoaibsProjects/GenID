@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/observeid/identity-platform/internal/activities"
+	"github.com/observeid/identity-platform/internal/audit"
 	"github.com/observeid/identity-platform/internal/service"
 	"github.com/observeid/identity-platform/internal/workflow"
 	"github.com/observeid/identity-platform/pkg/telemetry"
@@ -98,6 +99,7 @@ func main() {
 
 	// ─── Initialize Services ──────────────────────────────
 	svc := service.NewIdentityService(pgPool, neo4jDriver, rdb, temporalClient)
+	auditLogStore := svc.AuditStore()
 
 	// ─── Start Temporal Worker ────────────────────────────
 	w := worker.New(temporalClient, "critical-offboarding", worker.Options{
@@ -126,10 +128,21 @@ func main() {
 	// ─── Start HTTP/gRPC Server ───────────────────────────
 	r := mux.NewRouter()
 	r.Use(otelhttp.NewMiddleware("observeid-api"))
+	r.Use(audit.LoggingMiddleware(auditLogStore))
 
 	// Serve static frontend from the frontend/out directory
-	frontendDir := "../frontend/out"
-	if _, err := os.Stat(frontendDir); err == nil {
+	frontendDir := getEnv("FRONTEND_DIR", "")
+	if frontendDir == "" {
+		// Try common relative paths based on where the binary is run
+		candidates := []string{"frontend/out", "../frontend/out", "./frontend/out"}
+		for _, c := range candidates {
+			if fi, err := os.Stat(c); err == nil && fi.IsDir() {
+				frontendDir = c
+				break
+			}
+		}
+	}
+	if frontendDir != "" {
 		fs := http.FileServer(http.Dir(frontendDir))
 		r.PathPrefix("/_next/").Handler(fs)
 
@@ -264,6 +277,11 @@ func main() {
 	api.HandleFunc("/groups/{id}", svc.DeleteGroup).Methods("DELETE")
 	api.HandleFunc("/roles/assign", svc.AssignRole).Methods("POST")
 	api.HandleFunc("/roles/remove", svc.RemoveRole).Methods("POST")
+
+	// ─── Audit / Access Logs ──────────────────────
+	api.HandleFunc("/audit/logs", svc.ListAuditLogs).Methods("GET")
+	api.HandleFunc("/audit/logs/{id}", svc.GetAuditLog).Methods("GET")
+	api.HandleFunc("/audit/stats", svc.GetAuditLogStats).Methods("GET")
 
 	// Metrics
 	r.Handle("/metrics", telemetry.MetricsHandler()).Methods("GET")

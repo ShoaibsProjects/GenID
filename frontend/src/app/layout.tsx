@@ -52,7 +52,7 @@ function Sidebar() {
         <SidebarLink href="/groups" icon={<FolderIcon />} label="Groups" />
         <SidebarLink href="/access" icon={<KeyIcon />} label="Access" />
         <SidebarLink href="/policies" icon={<ShieldIcon />} label="Policies" />
-        <SidebarLink href="/audit" icon={<AuditIcon />} label="Audit & CAEP" />
+        <SidebarLink href="/audit" icon={<AuditIcon />} label="Access Logs" />
         <SidebarLink href="/vault" icon={<LockIcon />} label="Vault" />
         <SidebarLink href="/certifications" icon={<ClipboardIcon />} label="Certifications" />
         <SidebarLink href="/sod" icon={<WarningIcon />} label="SoD Violations" />

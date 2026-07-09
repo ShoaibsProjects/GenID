@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/client"
 
+	"github.com/observeid/identity-platform/internal/audit"
 	"github.com/observeid/identity-platform/internal/connector"
 	"github.com/observeid/identity-platform/internal/vault"
 	"github.com/observeid/identity-platform/internal/workflow"
@@ -29,11 +31,13 @@ type IdentityService struct {
 	connMgr      *connector.Manager
 	provisionEng *connector.ProvisioningEngine
 	vault        *vault.Vault
+	auditLog     *audit.Store
 }
 
 func NewIdentityService(pgPool interface{}, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *IdentityService {
 	connMgr := connector.NewManager()
 	vlt := vault.NewVault(os.Getenv("VAULT_MASTER_KEY"))
+	alog := audit.NewStore(10000)
 	return &IdentityService{
 		pgPool:       pgPool,
 		neo4j:        neo4j,
@@ -42,8 +46,11 @@ func NewIdentityService(pgPool interface{}, neo4j neo4j.DriverWithContext, rdb *
 		connMgr:      connMgr,
 		provisionEng: connector.NewProvisioningEngine(connMgr),
 		vault:        vlt,
+		auditLog:     alog,
 	}
 }
+
+func (s *IdentityService) AuditStore() *audit.Store { return s.auditLog }
 
 // ─── SCIM 2.0 Handlers ─────────────────────────────────────
 
@@ -750,11 +757,22 @@ func (s *IdentityService) SyncConnector(w http.ResponseWriter, r *http.Request) 
 func (s *IdentityService) TestConnectorConnection(w http.ResponseWriter, r *http.Request) {
 	var cfg connector.ConnectorConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		s.auditLog.Append(audit.Entry{
+			Level: audit.LevelError, Service: "connector", Method: r.Method, Path: r.URL.Path,
+			Message: "TestConnection: invalid config",
+			Detail:  err.Error(), Tags: []string{"connector", "error"},
+		})
 		respondError(w, http.StatusBadRequest, "Invalid connector config")
 		return
 	}
 
 	if err := connector.TestConnection(r.Context(), cfg); err != nil {
+		s.auditLog.Append(audit.Entry{
+			Level: audit.LevelWarn, Service: "connector", Method: r.Method, Path: r.URL.Path,
+			Message: fmt.Sprintf("TestConnection: %s (%s) — %s", cfg.Type, cfg.TenantName, err.Error()),
+			Detail:  fmt.Sprintf("type=%s tenant=%s client_id=%s error=%s", cfg.Type, cfg.TenantName, cfg.ClientID, err.Error()),
+			Tags:    []string{"connector", "test", "failed"},
+		})
 		respondJSON(w, http.StatusOK, map[string]any{
 			"success": false,
 			"error":   err.Error(),
@@ -762,6 +780,11 @@ func (s *IdentityService) TestConnectorConnection(w http.ResponseWriter, r *http
 		return
 	}
 
+	s.auditLog.Append(audit.Entry{
+		Level: audit.LevelInfo, Service: "connector", Method: r.Method, Path: r.URL.Path,
+		Message: fmt.Sprintf("TestConnection: %s (%s) — SUCCESS", cfg.Type, cfg.TenantName),
+		Tags:    []string{"connector", "test", "success"},
+	})
 	respondJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Connection successful",
@@ -1137,6 +1160,44 @@ func (s *IdentityService) DeleteSecret(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// ─── Audit Log Handlers ─────────────────────────────────
+
+func (s *IdentityService) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	level := audit.Level(q.Get("level"))
+	path := q.Get("path")
+
+	entries := s.auditLog.List(limit, offset, level, path)
+	if entries == nil {
+		entries = []audit.Entry{}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"entries": entries,
+		"total":   len(entries),
+		"stats":   s.auditLog.Stats(),
+	})
+}
+
+func (s *IdentityService) GetAuditLog(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	entry, ok := s.auditLog.Get(id)
+	if !ok {
+		respondError(w, http.StatusNotFound, "Log entry not found")
+		return
+	}
+	respondJSON(w, http.StatusOK, entry)
+}
+
+func (s *IdentityService) GetAuditLogStats(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, s.auditLog.Stats())
 }
 
 // ─── Helpers ──────────────────────────────────────────────
