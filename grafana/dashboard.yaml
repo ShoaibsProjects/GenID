@@ -1,0 +1,150 @@
+# ─── Grafana Dashboard: ObserveID Identity Fabric ──────────
+# Key metrics for the Identity Control Plane
+
+apiVersion: 1
+
+providers:
+  - name: "ObserveID"
+    orgId: 1
+    folder: "ObserveID"
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards
+
+dashboards:
+  - name: "ObserveID Identity Fabric Overview"
+    uid: "observeid-overview"
+    schemaVersion: 39
+    tags: ["observeid", "identity"]
+    time:
+      from: "now-6h"
+      to: "now"
+    refresh: "30s"
+
+    templating:
+      list:
+        - name: tenant
+          type: query
+          query: "label_values(observeid_identities_total, tenant_id)"
+          refresh: 1
+          sort: 0
+
+    panels:
+      - title: "Identity Count by Type"
+        type: "piechart"
+        span: 4
+        datasource: "Prometheus"
+        targets:
+          - expr: 'sum(observeid_identities_total{tenant_id=~"$tenant"}) by (type)'
+            legendFormat: "{{ type }}"
+        options:
+          pieType: "pie"
+          legend:
+            displayMode: "table"
+            placement: "right"
+          reduceOptions:
+            values: true
+
+      - title: "Access Check Latency (P99)"
+        type: "timeseries"
+        span: 8
+        datasource: "Prometheus"
+        targets:
+          - expr: 'histogram_quantile(0.99, sum(rate(observeid_access_check_latency_ms_bucket{tenant_id=~"$tenant"}[5m])) by (le))'
+            legendFormat: "P99"
+          - expr: 'histogram_quantile(0.95, sum(rate(observeid_access_check_latency_ms_bucket{tenant_id=~"$tenant"}[5m])) by (le))'
+            legendFormat: "P95"
+          - expr: 'histogram_quantile(0.50, sum(rate(observeid_access_check_latency_ms_bucket{tenant_id=~"$tenant"}[5m])) by (le))'
+            legendFormat: "P50"
+        fieldConfig:
+          defaults:
+            unit: "ms"
+            thresholds:
+              - value: 50
+                color: "green"
+              - value: 100
+                color: "yellow"
+              - value: 500
+                color: "red"
+
+      - title: "Workflow Executions"
+        type: "timeseries"
+        span: 6
+        datasource: "Prometheus"
+        targets:
+          - expr: 'sum(rate(observeid_workflow_executions_total{tenant_id=~"$tenant"}[5m])) by (workflow_type)'
+            legendFormat: "{{ workflow_type }}"
+
+      - title: "Cedar Policy Evaluations"
+        type: "timeseries"
+        span: 6
+        datasource: "Prometheus"
+        targets:
+          - expr: 'sum(rate(observeid_cedar_evaluation_latency_ms_count{tenant_id=~"$tenant"}[5m])) by (policy_effect)'
+            legendFormat: "{{ policy_effect }}"
+
+      - title: "DLQ Size (Security Critical)"
+        type: "stat"
+        span: 4
+        datasource: "Prometheus"
+        targets:
+          - expr: 'sum(observeid_dlq_size{tenant_id=~"$tenant"})'
+        fieldConfig:
+          defaults:
+            color:
+              mode: "thresholds"
+            thresholds:
+              - value: 0
+                color: "green"
+              - value: 1
+                color: "red"
+        options:
+          reduceOptions:
+            calcs: ["sum"]
+
+      - title: "CAEP Events"
+        type: "timeseries"
+        span: 8
+        datasource: "Prometheus"
+        targets:
+          - expr: 'sum(rate(observeid_caep_events_total{tenant_id=~"$tenant"}[5m])) by (delivery_status)'
+            legendFormat: "{{ delivery_status }}"
+
+      - title: "Agent Health"
+        type: "stat"
+        span: 4
+        datasource: "Prometheus"
+        targets:
+          - expr: 'sum(observeid_agent_kill_switch_total{tenant_id=~"$tenant"})'
+            legendFormat: "Kill switches"
+        options:
+          reduceOptions:
+            calcs: ["sum"]
+
+      - title: "Top Risk Identities"
+        type: "table"
+        span: 12
+        datasource: "Prometheus"
+        targets:
+          - expr: 'topk(10, observeid_identities_total{tenant_id=~"$tenant"})'
+            format: "table"
+            instant: true
+
+    rows:
+      - title: "Security Alerts"
+        panels:
+          - title: "Unauthorized Access Attempts"
+            type: "timeseries"
+            span: 6
+            datasource: "Prometheus"
+            targets:
+              - expr: 'sum(rate(observeid_cedar_deny_total[5m])) by (action)'
+                legendFormat: "{{ action }}"
+
+          - title: "Agent Anomalies"
+            type: "timeseries"
+            span: 6
+            datasource: "Prometheus"
+            targets:
+              - expr: 'sum(rate(observeid_agent_anomalies_total{tenant_id=~"$tenant"}[5m])) by (type)'
+                legendFormat: "{{ type }}"

@@ -1,0 +1,436 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observeid
+  labels:
+    name: observeid
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: observeid-identity
+  namespace: observeid
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/observeid-identity
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: observeid-temporal
+  namespace: observeid
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-agent
+  namespace: observeid
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: observeid-db-credentials
+  namespace: observeid
+type: Opaque
+stringData:
+  DB_USER: "observeid"
+  DB_PASSWORD: "${DB_PASSWORD}"
+  DB_NAME: "observeid"
+  NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
+---
+# ─── Identity Service ──────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: observeid-identity
+  namespace: observeid
+  labels:
+    app: observeid-identity
+    component: identity-service
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: observeid-identity
+  template:
+    metadata:
+      labels:
+        app: observeid-identity
+        component: identity-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        spire.io/inject: "true"  # SPIRE workload attestation
+    spec:
+      serviceAccountName: observeid-identity
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - observeid-identity
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: identity-service
+        image: observeid/identity-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: grpc
+          protocol: TCP
+        - containerPort: 8081
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        env:
+        - name: DB_HOST
+          value: "observeid-postgres.observeid.svc.cluster.local"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: observeid-db-credentials
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: observeid-db-credentials
+              key: DB_PASSWORD
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: observeid-db-credentials
+              key: DB_NAME
+        - name: NEO4J_URI
+          value: "bolt://observeid-neo4j.observeid.svc.cluster.local:7687"
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: observeid-db-credentials
+              key: NEO4J_PASSWORD
+        - name: KAFKA_BROKERS
+          value: "observeid-kafka-headless.observeid.svc.cluster.local:9092"
+        - name: TEMPORAL_HOST
+          value: "observeid-temporal.observeid.svc.cluster.local:7233"
+        - name: REDIS_ADDR
+          value: "observeid-redis.observeid.svc.cluster.local:6379"
+        - name: QDRANT_ADDR
+          value: "observeid-qdrant.observeid.svc.cluster.local:6333"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "observeid-otel-collector.observeid.svc.cluster.local:4317"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+        volumeMounts:
+        - name: spire-agent-socket
+          mountPath: /run/spire/sockets
+          readOnly: true
+      volumes:
+      - name: spire-agent-socket
+        hostPath:
+          path: /run/spire/sockets
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: observeid-identity
+  namespace: observeid
+  labels:
+    app: observeid-identity
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: grpc
+  - port: 8081
+    targetPort: 8081
+    name: http
+  - port: 9090
+    targetPort: 9090
+    name: metrics
+  selector:
+    app: observeid-identity
+---
+# ─── Temporal Worker ──────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: observeid-temporal-worker
+  namespace: observeid
+  labels:
+    app: observeid-temporal-worker
+    component: workflow-worker
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: observeid-temporal-worker
+  template:
+    metadata:
+      labels:
+        app: observeid-temporal-worker
+      annotations:
+        spire.io/inject: "true"
+    spec:
+      serviceAccountName: observeid-identity
+      containers:
+      - name: worker
+        image: observeid/identity-service:latest
+        command: ["/app/worker"]
+        env:
+        - name: TEMPORAL_HOST
+          value: "observeid-temporal.observeid.svc.cluster.local:7233"
+        - name: DB_HOST
+          value: "observeid-postgres.observeid.svc.cluster.local"
+        - name: NEO4J_URI
+          value: "bolt://observeid-neo4j.observeid.svc.cluster.local:7687"
+        - name: KAFKA_BROKERS
+          value: "observeid-kafka-headless.observeid.svc.cluster.local:9092"
+        - name: REDIS_ADDR
+          value: "observeid-redis.observeid.svc.cluster.local:6379"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9091
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 9091
+          initialDelaySeconds: 10
+          periodSeconds: 15
+---
+# ─── Frontend ──────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: observeid-frontend
+  namespace: observeid
+  labels:
+    app: observeid-frontend
+    component: ui
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: observeid-frontend
+  template:
+    metadata:
+      labels:
+        app: observeid-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: observeid/frontend:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: NEXT_PUBLIC_API_URL
+          value: "https://api.observeid.io"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: observeid-frontend
+  namespace: observeid
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    targetPort: 3000
+    name: http
+  selector:
+    app: observeid-frontend
+---
+# ─── Ingress ───────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: observeid-ingress
+  namespace: observeid
+  annotations:
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/scheme: "internet-facing"
+    alb.ingress.kubernetes.io/ssl-policy: "ELBSecurityPolicy-TLS-1-2-2017-01"
+    alb.ingress.kubernetes.io/certificate-arn: "${CERT_ARN}"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig": { "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
+    alb.ingress.kubernetes.io/auth-session-timeout: '3600'
+    alb.ingress.kubernetes.io/wafv2-acl-arn: "${WAF_ARN}"
+spec:
+  rules:
+  - host: app.observeid.io
+    http:
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: ssl-redirect
+            port:
+              name: use-annotation
+      - path: /api/*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: observeid-identity
+            port:
+              number: 8081
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: observeid-frontend
+            port:
+              number: 3000
+  - host: api.observeid.io
+    http:
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: ssl-redirect
+            port:
+              name: use-annotation
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: observeid-identity
+            port:
+              number: 8081
+---
+# ─── Network Policy ───────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: observeid-default-deny
+  namespace: observeid
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: observeid-identity-network
+  namespace: observeid
+spec:
+  podSelector:
+    matchLabels:
+      app: observeid-identity
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector: {}
+    ports:
+    - port: 8080
+      protocol: TCP
+    - port: 8081
+      protocol: TCP
+    - port: 9090
+      protocol: TCP
+---
+# ─── PodDisruptionBudget ──────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: observeid-identity-pdb
+  namespace: observeid
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: observeid-identity
+---
+# ─── HorizontalPodAutoscaler ──────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: observeid-identity-hpa
+  namespace: observeid
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: observeid-identity
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

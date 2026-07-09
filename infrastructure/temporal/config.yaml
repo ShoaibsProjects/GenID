@@ -1,0 +1,46 @@
+# ─── Temporal Server Dynamic Configuration ───────────────────
+# Optimized for identity workload patterns
+
+limit.maxIDLength:
+  - value: 1000
+
+limit.numPendingActivities:
+  - value: 5000
+
+limit.numPendingChildren:
+  - value: 5000
+
+limit.numPendingSignals:
+  - value: 2000
+
+frontend.visibilityListMaxQPS:
+  - value: 100
+
+frontend.namespaceCount:
+  - value: 50
+
+history.maximumEventCountPerExecution:
+  - value: 51200
+
+history.maximumTotalEventBytesPerExecution:
+  - value: 52428800
+
+history.defaultNamespaceRetention:
+  - value: 30d
+
+system.forceSearchAttributes:
+  - value: true
+    constraints: {}
+
+system.enableVisibilityToN:
+  - value: true
+    constraints: {}
+
+matching.numTaskqueuePartitions:
+  - value: 100
+
+worker.maxConcurrentActivityExecutionSize:
+  - value: 500
+
+worker.maxConcurrentWorkflowTaskExecutionSize:
+  - value: 500

@@ -1,0 +1,632 @@
+// ─── GraphQL Schema ─────────────────────────────────────────
+// ObserveID Identity Fabric API
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+type Query {
+  # Identity
+  identities(filter: IdentityFilter, limit: Int, offset: Int): IdentityConnection!
+  identity(id: ID!): Identity
+  identityByEmail(email: String!): Identity
+  identityEntitlements(id: ID!): [EntitlementPath!]!
+  blastRadius(id: ID!): [BlastRadiusEntry!]!
+
+  # NHI / Agents
+  agents(filter: AgentFilter): AgentConnection!
+  agent(id: ID!): NonHumanIdentity
+  agentCard(id: ID!): AgentCard!
+
+  # Access
+  checkAccess(input: AccessCheckInput!): AccessDecision!
+  accessHistory(identityId: ID!, limit: Int): [AccessEvent!]!
+
+  # Resources
+  resources(filter: ResourceFilter): ResourceConnection!
+  resource(id: ID!): Resource
+
+  # Roles
+  roles(filter: RoleFilter): RoleConnection!
+  role(id: ID!): Role
+
+  # Policies
+  policies: [CedarPolicy!]!
+  policy(id: ID!): CedarPolicy
+
+  # AI Copilot
+  copilotQuery(question: String!): CopilotResponse!
+
+  # SoD
+  sodViolations: [SoDViolation!]!
+  sodRules: [SoDRule!]!
+
+  # Audit
+  auditLog(filter: AuditFilter): [AuditEntry!]!
+
+  # CAEP
+  caepEvents(filter: CAEPFilter): [CAEPEvent!]!
+
+  # Certifications
+  certificationCampaigns: [CertificationCampaign!]!
+  certificationEntries(campaignId: ID!): [CertificationEntry!]!
+
+  # Dashboard
+  dashboardStats: DashboardStats!
+  securityScore: SecurityScore!
+}
+
+type Mutation {
+  # Identity
+  createIdentity(input: CreateIdentityInput!): Identity!
+  updateIdentity(id: ID!, input: UpdateIdentityInput!): Identity!
+  deleteIdentity(id: ID!): Boolean!
+  offboardIdentity(id: ID!, reason: String!): WorkflowResult!
+
+  # Access
+  grantAccess(input: GrantAccessInput!): WorkflowResult!
+  revokeAccess(input: RevokeAccessInput!): WorkflowResult!
+  emergencyRevokeAccess(input: RevokeAccessInput!): WorkflowResult!
+  requestJustInTimeAccess(input: JITAccessInput!): WorkflowResult!
+
+  # Agents / NHI
+  registerAgent(input: RegisterAgentInput!): NonHumanIdentity!
+  updateAgent(id: ID!, input: UpdateAgentInput!): NonHumanIdentity!
+  agentKillSwitch(id: ID!, reason: String!): KillSwitchResult!
+  delegateAgent(input: DelegateAgentInput!): Boolean!
+
+  # Roles
+  createRole(input: CreateRoleInput!): Role!
+  assignRoleToIdentity(identityId: ID!, roleId: ID!): Boolean!
+  removeRoleFromIdentity(identityId: ID!, roleId: ID!): Boolean!
+
+  # Policies
+  createPolicy(input: CreatePolicyInput!): CedarPolicy!
+  updatePolicy(id: ID!, input: UpdatePolicyInput!): CedarPolicy!
+  simulatePolicy(policyId: ID!, targetIdentityId: ID!): PolicySimulationResult!
+
+  # Certifications
+  startCertificationCampaign(input: CampaignInput!): CertificationCampaign!
+  certifyAccess(entryId: ID!, decision: String!, notes: String): CertificationEntry!
+
+  # SoD
+  createSoDRule(input: CreateSoDRuleInput!): SoDRule!
+  resolveViolation(violationId: ID!, resolution: String!): SoDViolation!
+
+  # CAEP
+  broadcastCAEP(input: CAEPBroadcastInput!): Boolean!
+
+  # AI
+  copilotQuery(question: String!): CopilotResponse!
+}
+
+type Subscription {
+  accessChanged(identityId: ID): AccessChangeEvent!
+  caepEventReceived: CAEPEvent!
+  anomalyDetected: AnomalyAlert!
+  identityUpdated(identityId: ID): IdentityUpdateEvent!
+}
+
+# ─── Core Types ─────────────────────────────────────────────
+
+type Identity {
+  id: ID!
+  tenantId: String!
+  type: IdentityType!
+  status: IdentityStatus!
+  email: String!
+  displayName: String!
+  department: String
+  employeeId: String
+  manager: Identity
+  managerId: String
+  riskScore: Float!
+  riskFactors: [String!]!
+  assuranceLevel: String!
+  roles: [RoleEdge!]!
+  directEntitlements: [Entitlement!]!
+  sessions: [Session!]!
+  createdAt: DateTime!
+  lastAccessedAt: DateTime
+  lastReviewedAt: DateTime
+}
+
+type NonHumanIdentity {
+  id: ID!
+  tenantId: String!
+  name: String!
+  type: IdentityType!
+  status: IdentityStatus!
+  agentCardId: String
+  protocols: [String!]!
+  owner: Identity
+  ownerId: String
+  teamId: String
+  createdBy: String
+  deploymentEnvironment: String
+  capabilities: [String!]!
+  isGoverned: Boolean!
+  riskScore: Float!
+  delegatedAgents: [NonHumanIdentity!]
+  createdAt: DateTime!
+  expiresAt: DateTime
+}
+
+type Role {
+  id: ID!
+  name: String!
+  description: String
+  type: String!
+  isAutoAssigned: Boolean!
+  approvalRequired: Boolean!
+  maxDurationHours: Int
+  createdByRolmining: Boolean!
+  confidenceScore: Float
+  isActive: Boolean!
+  members: [Identity!]!
+  entitlements: [Entitlement!]!
+}
+
+type Entitlement {
+  id: ID!
+  appName: String!
+  permissionLevel: String!
+  entitlementType: String!
+  isToxic: Boolean!
+  riskClassification: String!
+  lastUsedAt: DateTime
+  usageCount90d: Int!
+  isRubberband: Boolean!
+  resource: Resource
+}
+
+type Resource {
+  id: ID!
+  name: String!
+  type: String!
+  criticality: String!
+  dataClassification: String!
+  ownerTeam: String!
+  connectionType: String!
+  healthStatus: String!
+}
+
+type Session {
+  sessionId: ID!
+  identityId: ID!
+  authMethod: String!
+  assuranceLevel: String!
+  isActive: Boolean!
+  createdAt: DateTime!
+  expiresAt: DateTime!
+  lastActivityAt: DateTime!
+}
+
+type AccessDecision {
+  allowed: Boolean!
+  reason: String
+  evaluatedPolicies: [String!]!
+  evaluationTimeMs: Float!
+}
+
+type CedarPolicy {
+  id: ID!
+  policyId: String!
+  effect: String!
+  policySource: String!
+  isActive: Boolean!
+  version: Int!
+  createdAt: DateTime!
+}
+
+type AgentCard {
+  agentId: ID!
+  agentType: String!
+  capabilities: [String!]!
+  protocols: [String!]!
+  ownerId: ID!
+  deploymentEnv: String!
+  publicKey: String!
+  signatureScheme: String!
+  issuedAt: DateTime!
+  expiresAt: DateTime!
+}
+
+# ─── AI Copilot ─────────────────────────────────────────────
+
+type CopilotResponse {
+  answer: String!
+  confidenceScore: Float!
+  accessPaths: [AccessPath!]!
+  cypherQueries: [String!]!
+  isFlagged: Boolean!
+  recommendations: [String!]!
+  auditId: ID!
+}
+
+type AccessPath {
+  identity: String!
+  role: String!
+  entitlement: String!
+  resource: String!
+  criticality: String!
+  depth: Int!
+  source: String!
+}
+
+# ─── Blast Radius ───────────────────────────────────────────
+
+type BlastRadiusEntry {
+  resource: String!
+  criticality: String!
+  permission: String!
+  pathDepth: Int!
+  pathTypes: [String!]!
+}
+
+type EntitlementPath {
+  entitlement: Entitlement!
+  role: Role
+  resource: Resource!
+  source: String!
+}
+
+# ─── SoD ────────────────────────────────────────────────────
+
+type SoDViolation {
+  id: ID!
+  identity: Identity!
+  riskScore: Float!
+  conflictingEntitlements: [Entitlement!]!
+  toxicEntitlements: [Entitlement!]!
+  detectedAt: DateTime!
+  status: String!
+}
+
+type SoDRule {
+  id: ID!
+  name: String!
+  description: String
+  severity: String!
+  isActive: Boolean!
+}
+
+# ─── Dashboard ──────────────────────────────────────────────
+
+type DashboardStats {
+  totalIdentities: Int!
+  activeIdentities: Int!
+  totalNHIs: Int!
+  ungovernedNHIs: Int!
+  pendingAccessReviews: Int!
+  openSoDViolations: Int!
+  activeWorkflows: Int!
+  caepEventsLast24h: Int!
+  identitiesByType: [TypeCount!]!
+}
+
+type TypeCount {
+  type: String!
+  count: Int!
+}
+
+type SecurityScore {
+  overall: Float!
+  governance: Float!
+  accessControl: Float!
+  compliance: Float!
+  threatDetection: Float!
+}
+
+# ─── Workflow ───────────────────────────────────────────────
+
+type WorkflowResult {
+  workflowId: ID!
+  status: String!
+  message: String!
+}
+
+type KillSwitchResult {
+  status: String!
+  agentId: ID!
+  cascadeCount: Int!
+  message: String!
+}
+
+# ─── Audit & CAEP ──────────────────────────────────────────
+
+type AuditEntry {
+  id: ID!
+  eventType: String!
+  actorId: String!
+  action: String!
+  resource: String
+  timestamp: DateTime!
+  correlationId: String!
+}
+
+type CAEPEvent {
+  id: ID!
+  eventType: String!
+  identityId: ID
+  sessionId: ID
+  initiatingEntity: String!
+  deliveryStatus: String!
+  createdAt: DateTime!
+}
+
+# ─── Certifications ───────────────────────────────────────
+
+type CertificationCampaign {
+  id: ID!
+  name: String!
+  campaignType: String!
+  status: String!
+  startsAt: DateTime!
+  endsAt: DateTime!
+  entries: [CertificationEntry!]!
+}
+
+type CertificationEntry {
+  id: ID!
+  identity: Identity!
+  status: String!
+  decision: String
+  certifier: Identity
+  notes: String
+  createdAt: DateTime!
+}
+
+# ─── Events ────────────────────────────────────────────────
+
+type AccessChangeEvent {
+  userId: ID!
+  resourceId: ID!
+  changeType: String!
+  timestamp: DateTime!
+  affectedPermissions: [String!]!
+}
+
+type IdentityUpdateEvent {
+  identityId: ID!
+  changedFields: [String!]!
+  timestamp: DateTime!
+}
+
+type AnomalyAlert {
+  agentId: ID!
+  anomalyType: String!
+  severity: String!
+  description: String!
+  timestamp: DateTime!
+}
+
+# ─── Inputs ────────────────────────────────────────────────
+
+input CreateIdentityInput {
+  email: String!
+  displayName: String!
+  identityType: IdentityType!
+  department: String
+  employeeId: String
+  managerId: String
+  initialRoles: [String!]
+  attributes: JSON
+}
+
+input UpdateIdentityInput {
+  displayName: String
+  department: String
+  managerId: String
+  status: IdentityStatus
+  attributes: JSON
+}
+
+input GrantAccessInput {
+  identityId: ID!
+  resourceId: ID!
+  roleId: ID
+  durationHours: Int
+  reason: String!
+  requiresApproval: Boolean
+}
+
+input RevokeAccessInput {
+  identityId: ID!
+  entitlementId: ID!
+  reason: String!
+}
+
+input JITAccessInput {
+  identityId: ID!
+  resourceId: ID!
+  durationMins: Int!
+  reason: String!
+}
+
+input AccessCheckInput {
+  identityId: ID!
+  resourceId: ID!
+  action: String!
+  context: JSON
+}
+
+input RegisterAgentInput {
+  name: String!
+  agentType: String!
+  protocols: [String!]
+  ownerId: ID!
+  teamId: String
+  deploymentEnvironment: String
+  requestedCapabilities: [String!]
+}
+
+input UpdateAgentInput {
+  name: String
+  status: IdentityStatus
+  capabilities: [String!]
+  ownerId: ID
+}
+
+input DelegateAgentInput {
+  parentAgentId: ID!
+  childAgentId: ID!
+  scopeNarrowing: [String!]
+  maxDepth: Int
+}
+
+input CreateRoleInput {
+  name: String!
+  description: String
+  type: String!
+  isAutoAssigned: Boolean
+  approvalRequired: Boolean
+}
+
+input CreatePolicyInput {
+  policyId: String!
+  effect: String!
+  policySource: String!
+}
+
+input UpdatePolicyInput {
+  policySource: String
+  isActive: Boolean
+}
+
+input CreateSoDRuleInput {
+  name: String!
+  description: String
+  conflictingEntitlementIds: [ID!]!
+  severity: String!
+}
+
+input CAEPBroadcastInput {
+  eventType: String!
+  identityId: ID!
+  receivers: [String!]
+}
+
+input CampaignInput {
+  name: String!
+  campaignType: String!
+  endDate: DateTime!
+}
+
+input IdentityFilter {
+  type: IdentityType
+  status: IdentityStatus
+  department: String
+  search: String
+  minRiskScore: Float
+}
+
+input AgentFilter {
+  type: IdentityType
+  status: IdentityStatus
+  isGoverned: Boolean
+  search: String
+}
+
+input ResourceFilter {
+  type: String
+  criticality: String
+  dataClassification: String
+}
+
+input RoleFilter {
+  type: String
+  search: String
+}
+
+input AuditFilter {
+  eventType: String
+  actorId: String
+  dateFrom: DateTime
+  dateTo: DateTime
+}
+
+input CAEPFilter {
+  eventType: String
+  identityId: ID
+  status: String
+}
+
+# ─── Relationships ──────────────────────────────────────────
+
+type RoleEdge {
+  role: Role!
+  assignedAt: DateTime!
+  assignedBy: String
+  expiresAt: DateTime
+  source: String!
+  isActive: Boolean!
+}
+
+type IdentityConnection {
+  edges: [Identity!]!
+  totalCount: Int!
+  pageInfo: PageInfo!
+}
+
+type AgentConnection {
+  edges: [NonHumanIdentity!]!
+  totalCount: Int!
+  pageInfo: PageInfo!
+}
+
+type ResourceConnection {
+  edges: [Resource!]!
+  totalCount: Int!
+  pageInfo: PageInfo!
+}
+
+type RoleConnection {
+  edges: [Role!]!
+  totalCount: Int!
+  pageInfo: PageInfo!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+type PolicySimulationResult {
+  affectedIdentities: [Identity!]!
+  accessChanges: [AccessChange!]!
+  riskImpact: String!
+}
+
+type AccessChange {
+  identityId: ID!
+  resourceId: ID!
+  currentAccess: Boolean!
+  newAccess: Boolean!
+}
+
+# ─── Scalars ────────────────────────────────────────────────
+
+scalar DateTime
+scalar JSON
+
+enum IdentityType {
+  HUMAN
+  SERVICE_ACCOUNT
+  AI_AGENT
+  ROBOT
+  IOT_DEVICE
+  RPA_BOT
+  API_KEY
+}
+
+enum IdentityStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  TERMINATED
+  REVOKED
+  PENDING_REVIEW
+}

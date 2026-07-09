@@ -1,0 +1,179 @@
+syntax = "proto3";
+package observeid.event.v1;
+
+option go_package = "github.com/observeid/identity-platform/pkg/proto/event/v1";
+
+// ─── Core Identity Events ─────────────────────────────────
+
+message UserCreated {
+  string event_id = 1;
+  string identity_id = 2;
+  string tenant_id = 3;
+  string email = 4;
+  string display_name = 5;
+  string identity_type = 6;  // human, service_account, ai_agent, robot, iot_device
+  string department = 7;
+  string employee_id = 8;
+  string manager_id = 9;
+  string source = 10;        // hris, scim, manual, agent_registration
+  string requested_by = 11;
+  int64 timestamp = 12;
+  map<string, string> attributes = 13;
+}
+
+message UserUpdated {
+  string event_id = 1;
+  string identity_id = 2;
+  string tenant_id = 3;
+  repeated string changed_fields = 4;
+  string previous_status = 5;
+  string new_status = 6;
+  string updated_by = 7;
+  int64 timestamp = 8;
+  map<string, string> attribute_changes = 9;
+}
+
+message UserDeleted {
+  string event_id = 1;
+  string identity_id = 2;
+  string tenant_id = 3;
+  string reason = 4;
+  string deleted_by = 5;
+  int64 timestamp = 6;
+}
+
+// ─── Access Events ────────────────────────────────────────
+
+message AccessGranted {
+  string event_id = 1;
+  string identity_id = 2;
+  string tenant_id = 3;
+  string entitlement_id = 4;
+  string resource_id = 5;
+  string role_id = 6;
+  string grant_source = 7;   // direct, role_inheritance, birthright, emergency
+  string granted_by = 8;
+  string approval_ticket = 9;
+  int64 expires_at = 10;     // unix timestamp for JIT access
+  int64 timestamp = 11;
+  bool requires_approval = 12;
+}
+
+message AccessRevoked {
+  string event_id = 1;
+  string identity_id = 2;
+  string tenant_id = 3;
+  string entitlement_id = 4;
+  string resource_id = 5;
+  string reason = 6;
+  string revoked_by = 7;
+  string revocation_source = 8;  // manual, policy, certification, emergency
+  bool cascading = 9;
+  int64 timestamp = 10;
+}
+
+message AccessCertified {
+  string event_id = 1;
+  string campaign_id = 2;
+  string certifier_id = 3;
+  string identity_id = 4;
+  repeated string certified_entitlements = 5;
+  repeated string revoked_entitlements = 6;
+  int64 timestamp = 7;
+}
+
+// ─── Policy Events ────────────────────────────────────────
+
+message PolicyCreated {
+  string event_id = 1;
+  string policy_id = 2;
+  string tenant_id = 3;
+  string policy_source = 4;
+  string created_by = 5;
+  int64 timestamp = 6;
+}
+
+message PolicyEvaluated {
+  string event_id = 1;
+  string principal_id = 2;
+  string principal_type = 3;
+  string action = 4;
+  string resource = 5;
+  string decision = 6;      // allow, deny, not_applicable
+  string policy_id = 7;
+  int64 evaluation_time_ms = 8;
+  int64 timestamp = 9;
+}
+
+// ─── Agent / NHI Events ───────────────────────────────────
+
+message AgentOnboarded {
+  string event_id = 1;
+  string agent_id = 2;
+  string tenant_id = 3;
+  string agent_type = 4;
+  string agent_name = 5;
+  string protocol = 6;       // mcp, a2a, oauth2, spiffe
+  string owner_id = 7;
+  repeated string capabilities = 8;
+  string deployment_env = 9;
+  string agent_card_id = 10;
+  int64 expires_at = 11;
+  int64 timestamp = 12;
+}
+
+message AgentDelegated {
+  string event_id = 1;
+  string parent_agent_id = 2;
+  string child_agent_id = 3;
+  string scope_delegated = 4;
+  int32 max_depth_remaining = 5;
+  int64 timestamp = 6;
+}
+
+message AgentRevoked {
+  string event_id = 1;
+  string agent_id = 2;
+  string reason = 3;
+  string initiated_by = 4;
+  bool cascading = 5;
+  repeated string credentials_revoked = 6;
+  int64 timestamp = 7;
+}
+
+// ─── CAEP / Security Events ───────────────────────────────
+
+message CAEPSessionRevoked {
+  string event_id = 1;
+  string identity_id = 2;
+  string session_id = 3;
+  string initiating_entity = 4;  // admin, user, policy, system
+  string reason_admin = 5;
+  string reason_user = 6;
+  repeated string downstream_receivers = 7;
+  int64 timestamp = 8;
+}
+
+message CAEPAssuranceLevelChanged {
+  string event_id = 1;
+  string identity_id = 2;
+  string previous_level = 3;
+  string current_level = 4;
+  string change_direction = 5;
+  string reason = 6;
+  int64 timestamp = 7;
+}
+
+// ─── Audit / Ledger Events ────────────────────────────────
+
+message AuditRecord {
+  string event_id = 1;
+  string aggregate_type = 2;
+  string aggregate_id = 3;
+  string event_type = 4;
+  bytes payload = 5;
+  string recorded_by = 6;
+  int64 timestamp = 7;
+  string tenant_id = 8;
+  string correlation_id = 9;
+}

@@ -1,0 +1,69 @@
+# ─── ObserveID ──────────────────────────────────────────────
+# Environment
+.env
+.env.local
+.env.production
+
+# Dependencies
+**/node_modules
+**/vendor
+
+# Build outputs
+**/build
+**/dist
+**/.next
+**/out
+
+# Go
+**/*.exe
+**/*.exe~
+**/*.dll
+**/*.so
+**/*.dylib
+**/*.test
+**/*.out
+**/go.work.sum
+**/vendor
+
+# Generated
+**/pkg/proto
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+**/.docker
+
+# Terraform
+**/*.tfstate
+**/*.tfstate.*
+**/.terraform
+
+# Logs
+**/*.log
+**/logs
+
+# Temporal
+**/temporal-dev
+
+# Certificates
+**/*.pem
+**/*.key
+**/*.cert
+
+# Secrets
+**/secrets.*
+**/.vault-token
+**/.vault-password
+
+# Temp
+**/tmp
+**/temp

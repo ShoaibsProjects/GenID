@@ -1,0 +1,42 @@
+# ─── SPIRE Server Configuration ────────────────────────────
+
+server:
+  bind_address: "0.0.0.0"
+  bind_port: 8081
+  trust_domain: "observeid.io"
+  data_dir: "/run/spire/data"
+  log_level: "INFO"
+  upstream_bundle: true
+  ca_key_type: "ec-p256"
+  ca_ttl: "168h"
+  svid_ttl: "1h"
+
+  experimental:
+    require_hinting: true
+    jwt_issuer: "observeid.io"
+
+plugins:
+  DataStore:
+    sql:
+      plugin_data:
+        database_type: "postgres"
+        connection_string: "postgresql://spire:${SPIRE_PASSWORD}@observeid-postgres.observeid.svc.cluster.local:5432/spire?sslmode=disable"
+
+  NodeAttestor:
+    k8s_sat:
+      plugin_data:
+        clusters:
+          - service_account_allow_list: ["spire:spire-agent"]
+            allowed_pod_label_keys: ["app"]
+
+  NodeResolver:
+    noop:
+      plugin_data: {}
+
+  KeyManager:
+    memory:
+      plugin_data: {}
+
+  Notifier:
+    k8s_bundle:
+      plugin_data: {}

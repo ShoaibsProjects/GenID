@@ -1,0 +1,71 @@
+# ─── SPIRE Configuration ────────────────────────────────────
+# Workload identity for every ObserveID service
+
+apiVersion: spire.spiffe.io/v1alpha1
+kind: ClusterSPIFFEID
+metadata:
+  name: observeid-workloads
+spec:
+  spiffeIDTemplate: "spiffe://observeid.io/ns/{{ .PodMeta.Namespace }}/sa/{{ .PodSpec.ServiceAccountName }}"
+  podSelector:
+    matchLabels:
+      spire.io/inject: "true"
+  workloadSelectorTemplates:
+    - "k8s:ns:observeid"
+  dnsNameTemplates:
+    - "{{ .PodMeta.Name }}.observeid.svc.cluster.local"
+---
+# ─── SPIRE Agent DaemonSet ─────────────────────────────────
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spire-agent
+  namespace: spire
+  labels:
+    app: spire-agent
+spec:
+  selector:
+    matchLabels:
+      app: spire-agent
+  template:
+    metadata:
+      labels:
+        app: spire-agent
+    spec:
+      serviceAccountName: spire-agent
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: spire-agent
+        image: ghcr.io/spiffe/spire-agent:1.9.4
+        args: ["-config", "/run/spire/config/agent.conf"]
+        volumeMounts:
+        - name: spire-config
+          mountPath: /run/spire/config
+          readOnly: true
+        - name: spire-bundle
+          mountPath: /run/spire/bundle
+          readOnly: true
+        - name: spire-sockets
+          mountPath: /run/spire/sockets
+        securityContext:
+          privileged: false
+          capabilities:
+            add: ["SYS_PTRACE"]
+        livenessProbe:
+          exec:
+            command: ["/opt/spire/bin/spire-agent", "api", "fetch", "x509"]
+          initialDelaySeconds: 15
+          periodSeconds: 30
+      volumes:
+      - name: spire-config
+        configMap:
+          name: spire-agent
+      - name: spire-bundle
+        configMap:
+          name: spire-bundle
+      - name: spire-sockets
+        hostPath:
+          path: /run/spire/sockets
+          type: DirectoryOrCreate

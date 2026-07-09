@@ -1,0 +1,107 @@
+// ─── ObserveID Cedar Policy Schema ────────────────────────────
+// Strongly-typed schema for the Identity Fabric ABAC/RBAC system
+// All policies are validated against this schema at CI time
+
+// ─── Entity Definitions ──────────────────────────────────────
+
+entity User = {
+    "tenant_id": String,
+    "department": String,
+    "division": String,
+    "clearance": Long,
+    "region": String,
+    "is_active": Boolean,
+    "is_contractor": Boolean,
+    "employment_type": String,
+    "assurance_level": String,
+};
+
+entity NonHumanIdentity = {
+    "tenant_id": String,
+    "type": String,
+    "framework": String,
+    "is_governed": Boolean,
+    "deployment_env": String,
+};
+
+entity Role in [User, NonHumanIdentity] = {
+    "name": String,
+    "type": String,
+    "is_auto_assigned": Boolean,
+};
+
+entity Entitlement = {
+    "app_name": String,
+    "permission_level": String,
+    "entitlement_type": String,
+    "risk_classification": String,
+    "is_toxic": Boolean,
+};
+
+entity Resource = {
+    "name": String,
+    "type": String,
+    "criticality": String,
+    "data_classification": String,
+    "owner_department": String,
+    "region": String,
+};
+
+entity Group = {
+    "name": String,
+    "group_type": String,
+    "is_sensitive": Boolean,
+};
+
+entity Agent = {
+    "agent_id": String,
+    "agent_type": String,
+    "owner_id": String,
+    "is_revoked": Boolean,
+    "deployment_env": String,
+    "auth_protocol": String,
+};
+
+// ─── Action Definitions ──────────────────────────────────────
+
+action ReadDocument appliesTo {
+    principal: [User, Role, NonHumanIdentity],
+    resource: Document,
+    context: { "mfa_present": Boolean, "source_ip": ipaddr },
+};
+
+action WriteDocument appliesTo {
+    principal: [User, Role],
+    resource: Document,
+    context: { "mfa_present": Boolean, "source_ip": ipaddr, "approval_token": String },
+};
+
+action AdminAccess appliesTo {
+    principal: [User, Agent],
+    resource: Resource,
+    context: { "mfa_present": Boolean, "session_age_ms": Long, "device_posture": String },
+};
+
+action ReadAccess appliesTo {
+    principal: [User, Agent, NonHumanIdentity],
+    resource: Resource,
+    context: { "mfa_present": Boolean, "source_ip": ipaddr },
+};
+
+action RevokeAccess appliesTo {
+    principal: [User, Agent],
+    resource: [Entitlement, Resource],
+    context: { "emergency": Boolean, "reason": String },
+};
+
+action DelegatedAccess appliesTo {
+    principal: [Agent],
+    resource: Resource,
+    context: { "delegation_depth": Long, "original_principal": Entity },
+};
+
+action ToolCall appliesTo {
+    principal: [Agent],
+    resource: [Resource, Document],
+    context: { "tool_name": String, "mcp_session_id": String, "intent": String },
+};

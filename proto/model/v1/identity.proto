@@ -1,0 +1,209 @@
+syntax = "proto3";
+package observeid.model.v1;
+
+option go_package = "github.com/observeid/identity-platform/pkg/proto/model/v1";
+
+// ─── Identity ─────────────────────────────────────────────
+
+enum IdentityType {
+  IDENTITY_TYPE_UNSPECIFIED = 0;
+  IDENTITY_TYPE_HUMAN = 1;
+  IDENTITY_TYPE_SERVICE_ACCOUNT = 2;
+  IDENTITY_TYPE_AI_AGENT = 3;
+  IDENTITY_TYPE_ROBOT = 4;
+  IDENTITY_TYPE_IOT_DEVICE = 5;
+  IDENTITY_TYPE_RPA_BOT = 6;
+  IDENTITY_TYPE_API_KEY = 7;
+}
+
+enum IdentityStatus {
+  IDENTITY_STATUS_UNSPECIFIED = 0;
+  IDENTITY_STATUS_ACTIVE = 1;
+  IDENTITY_STATUS_INACTIVE = 2;
+  IDENTITY_STATUS_SUSPENDED = 3;
+  IDENTITY_STATUS_TERMINATED = 4;
+  IDENTITY_STATUS_REVOKED = 5;
+  IDENTITY_STATUS_PENDING_REVIEW = 6;
+}
+
+message Identity {
+  string id = 1;
+  string tenant_id = 2;
+  IdentityType type = 3;
+  IdentityStatus status = 4;
+  string email = 5;
+  string display_name = 6;
+  string department = 7;
+  string employee_id = 8;
+  string manager_id = 9;
+  double risk_score = 10;
+  repeated string risk_factors = 11;
+  string assurance_level = 12;
+  int64 created_at = 13;
+  int64 last_accessed_at = 14;
+  int64 last_reviewed_at = 15;
+  map<string, string> attributes = 16;
+}
+
+message NonHumanIdentity {
+  string id = 1;
+  string tenant_id = 2;
+  IdentityType type = 3;
+  IdentityStatus status = 4;
+  string name = 5;
+  string agent_card_id = 6;
+  repeated string protocols = 7;
+  string owner_id = 8;
+  string team_id = 9;
+  string created_by = 10;
+  string deployment_environment = 11;
+  int64 last_rotated_at = 12;
+  int64 expires_at = 13;
+  double risk_score = 14;
+  bool is_governed = 15;
+  string framework = 16;
+  repeated string capabilities = 17;
+  map<string, string> attributes = 18;
+}
+
+// ─── Entitlements & Access ────────────────────────────────
+
+message Entitlement {
+  string id = 1;
+  string app_name = 2;
+  string permission_level = 3;
+  string entitlement_type = 4;
+  bool is_toxic = 5;
+  string risk_classification = 6;
+  int64 last_used_at = 7;
+  int32 usage_count_90d = 8;
+  bool is_rubberband = 9;
+  map<string, string> attributes = 10;
+}
+
+message Resource {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  string criticality = 4;
+  string data_classification = 5;
+  string owner_team = 6;
+  string connection_type = 7;
+  string health_status = 8;
+  map<string, string> attributes = 9;
+}
+
+message Role {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string type = 4;
+  bool is_auto_assigned = 5;
+  bool approval_required = 6;
+  int32 max_duration_hours = 7;
+  bool created_by_rolmining = 8;
+  double confidence_score = 9;
+  map<string, string> attributes = 10;
+}
+
+message Session {
+  string session_id = 1;
+  string identity_id = 2;
+  int64 created_at = 3;
+  int64 expires_at = 4;
+  int64 last_activity_at = 5;
+  string auth_method = 6;
+  string assurance_level = 7;
+  string device_id = 8;
+  string ip_address = 9;
+  bool is_active = 10;
+}
+
+// ─── Workflow Definitions ─────────────────────────────────
+
+message OffboardInput {
+  string identity_id = 1;
+  IdentityType identity_type = 2;
+  string reason = 3;
+  string requested_by = 4;
+  repeated string subjects_of_concern = 5;
+  string tenant_id = 6;
+}
+
+message OnboardInput {
+  string email = 1;
+  string display_name = 2;
+  string identity_type = 3;
+  string department = 4;
+  string employee_id = 5;
+  string manager_id = 6;
+  string source = 7;
+  string requested_by = 8;
+  string tenant_id = 9;
+  repeated string initial_roles = 10;
+  map<string, string> attributes = 11;
+}
+
+message GrantAccessInput {
+  string identity_id = 1;
+  string resource_id = 2;
+  string role_id = 3;
+  string requested_by = 4;
+  int32 duration_hours = 5;    // 0 = permanent, >0 = JIT
+  string reason = 6;
+  string tenant_id = 7;
+  bool requires_approval = 8;
+}
+
+message RevokeAccessInput {
+  string identity_id = 1;
+  string entitlement_id = 2;
+  string reason = 3;
+  string revoked_by = 4;
+  bool is_emergency = 5;
+  string tenant_id = 6;
+}
+
+// ─── Agent Onboarding ─────────────────────────────────────
+
+message AgentOnboardInput {
+  string name = 1;
+  string agent_type = 2;
+  repeated string protocols = 3;
+  string owner_id = 4;
+  string team_id = 5;
+  string deployment_environment = 6;
+  repeated string requested_capabilities = 7;
+  string created_by = 8;
+  string tenant_id = 9;
+}
+
+message AgentCard {
+  string agent_id = 1;
+  string agent_type = 2;
+  string owner_id = 3;
+  string team_id = 4;
+  repeated string capabilities = 5;
+  string deployment_env = 6;
+  repeated string protocols = 7;
+  string public_key = 8;
+  int64 issued_at = 9;
+  int64 expires_at = 10;
+  string signature_scheme = 11;
+  bytes signature = 12;
+}
+
+// ─── Cedar Policy ─────────────────────────────────────────
+
+message CedarPolicy {
+  string id = 1;
+  string effect = 2;
+  string principal = 3;
+  string action = 4;
+  string resource = 5;
+  string condition = 6;
+  bool is_active = 7;
+  int32 version = 8;
+  string source = 9;
+  string tenant_id = 10;
+}

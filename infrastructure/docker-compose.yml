@@ -1,0 +1,276 @@
+# version removed - obsolete
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  observeid-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  postgres-data:
+  neo4j-data:
+  qdrant-data:
+  temporal-db:
+  redis-data:
+
+services:
+  # ─── PostgreSQL ────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: observeid-postgres
+    environment:
+      POSTGRES_DB: observeid
+      POSTGRES_USER: observeid
+      POSTGRES_PASSWORD: observeid
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - observeid-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U observeid"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+
+  # ─── Neo4j ─────────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5-enterprise
+    container_name: observeid-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/observeid123
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+      NEO4J_dbms_memory_pagecache_size: "512M"
+      NEO4J_dbms_memory_heap_initial__size: "1G"
+      NEO4J_dbms_memory_heap_max__size: "2G"
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+      NEO4J_dbms_security_procedures_allowlist: "apoc.*"
+      NEO4J_server_bolt_listen__address: "0.0.0.0:7687"
+      NEO4J_server_http_listen__address: "0.0.0.0:7474"
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    volumes:
+      - neo4j-data:/data
+      - ./neo4j/init.cypher:/init.cypher
+    networks:
+      - observeid-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-verbose -O- http://localhost:7474 2>/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+    logging: *default-logging
+
+  # ─── Redis ─────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: observeid-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - observeid-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging: *default-logging
+
+  # ─── Kafka + Schema Registry ───────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: observeid-kafka
+    depends_on:
+      kafka-zookeeper:
+        condition: service_started
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: kafka-zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    ports:
+      - "9092:9092"
+    networks:
+      - observeid-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    logging: *default-logging
+
+  kafka-zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: observeid-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - observeid-net
+    logging: *default-logging
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.1
+    container_name: observeid-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    ports:
+      - "8081:8081"
+    networks:
+      - observeid-net
+    logging: *default-logging
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: observeid-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic identity.events --partitions 12 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic access.events --partitions 12 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic policy.events --partitions 6 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic audit.events --partitions 6 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic agent.events --partitions 6 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic caep.events --partitions 6 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic identity.events.dlq --partitions 3 --replication-factor 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic access.events.dlq --partitions 3 --replication-factor 1
+      echo "Topics created."
+    networks:
+      - observeid-net
+    logging: *default-logging
+
+  # ─── Temporal Server ───────────────────────────────────────
+  temporal:
+    image: temporalio/auto-setup:1.25
+    container_name: observeid-temporal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: observeid
+      POSTGRES_PWD: observeid
+      POSTGRES_DB: observeid
+      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/config/dynamic.yaml
+      LOG_LEVEL: "info"
+    ports:
+      - "7233:7233"  # gRPC
+      - "8233:8233"  # Web UI
+    volumes:
+      - ./temporal/config.yaml:/etc/temporal/config/dynamic.yaml
+    networks:
+      - observeid-net
+    healthcheck:
+      test: ["CMD", "pidof", "temporal-server"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    logging: *default-logging
+
+  temporal-admin:
+    image: temporalio/admin-tools:1.25
+    container_name: observeid-temporal-admin
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CLI_ADDRESS: temporal:7233
+    entrypoint: |
+      sh -c "
+      echo 'Waiting for Temporal...';
+      sleep 10;
+      temporal operator namespace create --namespace critical-offboarding --description 'Critical offboarding workflows' --retention 30;
+      temporal operator namespace create --namespace provisioning --description 'Standard provisioning' --retention 14;
+      temporal operator namespace create --namespace reconciliation --description 'Reconciliation workflows' --retention 7;
+      temporal operator namespace create --namespace analysis --description 'Analysis and cron workflows' --retention 7;
+      echo 'Namespaces created.';
+      tail -f /dev/null
+      "
+    networks:
+      - observeid-net
+    logging: *default-logging
+
+  # ─── Qdrant (Vector DB) ────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.10.1
+    container_name: observeid-qdrant
+    ports:
+      - "6333:6333"  # gRPC
+      - "6334:6334"  # REST
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - observeid-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --no-verbose -O- http://localhost:6333/health 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  # ─── OpenTelemetry Collector ───────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    container_name: observeid-otel
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    networks:
+      - observeid-net
+    logging: *default-logging
+
+  # ─── Grafana ───────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: observeid-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: observeid123
+      GF_INSTALL_PLUGINS: grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../grafana:/etc/grafana/provisioning
+    networks:
+      - observeid-net
+    logging: *default-logging
+
+  # ─── Identity Service (Go) ─────────────────────────────────
+  # Disabled: run separately with `make backend` or `go run ./cmd/identity-service`
+  # Build context issues when running from infrastructure/ dir

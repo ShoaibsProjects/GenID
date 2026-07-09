@@ -1,0 +1,287 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/worker"
+
+	"github.com/observeid/identity-platform/internal/activities"
+	"github.com/observeid/identity-platform/internal/service"
+	"github.com/observeid/identity-platform/internal/workflow"
+	"github.com/observeid/identity-platform/pkg/telemetry"
+)
+
+func main() {
+	// ─── Initialize Structured Logger ─────────────────────
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	log.Logger = zerolog.New(os.Stdout).
+		With().
+		Timestamp().
+		Str("service", "observeid-identity").
+		Logger()
+
+	log.Info().Msg("═══════════════════════════════════════════")
+	log.Info().Msg("  ObserveID Identity Service Starting")
+	log.Info().Msg("  The Identity Fabric Engine")
+	log.Info().Msg("═══════════════════════════════════════════")
+
+	// ─── Load Configuration ───────────────────────────────
+	cfg := loadConfig()
+
+	// ─── Initialize OpenTelemetry ─────────────────────────
+	shutdown := initTelemetry(cfg)
+	defer shutdown()
+
+	// ─── Initialize PostgreSQL ────────────────────────────
+	pgPool, err := service.NewPostgresPool(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to PostgreSQL")
+	}
+	defer pgPool.Close()
+	log.Info().Msg("PostgreSQL connected")
+
+	// ─── Initialize Neo4j ─────────────────────────────────
+	neo4jDriver, err := neo4j.NewDriverWithContext(
+		cfg.Neo4jURI,
+		neo4j.BasicAuth(cfg.Neo4jUser, cfg.Neo4jPassword, ""),
+	)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to Neo4j")
+	}
+	defer neo4jDriver.Close(context.Background())
+	log.Info().Msg("Neo4j connected")
+
+	// ─── Initialize Redis ─────────────────────────────────
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     cfg.RedisAddr,
+		Password: "",
+		DB:       0,
+	})
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to Redis")
+	}
+	defer rdb.Close()
+	log.Info().Msg("Redis connected")
+
+	// ─── Initialize Temporal Client ───────────────────────
+	temporalClient, err := client.Dial(client.Options{
+		HostPort:  cfg.TemporalHost,
+		Namespace: "critical-offboarding",
+	})
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to Temporal")
+	}
+	defer temporalClient.Close()
+	log.Info().Msg("Temporal connected")
+
+	// ─── Initialize Services ──────────────────────────────
+	svc := service.NewIdentityService(pgPool, neo4jDriver, rdb, temporalClient)
+
+	// ─── Start Temporal Worker ────────────────────────────
+	w := worker.New(temporalClient, "critical-offboarding", worker.Options{
+		MaxConcurrentActivityExecutionSize: 500,
+		MaxConcurrentWorkflowTaskExecutionSize: 500,
+		StickyCacheSize:                    10000,
+	})
+
+	w.RegisterWorkflow(workflow.OffboardIdentityWorkflow)
+	w.RegisterWorkflow(workflow.OnboardIdentityWorkflow)
+	w.RegisterWorkflow(workflow.GrantAccessWorkflow)
+	w.RegisterWorkflow(workflow.RevokeAccessWorkflow)
+	w.RegisterWorkflow(workflow.JustInTimeAccessWorkflow)
+	w.RegisterWorkflow(workflow.AgentAnomalyDetectionWorkflow)
+	w.RegisterWorkflow(workflow.DetectSoDViolationsWorkflow)
+
+	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient)
+	w.RegisterActivity(act)
+	w.RegisterActivity(act.GrantOktaAccess)
+	w.RegisterActivity(act.RevokeAWSAccess)
+	w.RegisterActivity(act.BroadcastCAEPEvent)
+	w.RegisterActivity(act.RevokeSPIFFESVID)
+	w.RegisterActivity(act.RevokeOAuthTokens)
+	w.RegisterActivity(act.RevokeAPIKeys)
+	w.RegisterActivity(act.AcquireIdentityLock)
+	w.RegisterActivity(act.ReleaseIdentityLock)
+	w.RegisterActivity(act.QueryIdentityEntitlements)
+	w.RegisterActivity(act.FindDelegatedAgents)
+	w.RegisterActivity(act.FinalizeAuditTrail)
+
+	if err := w.Start(); err != nil {
+		log.Fatal().Err(err).Msg("Failed to start Temporal worker")
+	}
+	defer w.Stop()
+	log.Info().Msg("Temporal worker started")
+
+	// ─── Start HTTP/gRPC Server ───────────────────────────
+	r := mux.NewRouter()
+	r.Use(otelhttp.NewMiddleware("observeid-api"))
+
+	// Health check
+	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"status":"ok","service":"observeid-identity","version":"1.0.0"}`)
+	}).Methods("GET")
+
+	r.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
+		// Check dependencies
+		if err := rdb.Ping(r.Context()).Err(); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprint(w, `{"status":"unavailable","reason":"redis_down"}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"status":"ready"}`)
+	}).Methods("GET")
+
+	// SCIM endpoints
+	scim := r.PathPrefix("/scim/v2").Subrouter()
+	scim.HandleFunc("/Users", svc.ScimListUsers).Methods("GET")
+	scim.HandleFunc("/Users", svc.ScimCreateUser).Methods("POST")
+	scim.HandleFunc("/Users/{id}", svc.ScimGetUser).Methods("GET")
+	scim.HandleFunc("/Users/{id}", svc.ScimUpdateUser).Methods("PUT")
+	scim.HandleFunc("/Users/{id}", svc.ScimPatchUser).Methods("PATCH")
+	scim.HandleFunc("/Users/{id}", svc.ScimDeleteUser).Methods("DELETE")
+
+	// Identity API
+	api := r.PathPrefix("/api/v1").Subrouter()
+	api.HandleFunc("/identities", svc.ListIdentities).Methods("GET")
+	api.HandleFunc("/identities/{id}", svc.GetIdentity).Methods("GET")
+	api.HandleFunc("/identities/{id}/entitlements", svc.GetIdentityEntitlements).Methods("GET")
+	api.HandleFunc("/identities/{id}/blast-radius", svc.GetBlastRadius).Methods("GET")
+
+	// NHI/Agent API
+	api.HandleFunc("/agents", svc.ListAgents).Methods("GET")
+	api.HandleFunc("/agents", svc.RegisterAgent).Methods("POST")
+	api.HandleFunc("/agents/{id}", svc.GetAgent).Methods("GET")
+	api.HandleFunc("/agents/{id}/kill-switch", svc.AgentKillSwitch).Methods("POST")
+	api.HandleFunc("/agents/{id}/delegate", svc.DelegateAgent).Methods("POST")
+	api.HandleFunc("/agents/{id}/card", svc.GetAgentCard).Methods("GET")
+
+	// Access API
+	api.HandleFunc("/access/check", svc.CheckAccess).Methods("POST")
+	api.HandleFunc("/access/grant", svc.GrantAccess).Methods("POST")
+	api.HandleFunc("/access/revoke", svc.RevokeAccess).Methods("POST")
+
+	// AI Copilot API
+	api.HandleFunc("/copilot/query", svc.CopilotQuery).Methods("POST")
+
+	// CAEP API
+	api.HandleFunc("/caep/events", svc.ListCAEPEvents).Methods("GET")
+	api.HandleFunc("/caep/broadcast", svc.BroadcastCAEP).Methods("POST")
+
+	// Metrics
+	r.HandleFunc("/metrics", telemetry.MetricsHandler()).Methods("GET")
+
+	srv := &http.Server{
+		Addr:         ":8080",
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Graceful Shutdown
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		log.Info().Msg("Shutting down gracefully...")
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		srv.Shutdown(ctx)
+	}()
+
+	log.Info().Str("addr", srv.Addr).Msg("HTTP server listening")
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal().Err(err).Msg("Server failed")
+	}
+	log.Info().Msg("Server stopped")
+}
+
+type Config struct {
+	DatabaseURL  string
+	Neo4jURI     string
+	Neo4jUser    string
+	Neo4jPassword string
+	RedisAddr    string
+	TemporalHost string
+	QdrantAddr   string
+}
+
+func loadConfig() *Config {
+	return &Config{
+		DatabaseURL:   getEnv("DATABASE_URL", "postgresql://observeid:observeid@localhost:5432/observeid?sslmode=disable"),
+		Neo4jURI:      getEnv("NEO4J_URI", "bolt://localhost:7687"),
+		Neo4jUser:     getEnv("NEO4J_USER", "neo4j"),
+		Neo4jPassword: getEnv("NEO4J_PASSWORD", "observeid123"),
+		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
+		TemporalHost:  getEnv("TEMPORAL_HOST", "localhost:7233"),
+		QdrantAddr:    getEnv("QDRANT_ADDR", "localhost:6333"),
+	}
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func initTelemetry(cfg *Config) func() {
+	res, err := resource.New(context.Background(),
+		resource.WithAttributes(
+			semconv.ServiceNameKey.String("observeid-identity-service"),
+			semconv.ServiceVersionKey.String("1.0.0"),
+		),
+	)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create telemetry resource")
+	}
+
+	traceExporter, err := otlptrace.New(context.Background(),
+		otelhttp.NewClient(),
+	)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create trace exporter")
+	}
+
+	tp := trace.NewTracerProvider(
+		trace.WithBatcher(traceExporter),
+		trace.WithResource(res),
+		trace.WithSampler(trace.AlwaysSample()),
+	)
+	otel.SetTracerProvider(tp)
+
+	exp, err := prometheus.New()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create metrics exporter")
+	}
+	mp := metric.NewMeterProvider(metric.WithReader(exp))
+	otel.SetMeterProvider(mp)
+
+	return func() {
+		_ = tp.Shutdown(context.Background())
+	}
+}
