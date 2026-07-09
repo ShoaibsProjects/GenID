@@ -129,8 +129,8 @@ func (cp *CopilotPipeline) executeGraphQuery(ctx context.Context, query CopilotQ
 		identityName := cp.extractEntity(query.Question)
 		cypherQuery = `
 			MATCH (i:Identity {display_name: $identity_name, tenant_id: $tenant_id})
-			OPTIONAL MATCH path = (i)-[:HAS_ROLE]->(r:Role)-[:GRANTS]->(e:Entitlement)-[:ACCESSES]->(res:Resource)
-			OPTIONAL MATCH direct = (i)-[:DIRECTLY_OWNS]->(e2:Entitlement)-[:ACCESSES]->(res2:Resource)
+			OPTIONAL MATCH (i)-[:HAS_ROLE]->(r:Role)-[:GRANTS]->(e:Entitlement)-[:ACCESSES]->(res:Resource)
+			OPTIONAL MATCH (i)-[:DIRECTLY_OWNS]->(e2:Entitlement)-[:ACCESSES]->(res2:Resource)
 			RETURN i.display_name AS identity,
 				   COLLECT(DISTINCT {role: r.name, entitlement: e.permission_level, resource: res.name}) AS role_entitlements,
 				   COLLECT(DISTINCT {entitlement: e2.permission_level, resource: res2.name}) AS direct_entitlements
@@ -222,7 +222,7 @@ func (cp *CopilotPipeline) extractEntity(question string) string {
 	// Naive: look for common patterns
 	q := strings.ToLower(question)
 	words := strings.Fields(q)
-	for i, w := range words {
+	for _, w := range words {
 		if w == "alice" || w == "bob" || w == "charlie" {
 			return strings.Title(w) // Will use proper text processing in prod
 		}
@@ -252,6 +252,13 @@ func (cp *CopilotPipeline) extractResource(question string) string {
 		return "GitHub Enterprise"
 	}
 	return "AWS Production"
+}
+
+func summarizePaths(paths []string) string {
+	if len(paths) == 0 {
+		return "no access paths found"
+	}
+	return fmt.Sprintf("%d access paths discovered", len(paths))
 }
 
 // ─── Response Generation ──────────────────────────────────

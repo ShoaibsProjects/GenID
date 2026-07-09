@@ -16,7 +16,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -24,6 +24,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/observeid/identity-platform/internal/activities"
 	"github.com/observeid/identity-platform/internal/service"
@@ -101,7 +103,7 @@ func main() {
 	w := worker.New(temporalClient, "critical-offboarding", worker.Options{
 		MaxConcurrentActivityExecutionSize: 500,
 		MaxConcurrentWorkflowTaskExecutionSize: 500,
-		StickyCacheSize:                    10000,
+		// StickyCacheSize: deprecated in newer SDK
 	})
 
 	w.RegisterWorkflow(workflow.OffboardIdentityWorkflow)
@@ -192,7 +194,7 @@ func main() {
 	api.HandleFunc("/caep/broadcast", svc.BroadcastCAEP).Methods("POST")
 
 	// Metrics
-	r.HandleFunc("/metrics", telemetry.MetricsHandler()).Methods("GET")
+	r.Handle("/metrics", telemetry.MetricsHandler()).Methods("GET")
 
 	srv := &http.Server{
 		Addr:         ":8080",
@@ -260,8 +262,17 @@ func initTelemetry(cfg *Config) func() {
 		log.Fatal().Err(err).Msg("Failed to create telemetry resource")
 	}
 
-	traceExporter, err := otlptrace.New(context.Background(),
-		otelhttp.NewClient(),
+	// Initialize OTLP trace exporter using gRPC
+	conn, err := grpc.DialContext(context.Background(), "localhost:4317",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		log.Warn().Err(err).Msg("OTLP exporter not available, continuing without tracing")
+		return func() {}
+	}
+	traceExporter, err := otlptracegrpc.New(context.Background(),
+		otlptracegrpc.WithGRPCConn(conn),
 	)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create trace exporter")

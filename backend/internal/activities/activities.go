@@ -88,7 +88,6 @@ func (s *ActivityService) ReleaseIdentityLock(ctx context.Context, params map[st
 
 func (s *ActivityService) QueryIdentityEntitlements(ctx context.Context, params map[string]any) ([]map[string]any, error) {
 	identityID := params["identity_id"].(string)
-	includeInherited := params["include_inherited"].(bool)
 
 	session := s.neo4j.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
@@ -116,7 +115,8 @@ func (s *ActivityService) QueryIdentityEntitlements(ctx context.Context, params 
 
 	var entitlements []map[string]any
 	if result.Next(ctx) {
-		entitlements, _ = result.Record().Get("entitlements")
+		val, _ := result.Record().Get("entitlements")
+		entitlements, _ = val.([]map[string]any)
 	}
 
 	return entitlements, nil
@@ -141,7 +141,8 @@ func (s *ActivityService) FindDelegatedAgents(ctx context.Context, params map[st
 
 	var agentIDs []string
 	if result.Next(ctx) {
-		agentIDs, _ = result.Record().Get("agent_ids")
+		val, _ := result.Record().Get("agent_ids")
+		agentIDs, _ = val.([]string)
 	}
 
 	return agentIDs, nil

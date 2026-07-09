@@ -13,7 +13,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/client"
 
-	"github.com/observeid/identity-platform/internal/domain"
 	"github.com/observeid/identity-platform/internal/workflow"
 )
 
@@ -120,17 +119,17 @@ func (s *IdentityService) ListIdentities(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var identities []map[string]any
+		var identities []map[string]any
 	for result.Next(r.Context()) {
-		record := result.Record()
+		rec := result.Record()
 		identities = append(identities, map[string]any{
-			"uuid":       record.AsString("uuid"),
-			"name":       record.AsString("name"),
-			"email":      record.AsString("email"),
-			"status":     record.AsString("status"),
-			"type":       record.AsString("type"),
-			"department": record.AsString("department"),
-			"risk_score": record.AsString("risk_score"),
+			"uuid":       getRecordVal(rec, "uuid"),
+			"name":       getRecordVal(rec, "display_name"),
+			"email":      getRecordVal(rec, "email"),
+			"status":     getRecordVal(rec, "status"),
+			"type":       getRecordVal(rec, "type"),
+			"department": getRecordVal(rec, "department"),
+			"risk_score": getRecordVal(rec, "risk_score"),
 		})
 	}
 
@@ -275,15 +274,15 @@ func (s *IdentityService) ListAgents(w http.ResponseWriter, r *http.Request) {
 
 	var agents []map[string]any
 	for result.Next(r.Context()) {
-		record := result.Record()
+		rec := result.Record()
 		agents = append(agents, map[string]any{
-			"uuid":        record.AsString("uuid"),
-			"name":        record.AsString("name"),
-			"type":        record.AsString("type"),
-			"status":      record.AsString("status"),
-			"risk_score":  record.AsString("risk_score"),
-			"is_governed": record.AsString("is_governed"),
-			"owner_name":  record.AsString("owner_name"),
+			"uuid":        getRecordVal(rec, "uuid"),
+			"name":        getRecordVal(rec, "name"),
+			"type":        getRecordVal(rec, "type"),
+			"status":      getRecordVal(rec, "status"),
+			"risk_score":  getRecordVal(rec, "risk_score"),
+			"is_governed": getRecordVal(rec, "is_governed"),
+			"owner_name":  getRecordVal(rec, "owner_name"),
 		})
 	}
 
@@ -505,11 +504,11 @@ func (s *IdentityService) GetAgentCard(w http.ResponseWriter, r *http.Request) {
 	card := map[string]any{
 		"agent_id":          id,
 		"agent_type":        "ai_agent",
-		"capabilities":      resultAsStrings(result, "capabilities"),
-		"protocols":         resultAsStrings(result, "protocols"),
-		"owner_id":          resultAsString(result, "owner_id"),
-		"deployment_env":    resultAsString(result, "env"),
-		"issued_at":         resultAsTime(result, "created_at"),
+		"capabilities":      getRecordStrings(result.Record(), "capabilities"),
+		"protocols":         getRecordStrings(result.Record(), "protocols"),
+		"owner_id":          getRecordString(result.Record(), "owner_id"),
+		"deployment_env":    getRecordString(result.Record(), "env"),
+		"issued_at":         getRecordVal(result.Record(), "created_at"),
 		"public_key":        "-----BEGIN PUBLIC KEY-----\n... (ML-DSA-44 public key)\n-----END PUBLIC KEY-----",
 		"signature_scheme":  "ml-dsa-44",
 	}
@@ -648,32 +647,49 @@ func respondError(w http.ResponseWriter, status int, msg string) {
 	respondJSON(w, status, map[string]string{"error": msg})
 }
 
-func resultAsString(result neo4j.ResultWithContext, key string) string {
-	val, _ := result.Record().Get(key)
-	if s, ok := val.(string); ok {
-		return s
+func getRecordString(record *neo4j.Record, key string) string {
+	val, ok := record.Get(key)
+	if !ok {
+		return ""
 	}
-	return ""
+	switch v := val.(type) {
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
-func resultAsStrings(result neo4j.ResultWithContext, key string) []string {
-	val, _ := result.Record().Get(key)
-	if arr, ok := val.([]string); ok {
-		return arr
+func getRecordStrings(record *neo4j.Record, key string) []string {
+	val, ok := record.Get(key)
+	if !ok {
+		return nil
 	}
-	if arr, ok := val.([]any); ok {
-		strs := make([]string, len(arr))
-		for i, v := range arr {
-			strs[i] = fmt.Sprintf("%v", v)
+	switch v := val.(type) {
+	case []string:
+		return v
+	case []any:
+		strs := make([]string, len(v))
+		for i, item := range v {
+			strs[i] = fmt.Sprintf("%v", item)
 		}
 		return strs
+	default:
+		return nil
 	}
-	return nil
 }
 
-func resultAsTime(result neo4j.ResultWithContext, key string) string {
-	val, _ := result.Record().Get(key)
-	return fmt.Sprintf("%v", val)
+func getRecordVal(record *neo4j.Record, key string) string {
+	val, ok := record.Get(key)
+	if !ok {
+		return ""
+	}
+	switch v := val.(type) {
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 func logError(component string, err error) {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/observeid/identity-platform/internal/domain"
@@ -80,7 +81,7 @@ func OffboardIdentityWorkflow(ctx workflow.Context, input OffboardInput) error {
 	// Activity defaults
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy: &workflow.RetryPolicy{
+		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
 			BackoffCoefficient: 2.0,
 			MaximumInterval:    time.Minute,
@@ -165,7 +166,7 @@ func OffboardIdentityWorkflow(ctx workflow.Context, input OffboardInput) error {
 	if len(input.SubjectsOfConcern) > 0 {
 		caepCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
-			RetryPolicy: &workflow.RetryPolicy{
+			RetryPolicy: &temporal.RetryPolicy{
 				InitialInterval: time.Second, BackoffCoefficient: 2.0, MaximumAttempts: 10,
 			},
 		})
@@ -178,7 +179,7 @@ func OffboardIdentityWorkflow(ctx workflow.Context, input OffboardInput) error {
 	// Step 6: Finalize audit (write to QLDB)
 	finalizeCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 1 * time.Minute,
-		RetryPolicy:         &workflow.RetryPolicy{MaximumAttempts: 5},
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 5},
 	})
 	workflow.ExecuteActivity(finalizeCtx, "FinalizeAuditTrail", map[string]any{
 		"audit_id": auditID, "status": "completed",
@@ -200,7 +201,7 @@ func RevokeAccessChildWorkflow(ctx workflow.Context, input RevokeAccessInput) er
 	// App-specific activity options
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
-		RetryPolicy: &workflow.RetryPolicy{
+		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:               time.Second,
 			BackoffCoefficient:            2.0,
 			MaximumInterval:               30 * time.Second,
@@ -230,7 +231,7 @@ func OnboardIdentityWorkflow(ctx workflow.Context, input OnboardInput) error {
 	// Create identity in PostgreSQL + Neo4j
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy:         &workflow.RetryPolicy{MaximumAttempts: 3},
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 3},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
@@ -291,7 +292,7 @@ func GrantAccessWorkflow(ctx workflow.Context, input GrantAccessInput) error {
 	// Provision access
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
-		RetryPolicy:         &workflow.RetryPolicy{MaximumAttempts: 5},
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 5},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
@@ -326,7 +327,7 @@ func RevokeAccessWorkflow(ctx workflow.Context, input RevokeAccessInput) error {
 
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy:         &workflow.RetryPolicy{MaximumAttempts: 5},
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 5},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
@@ -358,7 +359,7 @@ func JustInTimeAccessWorkflow(ctx workflow.Context, input JustInTimeInput) error
 	// Validate with Cedar policy
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Second,
-		RetryPolicy:         &workflow.RetryPolicy{MaximumAttempts: 2},
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
@@ -374,7 +375,7 @@ func JustInTimeAccessWorkflow(ctx workflow.Context, input JustInTimeInput) error
 	// Grant time-bounded access
 	grantCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 1 * time.Minute,
-		RetryPolicy:         &workflow.RetryPolicy{MaximumAttempts: 3},
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 3},
 	})
 	if err := workflow.ExecuteActivity(grantCtx, "ProvisionTemporaryAccess", map[string]any{
 		"identity_id": input.IdentityID, "resource_id": input.ResourceID,
@@ -385,9 +386,8 @@ func JustInTimeAccessWorkflow(ctx workflow.Context, input JustInTimeInput) error
 	}
 
 	// Timer for automatic revocation
-	timerCtx, cancel := workflow.NewTimer(ctx, time.Duration(input.DurationMins)*time.Minute)
-	defer cancel()
-	<-timerCtx
+	timerCh := workflow.NewTimer(ctx, time.Duration(input.DurationMins)*time.Minute)
+	_ = timerCh
 
 	workflow.ExecuteActivity(ctx, "RevokeTemporaryAccess", map[string]any{
 		"identity_id": input.IdentityID, "resource_id": input.ResourceID,
@@ -406,7 +406,7 @@ func AgentAnomalyDetectionWorkflow(ctx workflow.Context) error {
 
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
-		RetryPolicy:         &workflow.RetryPolicy{MaximumAttempts: 2},
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
@@ -436,7 +436,7 @@ func DetectSoDViolationsWorkflow(ctx workflow.Context) error {
 
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 10 * time.Minute,
-		RetryPolicy:         &workflow.RetryPolicy{MaximumAttempts: 2},
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
