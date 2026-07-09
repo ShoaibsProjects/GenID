@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/observeid/identity-platform/internal/connector"
+	"github.com/observeid/identity-platform/internal/vault"
 	"github.com/observeid/identity-platform/internal/workflow"
 )
 
@@ -26,10 +28,12 @@ type IdentityService struct {
 	temporal     client.Client
 	connMgr      *connector.Manager
 	provisionEng *connector.ProvisioningEngine
+	vault        *vault.Vault
 }
 
 func NewIdentityService(pgPool interface{}, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *IdentityService {
 	connMgr := connector.NewManager()
+	vlt := vault.NewVault(os.Getenv("VAULT_MASTER_KEY"))
 	return &IdentityService{
 		pgPool:       pgPool,
 		neo4j:        neo4j,
@@ -37,6 +41,7 @@ func NewIdentityService(pgPool interface{}, neo4j neo4j.DriverWithContext, rdb *
 		temporal:     tc,
 		connMgr:      connMgr,
 		provisionEng: connector.NewProvisioningEngine(connMgr),
+		vault:        vlt,
 	}
 }
 
@@ -1070,6 +1075,68 @@ func (s *IdentityService) RemoveRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "removed"})
+}
+
+// ─── Vault / Credential Management Handlers ─────────────
+
+func (s *IdentityService) ListSecrets(w http.ResponseWriter, r *http.Request) {
+	secrets := s.vault.List(r.Context())
+	respondJSON(w, http.StatusOK, map[string]any{
+		"secrets": secrets,
+		"total":   len(secrets),
+	})
+}
+
+func (s *IdentityService) StoreSecret(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name      string `json:"name"`
+		Type      string `json:"type"`
+		Reference string `json:"reference"`
+		Value     string `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+
+	id, err := s.vault.Store(r.Context(), req.Name, req.Type, req.Reference, req.Value)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, map[string]any{
+		"secret_id": id,
+		"status":    "stored",
+	})
+}
+
+func (s *IdentityService) RetrieveSecret(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	plaintext, err := s.vault.Retrieve(r.Context(), id)
+	if err != nil {
+		respondError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"secret_id": id,
+		"value":     plaintext,
+	})
+}
+
+func (s *IdentityService) DeleteSecret(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	if err := s.vault.Delete(r.Context(), id); err != nil {
+		respondError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 // ─── Helpers ──────────────────────────────────────────────

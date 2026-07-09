@@ -127,11 +127,36 @@ func main() {
 	r := mux.NewRouter()
 	r.Use(otelhttp.NewMiddleware("observeid-api"))
 
-	// Root — API landing page
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{
+	// Serve static frontend from the frontend/out directory
+	frontendDir := "../frontend/out"
+	if _, err := os.Stat(frontendDir); err == nil {
+		fs := http.FileServer(http.Dir(frontendDir))
+		r.PathPrefix("/_next/").Handler(fs)
+
+		// Next.js static export creates flat .html files (dashboard.html, identities.html, etc.)
+		// Map each frontend route to its .html file
+		frontendPages := []string{"dashboard", "identities", "agents", "connectors", "groups",
+			"access", "policies", "audit", "certifications", "sod", "vault"}
+		for _, page := range frontendPages {
+			p := page // capture
+			r.HandleFunc("/"+p, func(w http.ResponseWriter, r *http.Request) {
+				http.ServeFile(w, r, frontendDir+"/"+p+".html")
+			})
+		}
+
+		// Root serves index.html
+		r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, frontendDir+"/index.html")
+		})
+
+		log.Info().Msg("Frontend static files serving from " + frontendDir)
+	} else {
+		log.Warn().Str("dir", frontendDir).Msg("Frontend static directory not found, serving API-only")
+		// Root — API landing page
+		r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, `{
   "service": "ObserveID Identity Fabric Engine",
   "version": "1.0.0",
   "status": "running",
@@ -150,7 +175,8 @@ func main() {
     "groups":    "/api/v1/groups"
   }
 }`)
-	}).Methods("GET")
+		}).Methods("GET")
+	}
 
 	// Health check
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -225,6 +251,12 @@ func main() {
 	api.HandleFunc("/identities", svc.CreateIdentityRecord).Methods("POST")
 	api.HandleFunc("/identities/{id}", svc.UpdateIdentityRecord).Methods("PATCH")
 	api.HandleFunc("/identities/{id}", svc.DeleteIdentityRecord).Methods("DELETE")
+
+	// ─── Vault / Secrets ────────────────────────────
+	api.HandleFunc("/vault/secrets", svc.ListSecrets).Methods("GET")
+	api.HandleFunc("/vault/secrets", svc.StoreSecret).Methods("POST")
+	api.HandleFunc("/vault/secrets/{id}", svc.RetrieveSecret).Methods("GET")
+	api.HandleFunc("/vault/secrets/{id}", svc.DeleteSecret).Methods("DELETE")
 
 	// ─── Role / Group Management ───────────────────
 	api.HandleFunc("/groups", svc.ListGroups).Methods("GET")

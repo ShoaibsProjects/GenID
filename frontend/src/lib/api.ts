@@ -1,6 +1,8 @@
 // ─── ObserveID API Client ──────────────────────────────────
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://delays-telecommunications-hunting-nobody.trycloudflare.com"
+// API_BASE uses relative path by default (same-origin when frontend served by Go backend).
+// Set NEXT_PUBLIC_API_URL env var to override (e.g., tunnel URL for Cloudflare Pages).
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || ""
 
 interface RequestOptions {
   method?: string
@@ -216,6 +218,24 @@ export function broadcastCAEP(data: { event_type: string; identity_id: string; r
 
 export function copilotQuery(data: { question: string; user_id?: string; tenant_id?: string }): Promise<any> {
   return apiRequest<any>("/api/v1/copilot/query", { method: "POST", body: data })
+}
+
+// ─── Vault / Secrets ────────────────────────────────────
+
+export function fetchSecrets(): Promise<any> {
+  return apiRequest<any>("/api/v1/vault/secrets")
+}
+
+export function storeSecret(data: { name: string; type: string; reference?: string; value: string }): Promise<any> {
+  return apiRequest<any>("/api/v1/vault/secrets", { method: "POST", body: data })
+}
+
+export function retrieveSecret(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/vault/secrets/${id}`)
+}
+
+export function deleteSecret(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/vault/secrets/${id}`, { method: "DELETE" })
 }
 
 // ─── Health ──────────────────────────────────────────────
