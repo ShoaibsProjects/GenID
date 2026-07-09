@@ -265,6 +265,7 @@ func main() {
 
 	// ─── Identity CRUD ─────────────────────────────
 	api.HandleFunc("/identities", svc.CreateIdentityRecord).Methods("POST")
+	api.HandleFunc("/identities/bulk", svc.BulkImportIdentities).Methods("POST")
 	api.HandleFunc("/identities/{id}", svc.UpdateIdentityRecord).Methods("PATCH")
 	api.HandleFunc("/identities/{id}", svc.DeleteIdentityRecord).Methods("DELETE")
 

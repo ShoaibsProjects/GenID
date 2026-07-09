@@ -1044,55 +1044,119 @@ func (s *IdentityService) GetLCMHistory(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// ─── Identity CRUD (PostgreSQL) Handlers ─────────────────
+// ─── Identity CRUD (PostgreSQL + Neo4j) Handlers ─────────
 
 func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Request) {
-	var identity struct {
+	var input struct {
 		Email       string `json:"email"`
 		DisplayName string `json:"display_name"`
+		FirstName   string `json:"first_name"`
+		LastName    string `json:"last_name"`
 		Type        string `json:"type"`
+		Status      string `json:"status"`
 		Department  string `json:"department"`
+		Title       string `json:"title"`
 		EmployeeID  string `json:"employee_id"`
 		ManagerID   string `json:"manager_id"`
 		Source      string `json:"source"`
 		TenantID    string `json:"tenant_id"`
+		Phone       string `json:"phone"`
+		Attributes  map[string]string `json:"attributes"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&identity); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid request")
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
+	}
+	if input.Email == "" || input.DisplayName == "" {
+		respondError(w, http.StatusBadRequest, "email and display_name are required")
+		return
+	}
+	if input.Type == "" {
+		input.Type = "human"
+	}
+	if input.Status == "" {
+		input.Status = "active"
+	}
+	if input.Source == "" {
+		input.Source = "manual"
+	}
+	if input.TenantID == "" {
+		input.TenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
 	id := uuid.New().String()
 
-	// Create in PostgreSQL via raw SQL
-	// In production: s.pgPool.(*pgxpool.Pool).Exec(...)
+	// Handle nullable UUID fields
+	var managerID interface{}
+	if input.ManagerID != "" {
+		managerID = input.ManagerID
+	}
 
-	// Create in Neo4j
-	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(r.Context())
-
-	_, err := session.Run(r.Context(), `
-		CREATE (i:Identity {
-			uuid: $uuid, tenant_id: $tenant_id, type: $type,
-			status: 'active', email: $email, display_name: $display_name,
-			department: $department, employee_id: $employee_id,
-			manager_id: $manager_id, source: $source,
-			risk_score: 0.0, created_at: datetime(), updated_at: datetime()
-		})
-	`, map[string]any{
-		"uuid": id, "tenant_id": identity.TenantID, "type": identity.Type,
-		"email": identity.Email, "display_name": identity.DisplayName,
-		"department": identity.Department, "employee_id": identity.EmployeeID,
-		"manager_id": identity.ManagerID, "source": identity.Source,
-	})
+	// 1. Write to PostgreSQL
+	attrsJSON, _ := json.Marshal(input.Attributes)
+	_, err := s.pgPool.Exec(r.Context(), `
+		INSERT INTO identities (id, tenant_id, type, status, email, display_name, department, employee_id, manager_id, source, risk_score, attributes)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0.0, $11)
+		ON CONFLICT (tenant_id, email) DO UPDATE SET
+			display_name = EXCLUDED.display_name,
+			department   = EXCLUDED.department,
+			employee_id  = EXCLUDED.employee_id,
+			status       = 'active',
+			updated_at   = NOW()
+	`, id, input.TenantID, input.Type, input.Status, input.Email, input.DisplayName,
+		input.Department, input.EmployeeID, managerID, input.Source, attrsJSON)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to create identity")
+		s.auditLog.Append(audit.Entry{
+			Level: audit.LevelError, Service: "identity", Path: r.URL.Path,
+			Message: fmt.Sprintf("PG create failed: %s", err.Error()),
+			Tags:    []string{"identity", "create", "error"},
+		})
+		respondError(w, http.StatusInternalServerError, "Failed to persist identity to database")
 		return
 	}
 
+	// 2. Write to Neo4j (graph)
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(r.Context())
+
+	_, err = session.Run(r.Context(), `
+		MERGE (i:Identity {uuid: $uuid})
+		SET i.tenant_id = $tenant_id, i.type = $type, i.status = 'active',
+		    i.email = $email, i.display_name = $display_name,
+		    i.first_name = $first_name, i.last_name = $last_name,
+		    i.department = $department, i.title = $title,
+		    i.employee_id = $employee_id, i.manager_id = $manager_id,
+		    i.source = $source, i.phone = $phone,
+		    i.risk_score = 0.0, i.updated_at = datetime(),
+		    i.created_at = COALESCE(i.created_at, datetime())
+	`, map[string]any{
+		"uuid": id, "tenant_id": input.TenantID, "type": input.Type,
+		"email": input.Email, "display_name": input.DisplayName,
+		"first_name": input.FirstName, "last_name": input.LastName,
+		"department": input.Department, "title": input.Title,
+		"employee_id": input.EmployeeID, "manager_id": input.ManagerID,
+		"source": input.Source, "phone": input.Phone,
+	})
+	if err != nil {
+		s.auditLog.Append(audit.Entry{
+			Level: audit.LevelError, Service: "identity", Path: r.URL.Path,
+			Message: fmt.Sprintf("Neo4j create failed: %s", err.Error()),
+			Tags:    []string{"identity", "create", "neo4j", "error"},
+		})
+	}
+
+	s.auditLog.Append(audit.Entry{
+		Level: audit.LevelInfo, Service: "identity", Path: r.URL.Path,
+		Message: fmt.Sprintf("Created identity: %s (%s)", input.DisplayName, input.Email),
+		Tags:    []string{"identity", "create", "success"},
+	})
+
 	respondJSON(w, http.StatusCreated, map[string]any{
-		"id":     id,
-		"status": "created",
+		"id":            id,
+		"status":        "created",
+		"email":         input.Email,
+		"display_name":  input.DisplayName,
+		"type":          input.Type,
 	})
 }
 
@@ -1106,15 +1170,15 @@ func (s *IdentityService) UpdateIdentityRecord(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Update Neo4j
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(r.Context())
 
-	// Build dynamic SET clause
 	setClauses := ""
 	params := map[string]any{"uuid": id}
 	for key, val := range updates {
 		switch key {
-		case "display_name", "email", "department", "status", "type", "manager_id":
+		case "display_name", "first_name", "last_name", "email", "department", "status", "type", "title", "manager_id", "phone", "risk_score":
 			paramKey := "p_" + key
 			setClauses += fmt.Sprintf("i.%s = $%s, ", key, paramKey)
 			params[paramKey] = val
@@ -1122,12 +1186,16 @@ func (s *IdentityService) UpdateIdentityRecord(w http.ResponseWriter, r *http.Re
 	}
 	setClauses += "i.updated_at = datetime()"
 
-	query := fmt.Sprintf(`
-		MATCH (i:Identity {uuid: $uuid})
-		SET %s
-	`, setClauses)
-
+	query := fmt.Sprintf("MATCH (i:Identity {uuid: $uuid}) SET %s", setClauses)
 	_, err := session.Run(r.Context(), query, params)
+
+	// Also update PostgreSQL
+	if _, errUpdate := s.pgPool.Exec(r.Context(), `
+		UPDATE identities SET updated_at = NOW() WHERE id = $1
+	`, id); errUpdate != nil {
+		logError("postgres", fmt.Errorf("update failed: %w", errUpdate))
+	}
+
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to update identity")
 		return
@@ -1140,7 +1208,15 @@ func (s *IdentityService) DeleteIdentityRecord(w http.ResponseWriter, r *http.Re
 	vars := mux.Vars(r)
 	id := vars["id"]
 
-	// Soft delete — mark as terminated
+	// Soft-delete in PostgreSQL
+	if _, err := s.pgPool.Exec(r.Context(), `
+		UPDATE identities SET status = 'terminated', updated_at = NOW() WHERE id = $1
+	`, id); err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to delete from database")
+		return
+	}
+
+	// Soft-delete in Neo4j
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(r.Context())
 
@@ -1149,11 +1225,86 @@ func (s *IdentityService) DeleteIdentityRecord(w http.ResponseWriter, r *http.Re
 		SET i.status = 'terminated', i.updated_at = datetime()
 	`, map[string]any{"uuid": id})
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "Failed to delete identity")
-		return
+		logError("neo4j", fmt.Errorf("delete failed: %w", err))
 	}
 
+	s.auditLog.Append(audit.Entry{
+		Level: audit.LevelInfo, Service: "identity", Path: r.URL.Path,
+		Message: fmt.Sprintf("Deleted identity: %s", id),
+		Tags:    []string{"identity", "delete"},
+	})
+
 	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// ─── Bulk Import Handler ──────────────────────────────────
+
+func (s *IdentityService) BulkImportIdentities(w http.ResponseWriter, r *http.Request) {
+	type ImportRec struct {
+		Email       string `json:"email"`
+		DisplayName string `json:"display_name"`
+		Type        string `json:"type"`
+		Department  string `json:"department"`
+		Title       string `json:"title"`
+		EmployeeID  string `json:"employee_id"`
+		Source      string `json:"source"`
+		TenantID    string `json:"tenant_id"`
+	}
+	var req struct {
+		Records []ImportRec `json:"records"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request: expected JSON with 'records' array")
+		return
+	}
+	if len(req.Records) == 0 {
+		respondError(w, http.StatusBadRequest, "No records provided")
+		return
+	}
+	if len(req.Records) > 5000 {
+		req.Records = req.Records[:5000]
+	}
+
+	created, updated, failed := 0, 0, 0
+	var errs []string
+
+	for i, rec := range req.Records {
+		if rec.Email == "" || rec.DisplayName == "" {
+			failed++
+			errs = append(errs, fmt.Sprintf("row %d: missing email or display_name", i+1))
+			continue
+		}
+		if rec.Type == "" { rec.Type = "human" }
+		if rec.Source == "" { rec.Source = "hris" }
+		if rec.TenantID == "" { rec.TenantID = "00000000-0000-0000-0000-000000000001" }
+
+		id := uuid.New().String()
+		tag, err := s.pgPool.Exec(r.Context(), `
+			INSERT INTO identities (id, tenant_id, type, status, email, display_name, department, employee_id, source)
+			VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8)
+			ON CONFLICT (tenant_id, email) DO UPDATE SET
+				display_name=EXCLUDED.display_name, department=EXCLUDED.department,
+				employee_id=EXCLUDED.employee_id, status='active', updated_at=NOW()
+		`, id, rec.TenantID, rec.Type, rec.Email, rec.DisplayName, rec.Department, rec.EmployeeID, rec.Source)
+
+		if err != nil {
+			failed++
+			errs = append(errs, fmt.Sprintf("row %d (%s): %s", i+1, rec.Email, err.Error()))
+			continue
+		}
+		if tag.Insert() { created++ } else { updated++ }
+	}
+
+	s.auditLog.Append(audit.Entry{
+		Level: audit.LevelInfo, Service: "identity", Path: r.URL.Path,
+		Message: fmt.Sprintf("Bulk import: %d created, %d updated, %d failed", created, updated, failed),
+		Tags:    []string{"identity", "bulk", "import"},
+	})
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status": "completed", "created": created, "updated": updated,
+		"failed": failed, "total": len(req.Records), "errors": errs,
+	})
 }
 
 // ─── Group CRUD Handlers ────────────────────────────────────
