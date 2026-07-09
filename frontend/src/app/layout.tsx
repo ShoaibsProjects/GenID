@@ -45,9 +45,11 @@ function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
-        <SidebarLink href="/dashboard" icon={<HomeIcon />} label="Dashboard" active />
+        <SidebarLink href="/dashboard" icon={<HomeIcon />} label="Dashboard" />
         <SidebarLink href="/identities" icon={<UsersIcon />} label="Identities" />
         <SidebarLink href="/agents" icon={<BotIcon />} label="AI Agents" />
+        <SidebarLink href="/connectors" icon={<PlugIcon />} label="Connectors" />
+        <SidebarLink href="/groups" icon={<FolderIcon />} label="Groups" />
         <SidebarLink href="/access" icon={<KeyIcon />} label="Access" />
         <SidebarLink href="/policies" icon={<ShieldIcon />} label="Policies" />
         <SidebarLink href="/audit" icon={<AuditIcon />} label="Audit & CAEP" />
@@ -137,5 +139,17 @@ function ClipboardIcon() { return (
 function WarningIcon() { return (
   <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+  </svg>
+)}
+
+function PlugIcon() { return (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+  </svg>
+)}
+
+function FolderIcon() { return (
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
   </svg>
 )}
