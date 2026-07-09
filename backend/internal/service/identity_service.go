@@ -13,24 +13,30 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/client"
 
+	"github.com/observeid/identity-platform/internal/connector"
 	"github.com/observeid/identity-platform/internal/workflow"
 )
 
 // ─── Identity Service ──────────────────────────────────────
 
 type IdentityService struct {
-	pgPool   interface{} // *pgxpool.Pool in production
-	neo4j    neo4j.DriverWithContext
-	redis    *redis.Client
-	temporal client.Client
+	pgPool       interface{} // *pgxpool.Pool in production
+	neo4j        neo4j.DriverWithContext
+	redis        *redis.Client
+	temporal     client.Client
+	connMgr      *connector.Manager
+	provisionEng *connector.ProvisioningEngine
 }
 
 func NewIdentityService(pgPool interface{}, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *IdentityService {
+	connMgr := connector.NewManager()
 	return &IdentityService{
-		pgPool:   pgPool,
-		neo4j:    neo4j,
-		redis:    rdb,
-		temporal: tc,
+		pgPool:       pgPool,
+		neo4j:        neo4j,
+		redis:        rdb,
+		temporal:     tc,
+		connMgr:      connMgr,
+		provisionEng: connector.NewProvisioningEngine(connMgr),
 	}
 }
 
@@ -633,6 +639,437 @@ func (s *IdentityService) BroadcastCAEP(w http.ResponseWriter, r *http.Request) 
 		"event":    req.EventType,
 		"identity": req.IdentityID,
 	})
+}
+
+// ─── Connector Management Handlers ─────────────────────────
+
+func (s *IdentityService) ListConnectors(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]any{
+		"connectors": s.connMgr.List(),
+		"total":      len(s.connMgr.List()),
+	})
+}
+
+func (s *IdentityService) CreateConnector(w http.ResponseWriter, r *http.Request) {
+	var cfg connector.ConnectorConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid connector config")
+		return
+	}
+
+	id, err := s.connMgr.Register(r.Context(), cfg)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, map[string]any{
+		"connector_id": id,
+		"status":       "registered",
+	})
+}
+
+func (s *IdentityService) GetConnector(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	cfg, err := s.connMgr.GetConfig(id)
+	if err != nil {
+		respondError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	lastSync := s.connMgr.GetLastSyncResult(id)
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"connector": cfg,
+		"last_sync": lastSync,
+	})
+}
+
+func (s *IdentityService) DeleteConnector(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	if err := s.connMgr.Unregister(r.Context(), id); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+func (s *IdentityService) ConnectConnector(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	if err := s.connMgr.Connect(r.Context(), id); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "connected"})
+}
+
+func (s *IdentityService) DisconnectConnector(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	if err := s.connMgr.Disconnect(r.Context(), id); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
+}
+
+func (s *IdentityService) SyncConnector(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	result, err := s.connMgr.SyncUsers(r.Context(), id)
+	if err != nil {
+		respondJSON(w, http.StatusOK, map[string]any{
+			"status": "sync_completed_with_errors",
+			"result": result,
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status": "sync_completed",
+		"result": result,
+	})
+}
+
+func (s *IdentityService) TestConnectorConnection(w http.ResponseWriter, r *http.Request) {
+	var cfg connector.ConnectorConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid connector config")
+		return
+	}
+
+	if err := connector.TestConnection(r.Context(), cfg); err != nil {
+		respondJSON(w, http.StatusOK, map[string]any{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "Connection successful",
+	})
+}
+
+// ─── IAM Lifecycle Management (LCM) Handlers ─────────────
+
+func (s *IdentityService) ExecuteLCM(w http.ResponseWriter, r *http.Request) {
+	var req connector.LCMRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid LCM request")
+		return
+	}
+
+	results := s.provisionEng.ExecuteLCM(r.Context(), req)
+
+	allSuccess := true
+	for _, res := range results {
+		if res.Status == connector.ProvisioningFailed {
+			allSuccess = false
+			break
+		}
+	}
+
+	status := http.StatusOK
+	if !allSuccess {
+		status = http.StatusMultiStatus
+	}
+
+	respondJSON(w, status, map[string]any{
+		"results": results,
+		"total":   len(results),
+		"all_ok":  allSuccess,
+	})
+}
+
+func (s *IdentityService) GetLCMHistory(w http.ResponseWriter, r *http.Request) {
+	history := s.provisionEng.GetHistory()
+	respondJSON(w, http.StatusOK, map[string]any{
+		"history": history,
+		"total":   len(history),
+	})
+}
+
+// ─── Identity CRUD (PostgreSQL) Handlers ─────────────────
+
+func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Request) {
+	var identity struct {
+		Email       string `json:"email"`
+		DisplayName string `json:"display_name"`
+		Type        string `json:"type"`
+		Department  string `json:"department"`
+		EmployeeID  string `json:"employee_id"`
+		ManagerID   string `json:"manager_id"`
+		Source      string `json:"source"`
+		TenantID    string `json:"tenant_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&identity); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+
+	id := uuid.New().String()
+
+	// Create in PostgreSQL via raw SQL (pgPool is interface{} for now)
+	// In production: s.pgPool.(*pgxpool.Pool).Exec(...)
+
+	// Create in Neo4j
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(r.Context())
+
+	_, err := session.Run(r.Context(), `
+		CREATE (i:Identity {
+			uuid: $uuid, tenant_id: $tenant_id, type: $type,
+			status: 'active', email: $email, display_name: $display_name,
+			department: $department, employee_id: $employee_id,
+			manager_id: $manager_id, source: $source,
+			risk_score: 0.0, created_at: datetime(), updated_at: datetime()
+		})
+	`, map[string]any{
+		"uuid": id, "tenant_id": identity.TenantID, "type": identity.Type,
+		"email": identity.Email, "display_name": identity.DisplayName,
+		"department": identity.Department, "employee_id": identity.EmployeeID,
+		"manager_id": identity.ManagerID, "source": identity.Source,
+	})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to create identity")
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, map[string]any{
+		"id":     id,
+		"status": "created",
+	})
+}
+
+func (s *IdentityService) UpdateIdentityRecord(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	var updates map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(r.Context())
+
+	// Build dynamic SET clause
+	setClauses := ""
+	params := map[string]any{"uuid": id}
+	for key, val := range updates {
+		switch key {
+		case "display_name", "email", "department", "status", "type", "manager_id":
+			paramKey := "p_" + key
+			setClauses += fmt.Sprintf("i.%s = $%s, ", key, paramKey)
+			params[paramKey] = val
+		}
+	}
+	setClauses += "i.updated_at = datetime()"
+
+	query := fmt.Sprintf(`
+		MATCH (i:Identity {uuid: $uuid})
+		SET %s
+	`, setClauses)
+
+	_, err := session.Run(r.Context(), query, params)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to update identity")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+func (s *IdentityService) DeleteIdentityRecord(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	// Soft delete — mark as terminated
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(r.Context())
+
+	_, err := session.Run(r.Context(), `
+		MATCH (i:Identity {uuid: $uuid})
+		SET i.status = 'terminated', i.updated_at = datetime()
+	`, map[string]any{"uuid": id})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to delete identity")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// ─── Group CRUD Handlers ────────────────────────────────────
+
+func (s *IdentityService) ListGroups(w http.ResponseWriter, r *http.Request) {
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(r.Context())
+
+	result, err := session.Run(r.Context(), `
+		MATCH (r:Role)
+		OPTIONAL MATCH (r)-[:GRANTS]->(e:Entitlement)
+		RETURN r.uuid AS uuid, r.name AS name, r.description AS description,
+			   r.role_type AS role_type, r.is_active AS is_active,
+			   COUNT(DISTINCT e) AS entitlement_count
+		ORDER BY r.name
+	`, nil)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Query failed")
+		return
+	}
+
+	var groups []map[string]any
+	for result.Next(r.Context()) {
+		rec := result.Record()
+		groups = append(groups, map[string]any{
+			"uuid":             getRecordVal(rec, "uuid"),
+			"name":             getRecordVal(rec, "name"),
+			"description":      getRecordVal(rec, "description"),
+			"role_type":        getRecordVal(rec, "role_type"),
+			"is_active":        getRecordVal(rec, "is_active"),
+			"entitlement_count": getRecordVal(rec, "entitlement_count"),
+		})
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"groups": groups,
+		"total":  len(groups),
+	})
+}
+
+func (s *IdentityService) CreateGroup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		RoleType    string `json:"role_type"`
+		TenantID    string `json:"tenant_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+
+	id := uuid.New().String()
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(r.Context())
+
+	_, err := session.Run(r.Context(), `
+		CREATE (r:Role {
+			uuid: $uuid, tenant_id: $tenant_id, name: $name,
+			description: $description, role_type: $role_type,
+			is_active: true, created_at: datetime()
+		})
+	`, map[string]any{
+		"uuid": id, "tenant_id": req.TenantID, "name": req.Name,
+		"description": req.Description, "role_type": req.RoleType,
+	})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to create group")
+		return
+	}
+
+	respondJSON(w, http.StatusCreated, map[string]any{
+		"id":     id,
+		"status": "created",
+	})
+}
+
+func (s *IdentityService) DeleteGroup(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(r.Context())
+
+	_, err := session.Run(r.Context(), `
+		MATCH (r:Role {uuid: $uuid})
+		DETACH DELETE r
+	`, map[string]any{"uuid": id})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to delete group")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// ─── Role Assignment ────────────────────────────────────────
+
+func (s *IdentityService) AssignRole(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IdentityID string `json:"identity_id"`
+		RoleID     string `json:"role_id"`
+		AssignedBy string `json:"assigned_by"`
+		Source     string `json:"source"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(r.Context())
+
+	_, err := session.Run(r.Context(), `
+		MATCH (i:Identity {uuid: $identity_id})
+		MATCH (r:Role {uuid: $role_id})
+		CREATE (i)-[:HAS_ROLE {
+			assigned_at: datetime(), assigned_by: $assigned_by,
+			source: $source, is_active: true
+		}]->(r)
+	`, map[string]any{
+		"identity_id": req.IdentityID, "role_id": req.RoleID,
+		"assigned_by": req.AssignedBy, "source": req.Source,
+	})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to assign role")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "assigned"})
+}
+
+func (s *IdentityService) RemoveRole(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IdentityID string `json:"identity_id"`
+		RoleID     string `json:"role_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(r.Context())
+
+	_, err := session.Run(r.Context(), `
+		MATCH (i:Identity {uuid: $identity_id})-[rel:HAS_ROLE]->(r:Role {uuid: $role_id})
+		DELETE rel
+		SET i.updated_at = datetime()
+	`, map[string]any{
+		"identity_id": req.IdentityID, "role_id": req.RoleID,
+	})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to remove role")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "removed"})
 }
 
 // ─── Helpers ──────────────────────────────────────────────

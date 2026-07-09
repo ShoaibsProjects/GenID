@@ -116,17 +116,6 @@ func main() {
 
 	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient)
 	w.RegisterActivity(act)
-	w.RegisterActivity(act.GrantOktaAccess)
-	w.RegisterActivity(act.RevokeAWSAccess)
-	w.RegisterActivity(act.BroadcastCAEPEvent)
-	w.RegisterActivity(act.RevokeSPIFFESVID)
-	w.RegisterActivity(act.RevokeOAuthTokens)
-	w.RegisterActivity(act.RevokeAPIKeys)
-	w.RegisterActivity(act.AcquireIdentityLock)
-	w.RegisterActivity(act.ReleaseIdentityLock)
-	w.RegisterActivity(act.QueryIdentityEntitlements)
-	w.RegisterActivity(act.FindDelegatedAgents)
-	w.RegisterActivity(act.FinalizeAuditTrail)
 
 	if err := w.Start(); err != nil {
 		log.Fatal().Err(err).Msg("Failed to start Temporal worker")
@@ -137,6 +126,31 @@ func main() {
 	// ─── Start HTTP/gRPC Server ───────────────────────────
 	r := mux.NewRouter()
 	r.Use(otelhttp.NewMiddleware("observeid-api"))
+
+	// Root — API landing page
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{
+  "service": "ObserveID Identity Fabric Engine",
+  "version": "1.0.0",
+  "status": "running",
+  "docs": {
+    "health":   "/health",
+    "ready":    "/ready",
+    "metrics":  "/metrics",
+    "scim":     "/scim/v2/Users",
+    "identities": "/api/v1/identities",
+    "agents":    "/api/v1/agents",
+    "access":    "/api/v1/access/check",
+    "copilot":   "/api/v1/copilot/query",
+    "caep":      "/api/v1/caep/events",
+    "connectors": "/api/v1/connectors",
+    "lcm":       "/api/v1/lcm",
+    "groups":    "/api/v1/groups"
+  }
+}`)
+	}).Methods("GET")
 
 	// Health check
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -192,6 +206,32 @@ func main() {
 	// CAEP API
 	api.HandleFunc("/caep/events", svc.ListCAEPEvents).Methods("GET")
 	api.HandleFunc("/caep/broadcast", svc.BroadcastCAEP).Methods("POST")
+
+	// ─── Connector Management ───────────────────────
+	api.HandleFunc("/connectors", svc.ListConnectors).Methods("GET")
+	api.HandleFunc("/connectors", svc.CreateConnector).Methods("POST")
+	api.HandleFunc("/connectors/test", svc.TestConnectorConnection).Methods("POST")
+	api.HandleFunc("/connectors/{id}", svc.GetConnector).Methods("GET")
+	api.HandleFunc("/connectors/{id}", svc.DeleteConnector).Methods("DELETE")
+	api.HandleFunc("/connectors/{id}/connect", svc.ConnectConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/disconnect", svc.DisconnectConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/sync", svc.SyncConnector).Methods("POST")
+
+	// ─── IAM Lifecycle Management (LCM) ────────────
+	api.HandleFunc("/lcm", svc.ExecuteLCM).Methods("POST")
+	api.HandleFunc("/lcm/history", svc.GetLCMHistory).Methods("GET")
+
+	// ─── Identity CRUD ─────────────────────────────
+	api.HandleFunc("/identities", svc.CreateIdentityRecord).Methods("POST")
+	api.HandleFunc("/identities/{id}", svc.UpdateIdentityRecord).Methods("PATCH")
+	api.HandleFunc("/identities/{id}", svc.DeleteIdentityRecord).Methods("DELETE")
+
+	// ─── Role / Group Management ───────────────────
+	api.HandleFunc("/groups", svc.ListGroups).Methods("GET")
+	api.HandleFunc("/groups", svc.CreateGroup).Methods("POST")
+	api.HandleFunc("/groups/{id}", svc.DeleteGroup).Methods("DELETE")
+	api.HandleFunc("/roles/assign", svc.AssignRole).Methods("POST")
+	api.HandleFunc("/roles/remove", svc.RemoveRole).Methods("POST")
 
 	// Metrics
 	r.Handle("/metrics", telemetry.MetricsHandler()).Methods("GET")
