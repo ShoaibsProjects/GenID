@@ -136,7 +136,7 @@ func main() {
 		// Next.js static export creates flat .html files (dashboard.html, identities.html, etc.)
 		// Map each frontend route to its .html file
 		frontendPages := []string{"dashboard", "identities", "agents", "connectors", "groups",
-			"access", "policies", "audit", "certifications", "sod", "vault"}
+			"access", "policies", "audit", "certifications", "sod", "vault", "settings"}
 		for _, page := range frontendPages {
 			p := page // capture
 			r.HandleFunc("/"+p, func(w http.ResponseWriter, r *http.Request) {

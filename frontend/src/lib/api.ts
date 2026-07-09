@@ -1,8 +1,39 @@
 // ─── ObserveID API Client ──────────────────────────────────
+// Auto-detects deployment: relative URLs for same-origin (Go-served),
+// or tunnel URL for Cloudflare Pages. Configurable via settings.
 
-// API_BASE uses relative path by default (same-origin when frontend served by Go backend).
-// Set NEXT_PUBLIC_API_URL env var to override (e.g., tunnel URL for Cloudflare Pages).
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || ""
+function getApiBase(): string {
+  // Runtime check: if on Cloudflare Pages (no local backend), need tunnel URL
+  if (typeof window !== "undefined") {
+    // Check if we're on the Go backend (same origin serves both frontend + API)
+    // If we can reach /health on the same origin, assume same-origin API
+    const isLocalOrBackend = window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      !window.location.hostname.includes("pages.dev")
+    if (!isLocalOrBackend) {
+      return localStorage.getItem("observeid_api_url") || ""
+    }
+  }
+  // Built-time override from env
+  if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL
+  }
+  return ""
+}
+
+// Allows runtime API URL configuration (saved to localStorage)
+export function setApiUrl(url: string): void {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("observeid_api_url", url)
+  }
+}
+
+export function getApiUrl(): string {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("observeid_api_url") || ""
+  }
+  return ""
+}
 
 interface RequestOptions {
   method?: string
@@ -12,8 +43,9 @@ interface RequestOptions {
 
 async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, headers = {} } = options
+  const base = getApiBase()
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${base}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
