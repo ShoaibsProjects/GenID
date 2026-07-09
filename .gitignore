@@ -42,6 +42,9 @@ Thumbs.db
 # Docker
 **/.docker
 
+# Cloudflare
+wrangler.toml
+
 # Terraform
 **/*.tfstate
 **/*.tfstate.*

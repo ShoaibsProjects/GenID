@@ -41,3 +41,4 @@ jobs:
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
           command: pages deploy out --project-name=observeid-frontend
           workingDirectory: frontend
+          packageManager: npm
