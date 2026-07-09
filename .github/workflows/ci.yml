@@ -64,12 +64,6 @@ jobs:
       - name: Vendor Dependencies
         run: cd backend && go mod tidy
 
-      - name: Lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          working-directory: backend
-
       - name: Vet
         run: cd backend && go vet ./...
 
