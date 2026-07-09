@@ -1,0 +1,31 @@
+# ─── Cloudflare Pages Configuration ────────────────────────
+# Deploys the ObserveID frontend on Cloudflare's free tier
+
+name: observeid
+compatibility_date: "2026-07-08"
+
+pages:
+  - name: observeid
+    build:
+      command: npm run build
+      cwd: frontend
+      directory: out
+    routes:
+      - pattern: "/*"
+        script: observeid
+
+# ─── Cloudflare Workers (API Proxy) ────────────────────────
+# Routes API calls to the backend without exposing origin
+
+workers:
+  - name: observeid-api
+    main: workers/api-proxy.ts
+    compatibility_date: "2026-07-08"
+    routes:
+      - pattern: "api.observeid.io/*"
+        zone_id: $CLOUDFLARE_ZONE_ID
+    env:
+      API_ORIGIN: $API_ORIGIN
+    triggers:
+      - crons:
+          - "*/5 * * * *"  # health check every 5 minutes
