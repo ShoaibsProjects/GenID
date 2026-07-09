@@ -26,7 +26,7 @@ RUN CGO_ENABLED=0 go build -o /app/worker ./cmd/worker
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
 
-RUN adduser -D -u 65534 observeid
+RUN adduser -D -u 1001 observeid
 USER observeid
 
 WORKDIR /app
