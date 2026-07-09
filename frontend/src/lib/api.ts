@@ -118,7 +118,7 @@ export function createIdentity(data: {
 }): Promise<any> {
   return apiRequest<any>("/api/v1/identities", {
     method: "POST",
-    body: { ...data, source: data.source || "manual", tenant_id: data.tenant_id || "default" },
+    body: { ...data, source: data.source || "manual" },
   })
 }
 

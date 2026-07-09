@@ -1080,7 +1080,7 @@ func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Re
 	if input.Source == "" {
 		input.Source = "manual"
 	}
-	if input.TenantID == "" {
+	if input.TenantID == "" || input.TenantID == "default" {
 		input.TenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
