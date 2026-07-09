@@ -127,6 +127,7 @@ func main() {
 
 	// ─── Start HTTP/gRPC Server ───────────────────────────
 	r := mux.NewRouter()
+	r.Use(corsMiddleware)
 	r.Use(otelhttp.NewMiddleware("observeid-api"))
 	r.Use(audit.LoggingMiddleware(auditLogStore))
 
@@ -164,7 +165,7 @@ func main() {
 
 		log.Info().Msg("Frontend static files serving from " + frontendDir)
 	} else {
-		log.Warn().Str("dir", frontendDir).Msg("Frontend static directory not found, serving API-only")
+		log.Warn().Msg("Frontend static directory not found (checked: frontend/out, ../frontend/out), serving API-only")
 		// Root — API landing page
 		r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -302,6 +303,10 @@ func main() {
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		log.Info().Msg("Shutting down gracefully...")
+		// Save vault secrets to disk
+		if err := svc.SaveVault(); err != nil {
+			log.Warn().Err(err).Msg("Failed to save vault")
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		srv.Shutdown(ctx)
@@ -312,6 +317,23 @@ func main() {
 		log.Fatal().Err(err).Msg("Server failed")
 	}
 	log.Info().Msg("Server stopped")
+}
+
+// ─── CORS Middleware ───────────────────────────────────────
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 type Config struct {

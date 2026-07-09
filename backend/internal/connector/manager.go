@@ -77,10 +77,10 @@ func (m *Manager) Unregister(ctx context.Context, id string) error {
 func (m *Manager) Connect(ctx context.Context, id string) error {
 	m.mu.RLock()
 	conn, ok := m.connectors[id]
-	config := m.configs[id]
+	config, hasCfg := m.configs[id]
 	m.mu.RUnlock()
 
-	if !ok {
+	if !ok || !hasCfg {
 		return fmt.Errorf("manager: connector not found: %s", id)
 	}
 
@@ -99,14 +99,14 @@ func (m *Manager) Connect(ctx context.Context, id string) error {
 func (m *Manager) Disconnect(ctx context.Context, id string) error {
 	m.mu.RLock()
 	conn, ok := m.connectors[id]
+	config, hasCfg := m.configs[id]
 	m.mu.RUnlock()
 
-	if !ok {
+	if !ok || !hasCfg {
 		return fmt.Errorf("manager: connector not found: %s", id)
 	}
 
 	conn.Disconnect(ctx)
-	config := m.configs[id]
 	config.Status = ConnectorStatusDisconnected
 	m.updateConfig(config)
 	return nil
@@ -153,9 +153,11 @@ func (m *Manager) SyncUsers(ctx context.Context, id string) (*SyncResult, error)
 		return nil, err
 	}
 
+	// Read config under lock to prevent data race
+	m.mu.RLock()
 	config := m.configs[id]
-	config.Status = ConnectorStatusSyncing
-	m.updateConfig(config)
+	isConnected := config.Status == ConnectorStatusConnected
+	m.mu.RUnlock()
 
 	result := &SyncResult{
 		ConnectorID:   id,
@@ -165,7 +167,7 @@ func (m *Manager) SyncUsers(ctx context.Context, id string) (*SyncResult, error)
 	}
 
 	// Ensure connected
-	if config.Status != ConnectorStatusConnected {
+	if !isConnected {
 		if err := conn.Connect(ctx); err != nil {
 			result.Errors = append(result.Errors, err.Error())
 			result.Success = false
@@ -176,6 +178,10 @@ func (m *Manager) SyncUsers(ctx context.Context, id string) (*SyncResult, error)
 			return result, err
 		}
 	}
+
+	// Mark as syncing
+	config.Status = ConnectorStatusSyncing
+	m.updateConfig(config)
 
 	// List users from target system
 	remoteUsers, err := conn.ListUsers(ctx)

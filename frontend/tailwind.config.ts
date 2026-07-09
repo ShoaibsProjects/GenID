@@ -11,43 +11,33 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // ObserveID brand palette — dark, sophisticated, secure
+        // ObserveID brand palette — copper accent on dark industrial
         brand: {
-          50: "#eef2ff",
-          100: "#e0e7ff",
-          200: "#c7d2fe",
-          300: "#a5b4fc",
-          400: "#818cf8",
-          500: "#6366f1",
-          600: "#4f46e5",
-          700: "#4338ca",
-          800: "#3730a3",
-          900: "#312e81",
-          950: "#1e1b4b",
+          50: "#fdf3ed",
+          100: "#f9e4d4",
+          200: "#f2c9a8",
+          300: "#e9a874",
+          400: "#D4854A",
+          500: "#c0753f",
+          600: "#a36335",
+          700: "#864f2b",
+          800: "#6e3f23",
+          900: "#5a341c",
+          950: "#331b0d",
         },
         surface: {
-          DEFAULT: "#0f1117",
-          50: "#1a1d27",
-          100: "#1e2130",
-          200: "#262938",
-          300: "#2e3140",
+          DEFAULT: "#0C0E13",
+          50: "#12151C",
+          100: "#1a1d27",
+          200: "#1E2230",
+          300: "#262938",
           400: "#3b3e4d",
-          500: "#4a4d5c",
+          500: "#555A68",
         },
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        sans: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "Fira Code", "monospace"],
-      },
-      animation: {
-        "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-        "glow": "glow 2s ease-in-out infinite alternate",
-      },
-      keyframes: {
-        glow: {
-          "0%": { boxShadow: "0 0 5px rgba(99, 102, 241, 0.2)" },
-          "100%": { boxShadow: "0 0 20px rgba(99, 102, 241, 0.6)" },
-        },
       },
     },
   },

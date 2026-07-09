@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"sync"
 	"time"
 )
@@ -20,9 +21,10 @@ import (
 // Uses AES-256-GCM with a master key derived from an environment variable.
 
 type Vault struct {
-	mu       sync.RWMutex
-	masterKey []byte
-	secrets  map[string]SecretEntry
+	mu        sync.RWMutex
+	masterKey  []byte
+	secrets    map[string]SecretEntry
+	vaultPath  string // file path for persistent storage
 }
 
 type SecretEntry struct {
@@ -37,12 +39,37 @@ type SecretEntry struct {
 }
 
 // NewVault creates a vault with a key derived from VAULT_MASTER_KEY env var.
-func NewVault(masterKey string) *Vault {
+// vaultPath is an optional file path for persistent storage. Set to "" for in-memory only.
+func NewVault(masterKey string, vaultPath string) *Vault {
 	key := deriveKey(masterKey)
-	return &Vault{
+	v := &Vault{
 		masterKey: key,
 		secrets:   make(map[string]SecretEntry),
+		vaultPath: vaultPath,
 	}
+	// Auto-load from file on startup
+	if vaultPath != "" {
+		if data, err := os.ReadFile(vaultPath); err == nil && len(data) > 0 {
+			if err := v.Import(data); err != nil {
+				log.Printf("[VAULT] Failed to load from %s: %v", vaultPath, err)
+			} else {
+				log.Printf("[VAULT] Loaded %d secrets from %s", len(v.secrets), vaultPath)
+			}
+		}
+	}
+	return v
+}
+
+// Save persists the vault to disk. Returns an error if no vaultPath was configured.
+func (v *Vault) Save() error {
+	if v.vaultPath == "" {
+		return fmt.Errorf("vault: no vault path configured")
+	}
+	data, err := v.Export()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(v.vaultPath, data, 0600)
 }
 
 // Store encrypts and stores a secret.

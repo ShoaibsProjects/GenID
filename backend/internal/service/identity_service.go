@@ -38,7 +38,11 @@ type IdentityService struct {
 
 func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *IdentityService {
 	connMgr := connector.NewManager()
-	vlt := vault.NewVault(os.Getenv("VAULT_MASTER_KEY"))
+	vaultPath := os.Getenv("VAULT_PATH")
+	if vaultPath == "" {
+		vaultPath = "/tmp/observeid-vault.json"
+	}
+	vlt := vault.NewVault(os.Getenv("VAULT_MASTER_KEY"), vaultPath)
 	alog := audit.NewStore(10000)
 	return &IdentityService{
 		pgPool:       pgPool,
@@ -53,6 +57,7 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 }
 
 func (s *IdentityService) AuditStore() *audit.Store { return s.auditLog }
+func (s *IdentityService) SaveVault() error         { return s.vault.Save() }
 
 // ─── SCIM 2.0 Handlers ─────────────────────────────────────
 
@@ -109,7 +114,7 @@ func (s *IdentityService) ScimDeleteUser(w http.ResponseWriter, r *http.Request)
 	vars := mux.Vars(r)
 	id := vars["id"]
 	// Trigger offboarding workflow
-	s.temporal.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
+	s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
 		ID:        fmt.Sprintf("offboard-%s", id),
 		TaskQueue: "critical_offboarding",
 	}, workflow.OffboardIdentityWorkflow, workflow.OffboardInput{
@@ -139,7 +144,7 @@ func (s *IdentityService) ListIdentities(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-		var identities []map[string]any
+	var identities []map[string]any
 	for result.Next(r.Context()) {
 		rec := result.Record()
 		identities = append(identities, map[string]any{
@@ -415,35 +420,56 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 	// Update PostgreSQL status (source of truth)
 	// In production: tx.Exec("UPDATE non_human_identities SET status = 'revoked' WHERE uuid = $1", id)
 
-	// Revoke SPIFFE SVID
+	// Revoke agent — use the registered RevokeAccessWorkflow
+	agentID := id
+	reason := req.Reason
 	go func() {
-		s.temporal.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
-			ID:        fmt.Sprintf("kill-agent-%s", id),
+		if _, err := s.temporal.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
+			ID:        fmt.Sprintf("kill-agent-%s", agentID),
 			TaskQueue: "critical_offboarding",
-		}, "RevokeAgentDelegationWorkflow", map[string]any{
-			"agent_id": id, "revoked_by": "system", "reason": req.Reason,
-		})
+		}, workflow.RevokeAccessWorkflow, workflow.RevokeAccessInput{
+			IdentityID:  agentID,
+			Reason:      reason,
+			RevokedBy:   "system",
+			IsEmergency: true,
+		}); err != nil {
+			logError("temporal", fmt.Errorf("kill switch workflow: %w", err))
+		}
 	}()
 
 	// Find and cascade-revoke delegated agents
+	parentID := id
 	go func() {
 		session := s.neo4j.NewSession(context.Background(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 		defer session.Close(context.Background())
 
-		result, _ := session.Run(context.Background(), `
+		result, err := session.Run(context.Background(), `
 			MATCH (:NonHumanIdentity {uuid: $id})-[:DELEGATED_FROM*1..3]->(child:NonHumanIdentity)
 			WHERE child.status = 'active'
 			RETURN child.uuid AS child_id
-		`, map[string]any{"id": id})
+		`, map[string]any{"id": parentID})
+		if err != nil {
+			logError("neo4j", fmt.Errorf("cascade query: %w", err))
+			return
+		}
 
 		for result.Next(context.Background()) {
-			childID, _ := result.Record().Get("child_id")
-			s.temporal.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
-				ID:        fmt.Sprintf("cascade-kill-%s", childID),
+			childIDRaw, _ := result.Record().Get("child_id")
+			childIDStr, _ := childIDRaw.(string)
+			if childIDStr == "" {
+				continue
+			}
+			if _, err := s.temporal.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
+				ID:        fmt.Sprintf("cascade-kill-%s", childIDStr),
 				TaskQueue: "critical_offboarding",
-			}, "RevokeAgentDelegationWorkflow", map[string]any{
-				"agent_id": childID, "revoked_by": id, "reason": "parent_revoked",
-			})
+			}, workflow.RevokeAccessWorkflow, workflow.RevokeAccessInput{
+				IdentityID:  childIDStr,
+				Reason:      "parent_revoked",
+				RevokedBy:   parentID,
+				IsEmergency: true,
+			}); err != nil {
+				logError("temporal", fmt.Errorf("cascade kill switch: %w", err))
+			}
 		}
 	}()
 
@@ -551,8 +577,11 @@ func (s *IdentityService) CheckAccess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check sticky revocation cache
-	recent, _ := s.redis.Exists(r.Context(), fmt.Sprintf("revocation:recent:%s", req.IdentityID)).Result()
-	if recent > 0 {
+	recent, err := s.redis.Exists(r.Context(), fmt.Sprintf("revocation:recent:%s", req.IdentityID)).Result()
+	if err != nil {
+		// Redis down — fall through to allow (fail open for availability)
+		logError("redis", fmt.Errorf("revocation check: %w", err))
+	} else if recent > 0 {
 		respondJSON(w, http.StatusOK, map[string]any{
 			"allowed": false,
 			"reason":  "recent_revocation",
@@ -579,7 +608,7 @@ func (s *IdentityService) GrantAccess(w http.ResponseWriter, r *http.Request) {
 	workflowID := fmt.Sprintf("grant-access-%s-%s", req.IdentityID, uuid.New().String()[:8])
 	s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
 		ID:        workflowID,
-		TaskQueue: "provisioning",
+		TaskQueue: "critical_offboarding",
 	}, workflow.GrantAccessWorkflow, req)
 
 	respondJSON(w, http.StatusAccepted, map[string]any{
@@ -658,9 +687,10 @@ func (s *IdentityService) BroadcastCAEP(w http.ResponseWriter, r *http.Request) 
 // ─── Connector Management Handlers ─────────────────────────
 
 func (s *IdentityService) ListConnectors(w http.ResponseWriter, r *http.Request) {
+	connectors := s.connMgr.List()
 	respondJSON(w, http.StatusOK, map[string]any{
-		"connectors": s.connMgr.List(),
-		"total":      len(s.connMgr.List()),
+		"connectors": connectors,
+		"total":      len(connectors),
 	})
 }
 
