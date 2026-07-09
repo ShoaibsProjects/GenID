@@ -178,6 +178,10 @@ export function fetchConnectorUsers(id: string): Promise<any> {
   return apiRequest<any>(`/api/v1/connectors/${id}/users`)
 }
 
+export function fetchConnectorIdentities(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/connectors/${id}/identities`)
+}
+
 export function deleteConnector(id: string): Promise<any> {
   return apiRequest<any>(`/api/v1/connectors/${id}`, { method: "DELETE" })
 }

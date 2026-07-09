@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { fetchConnectors, createConnector, testConnectorConnection, connectConnector, syncConnector, deleteConnector, fetchConnectorUsers } from "@/lib/api"
+import { fetchConnectors, createConnector, testConnectorConnection, connectConnector, syncConnector, deleteConnector, fetchConnectorIdentities } from "@/lib/api"
 
 export default function ConnectorsPage() {
   const [connectors, setConnectors] = useState<any[]>([])
@@ -9,10 +9,10 @@ export default function ConnectorsPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ name: "", type: "entra_id", endpoint: "", client_id: "", client_secret: "", tenant_name: "", auth_type: "oauth2", base_dn: "", username: "", password: "", domain: "" })
   const [testResult, setTestResult] = useState<any>(null)
-  const [viewingUsers, setViewingUsers] = useState<string | null>(null)
-  const [usersData, setUsersData] = useState<any>(null)
-  const [usersLoading, setUsersLoading] = useState(false)
-  const [syncResult, setSyncResult] = useState<string | null>(null)
+  const [viewingAccts, setViewingAccts] = useState<string | null>(null)
+  const [acctsData, setAcctsData] = useState<any>(null)
+  const [acctsLoading, setAcctsLoading] = useState(false)
+  const [syncBusy, setSyncBusy] = useState<string | null>(null)
 
   function loadConnectors() {
     setLoading(true)
@@ -54,46 +54,49 @@ export default function ConnectorsPage() {
   }
 
   async function handleSync(id: string) {
-    setSyncResult(id)
+    setSyncBusy(id)
     try {
       const res = await syncConnector(id)
       loadConnectors()
-      // If viewing users for this connector, refresh
-      if (viewingUsers === id) handleViewUsers(id)
+      if (viewingAccts === id) loadAccts(id)
     } catch (e: any) {
       alert("Sync failed: " + e.message)
     } finally {
-      setSyncResult(null)
+      setSyncBusy(null)
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this connector?")) return
+    if (!confirm("Delete this connector and all its synced identities?")) return
     try {
       await deleteConnector(id)
-      if (viewingUsers === id) setViewingUsers(null)
+      if (viewingAccts === id) { setViewingAccts(null); setAcctsData(null) }
       loadConnectors()
     } catch (e: any) {
       alert("Delete failed: " + e.message)
     }
   }
 
-  async function handleViewUsers(id: string) {
-    if (viewingUsers === id) {
-      setViewingUsers(null)
-      setUsersData(null)
+  async function loadAccts(id: string) {
+    setAcctsLoading(true)
+    try {
+      const data = await fetchConnectorIdentities(id)
+      setAcctsData(data)
+    } catch (e: any) {
+      setAcctsData({ error: e.message, identities: [], total: 0 })
+    } finally {
+      setAcctsLoading(false)
+    }
+  }
+
+  async function toggleAccts(id: string) {
+    if (viewingAccts === id) {
+      setViewingAccts(null)
+      setAcctsData(null)
       return
     }
-    setViewingUsers(id)
-    setUsersLoading(true)
-    try {
-      const data = await fetchConnectorUsers(id)
-      setUsersData(data)
-    } catch (e: any) {
-      setUsersData({ error: e.message, users: [], total: 0 })
-    } finally {
-      setUsersLoading(false)
-    }
+    setViewingAccts(id)
+    await loadAccts(id)
   }
 
   return (
@@ -129,8 +132,8 @@ export default function ConnectorsPage() {
             )}
             {(form.type === "active_directory" || form.type === "ldap") && (
               <>
-                <input className="input" placeholder="Host:port (e.g. ldap.company.com:389)" value={form.endpoint} onChange={(e) => setForm({...form, endpoint: e.target.value})} />
-                <input className="input" placeholder="Base DN (e.g. DC=company,DC=com)" value={form.base_dn} onChange={(e) => setForm({...form, base_dn: e.target.value})} />
+                <input className="input" placeholder="Host:port" value={form.endpoint} onChange={(e) => setForm({...form, endpoint: e.target.value})} />
+                <input className="input" placeholder="Base DN" value={form.base_dn} onChange={(e) => setForm({...form, base_dn: e.target.value})} />
                 <input className="input" placeholder="Username" value={form.username} onChange={(e) => setForm({...form, username: e.target.value})} />
                 <input className="input" type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({...form, password: e.target.value})} />
                 <input className="input" placeholder="Domain (optional)" value={form.domain} onChange={(e) => setForm({...form, domain: e.target.value})} />
@@ -198,71 +201,81 @@ export default function ConnectorsPage() {
                   </div>
                   <div className="flex gap-1.5 ml-4 shrink-0">
                     <button className="btn-ghost text-xs" onClick={() => handleConnect(c.id)}>Connect</button>
-                    <button className="btn-ghost text-xs" onClick={() => handleSync(c.id)} disabled={syncResult === c.id}>
-                      {syncResult === c.id ? "Syncing..." : "Sync"}
+                    <button className="btn-ghost text-xs" onClick={() => handleSync(c.id)} disabled={syncBusy === c.id}>
+                      {syncBusy === c.id ? "Syncing..." : "Sync"}
                     </button>
-                    <button className="btn-ghost text-xs" onClick={() => handleViewUsers(c.id)}>
-                      {viewingUsers === c.id ? "Hide" : "Accounts"}
+                    <button className="btn-ghost text-xs" onClick={() => toggleAccts(c.id)}>
+                      {viewingAccts === c.id ? "Hide" : "Accounts"}
                     </button>
                     <button className="btn-ghost text-xs text-rose-400" onClick={() => handleDelete(c.id)}>Delete</button>
                   </div>
                 </div>
 
-                {/* Expandable users table */}
-                {viewingUsers === c.id && (
+                {/* Accounts table (persisted identities) */}
+                {viewingAccts === c.id && (
                   <div className="border-t border-gray-800/50 bg-surface-100/20">
-                    {usersLoading ? (
+                    {acctsLoading ? (
                       <div className="p-8 text-center text-sm text-gray-500">Loading accounts...</div>
-                    ) : usersData?.error ? (
+                    ) : acctsData?.error ? (
                       <div className="p-8 text-center text-sm text-red-400">
-                        Failed to load accounts: {usersData.error}
+                        Failed: {acctsData.error}
                       </div>
-                    ) : !usersData?.users || usersData.users.length === 0 ? (
+                    ) : !acctsData?.identities || acctsData.identities.length === 0 ? (
                       <div className="p-8 text-center text-sm text-gray-500">
-                        <p className="mb-1">No accounts found</p>
-                        <p className="text-xs text-gray-600">Click "Sync" to pull users from this connector</p>
+                        <p className="mb-1">No accounts synced yet</p>
+                        <p className="text-xs text-gray-600">Click "Connect" then "Sync" to pull users from this directory</p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-gray-800/50">
-                              <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase w-8">#</th>
-                              <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">User</th>
-                              <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">Email</th>
-                              <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">Username</th>
-                              <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">Department</th>
-                              <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-800/30">
-                            {usersData.users.map((u: any, i: number) => (
-                              <tr key={u.external_id || i} className="hover:bg-surface-100/30">
-                                <td className="py-2 px-4 text-xs text-gray-500">{i + 1}</td>
-                                <td className="py-2 px-4">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-7 h-7 rounded-full bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-xs font-medium text-brand-400">
-                                      {(u.display_name || u.email || u.username || "?").charAt(0).toUpperCase()}
-                                    </div>
-                                    <span className="text-gray-200 font-medium">{u.display_name || u.username || "Unnamed"}</span>
-                                  </div>
-                                </td>
-                                <td className="py-2 px-4 text-gray-400">{u.email || "-"}</td>
-                                <td className="py-2 px-4 text-gray-400 font-mono text-xs">{u.username || "-"}</td>
-                                <td className="py-2 px-4 text-gray-400">{u.department || "-"}</td>
-                                <td className="py-2 px-4">
-                                  <span className={u.enabled ? "badge-success" : "badge-neutral"}>
-                                    {u.enabled ? "Enabled" : "Disabled"}
-                                  </span>
-                                </td>
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-gray-800/50">
+                                <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">User</th>
+                                <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">Email</th>
+                                <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">Department</th>
+                                <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">Title</th>
+                                <th className="text-left py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th className="text-right py-2.5 px-4 text-xs font-medium text-gray-500 uppercase">Synced</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <div className="px-4 py-2 text-xs text-gray-500 border-t border-gray-800/30">
-                          {usersData.total} account{usersData.total !== 1 ? "s" : ""} synced from {c.name}
+                            </thead>
+                            <tbody className="divide-y divide-gray-800/30">
+                              {acctsData.identities.map((u: any) => (
+                                <tr key={u.id} className="hover:bg-surface-100/30">
+                                  <td className="py-2 px-4">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-7 h-7 rounded-full bg-brand-600/20 border border-brand-500/30 flex items-center justify-center text-xs font-medium text-brand-400">
+                                        {(u.display_name || u.email || u.username || "?").charAt(0).toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <span className="text-gray-200 font-medium text-sm">{u.display_name || u.username || "Unnamed"}</span>
+                                        {u.external_id && <span className="text-gray-600 text-xs ml-1 truncate max-w-[120px] inline-block align-middle">{u.external_id}</span>}
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="py-2 px-4 text-gray-400 text-xs">{u.email || "-"}</td>
+                                  <td className="py-2 px-4 text-gray-400 text-xs">{u.department || "-"}</td>
+                                  <td className="py-2 px-4 text-gray-400 text-xs">{u.title || "-"}</td>
+                                  <td className="py-2 px-4">
+                                    <span className={u.enabled ? "badge-success" : "badge-neutral"}>
+                                      {u.enabled ? "Active" : "Disabled"}
+                                    </span>
+                                  </td>
+                                  <td className="py-2 px-4 text-right text-gray-500 text-xs">
+                                    {u.last_synced_at ? new Date(u.last_synced_at).toLocaleDateString() : "-"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                      </div>
+                        <div className="px-4 py-2 text-xs text-gray-500 border-t border-gray-800/30 flex items-center justify-between">
+                          <span>{acctsData.total} account{acctsData.total !== 1 ? "s" : ""} synced from {c.name}</span>
+                          <button className="btn-ghost text-xs" onClick={() => handleSync(c.id)} disabled={syncBusy === c.id}>
+                            {syncBusy === c.id ? "Syncing..." : "Re-sync"}
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 )}

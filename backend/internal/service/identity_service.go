@@ -15,6 +15,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/client"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/observeid/identity-platform/internal/audit"
 	"github.com/observeid/identity-platform/internal/connector"
 	"github.com/observeid/identity-platform/internal/vault"
@@ -24,7 +26,7 @@ import (
 // ─── Identity Service ──────────────────────────────────────
 
 type IdentityService struct {
-	pgPool       interface{} // *pgxpool.Pool in production
+	pgPool       *pgxpool.Pool
 	neo4j        neo4j.DriverWithContext
 	redis        *redis.Client
 	temporal     client.Client
@@ -34,7 +36,7 @@ type IdentityService struct {
 	auditLog     *audit.Store
 }
 
-func NewIdentityService(pgPool interface{}, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *IdentityService {
+func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *IdentityService {
 	connMgr := connector.NewManager()
 	vlt := vault.NewVault(os.Getenv("VAULT_MASTER_KEY"))
 	alog := audit.NewStore(10000)
@@ -748,9 +750,170 @@ func (s *IdentityService) SyncConnector(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Persist synced users to PostgreSQL
+	if result != nil && len(result.Users) > 0 {
+		created, updated, persistErr := s.persistSyncedUsers(r.Context(), id, result.Users)
+		if persistErr != nil {
+			s.auditLog.Append(audit.Entry{
+				Level: audit.LevelError, Service: "connector", Path: r.URL.Path,
+				Message: fmt.Sprintf("Sync persistence error: %s", persistErr.Error()),
+				Tags:    []string{"connector", "sync", "error"},
+			})
+		}
+		result.UsersCreated = created
+		result.UsersUpdated = updated
+		result.UsersTotal = len(result.Users)
+	}
+
 	respondJSON(w, http.StatusOK, map[string]any{
 		"status": "sync_completed",
 		"result": result,
+	})
+}
+
+func (s *IdentityService) persistSyncedUsers(ctx context.Context, connectorID string, users []connector.ConnectorUser) (int, int, error) {
+	created, updated := 0, 0
+
+	// Get tenant_id from connector config
+	cfg, err := s.connMgr.GetConfig(connectorID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("get connector config: %w", err)
+	}
+	tenantID := cfg.TenantID
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001" // default tenant
+	}
+
+	for _, user := range users {
+		raw, _ := json.Marshal(user.Attributes)
+		if raw == nil {
+			raw = []byte("{}")
+		}
+
+		groups := user.Groups
+		if groups == nil {
+			groups = []string{}
+		}
+		roles := user.Roles
+		if roles == nil {
+			roles = []string{}
+		}
+
+		tag, err := s.pgPool.Exec(ctx, `
+			INSERT INTO connector_identities
+				(tenant_id, connector_id, external_id, username, email, display_name,
+				 first_name, last_name, department, title, employee_id, manager_id,
+				 phone, mobile, street_address, city, state, zip_code, country,
+				 cost_center, division, company, enabled, locked,
+				 groups, roles, raw_attributes, last_synced_at)
+			VALUES
+				($1, $2, $3, $4, $5, $6,
+				 $7, $8, $9, $10, $11, $12,
+				 $13, $14, $15, $16, $17, $18, $19,
+				 $20, $21, $22, $23, $24,
+				 $25, $26, $27, NOW())
+			ON CONFLICT (connector_id, external_id) DO UPDATE SET
+				username      = EXCLUDED.username,
+				email         = EXCLUDED.email,
+				display_name  = EXCLUDED.display_name,
+				first_name    = EXCLUDED.first_name,
+				last_name     = EXCLUDED.last_name,
+				department    = EXCLUDED.department,
+				title         = EXCLUDED.title,
+				employee_id   = EXCLUDED.employee_id,
+				manager_id    = EXCLUDED.manager_id,
+				phone         = EXCLUDED.phone,
+				mobile        = EXCLUDED.mobile,
+				street_address = EXCLUDED.street_address,
+				city          = EXCLUDED.city,
+				state         = EXCLUDED.state,
+				zip_code      = EXCLUDED.zip_code,
+				country       = EXCLUDED.country,
+				cost_center   = EXCLUDED.cost_center,
+				division      = EXCLUDED.division,
+				company       = EXCLUDED.company,
+				enabled       = EXCLUDED.enabled,
+				locked        = EXCLUDED.locked,
+				groups        = EXCLUDED.groups,
+				roles         = EXCLUDED.roles,
+				raw_attributes = EXCLUDED.raw_attributes,
+				last_synced_at = NOW()
+		`, tenantID, connectorID, user.ExternalID, user.Username, user.Email, user.DisplayName,
+			user.FirstName, user.LastName, user.Department, user.Title, user.EmployeeID, user.Manager,
+			user.Phone, user.Mobile, user.StreetAddress, user.City, user.State, user.ZipCode, user.Country,
+			user.CostCenter, user.Division, user.Company, user.Enabled, user.Locked,
+			groups, roles, raw)
+
+		if err != nil {
+			return created, updated, fmt.Errorf("upsert user %s: %w", user.ExternalID, err)
+		}
+		if tag.Insert() {
+			created++
+		} else {
+			updated++
+		}
+	}
+
+	return created, updated, nil
+}
+
+func (s *IdentityService) GetConnectorIdentities(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	rows, err := s.pgPool.Query(r.Context(), `
+		SELECT id, external_id, username, email, display_name, first_name, last_name,
+		       department, title, enabled, locked, groups, roles, first_synced_at, last_synced_at
+		FROM connector_identities
+		WHERE connector_id = $1
+		ORDER BY display_name NULLS LAST, username NULLS LAST, email
+	`, id)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query failed: %s", err.Error()))
+		return
+	}
+	defer rows.Close()
+
+	type IdentityEntry struct {
+		ID           string   `json:"id"`
+		ExternalID   string   `json:"external_id"`
+		Username     string   `json:"username"`
+		Email        string   `json:"email"`
+		DisplayName  string   `json:"display_name"`
+		FirstName    string   `json:"first_name"`
+		LastName     string   `json:"last_name"`
+		Department   string   `json:"department"`
+		Title        string   `json:"title"`
+		Enabled      bool     `json:"enabled"`
+		Locked       bool     `json:"locked"`
+		Groups       []string `json:"groups"`
+		Roles        []string `json:"roles"`
+		FirstSynced  string   `json:"first_synced_at"`
+		LastSynced   string   `json:"last_synced_at"`
+	}
+
+	identities := []IdentityEntry{}
+	for rows.Next() {
+		var e IdentityEntry
+		var firstSynced, lastSynced *time.Time
+		if err := rows.Scan(&e.ID, &e.ExternalID, &e.Username, &e.Email, &e.DisplayName,
+			&e.FirstName, &e.LastName, &e.Department, &e.Title, &e.Enabled, &e.Locked,
+			&e.Groups, &e.Roles, &firstSynced, &lastSynced); err != nil {
+			continue
+		}
+		if firstSynced != nil {
+			e.FirstSynced = firstSynced.Format(time.RFC3339)
+		}
+		if lastSynced != nil {
+			e.LastSynced = lastSynced.Format(time.RFC3339)
+		}
+		identities = append(identities, e)
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"connector_id": id,
+		"identities":   identities,
+		"total":        len(identities),
 	})
 }
 
@@ -871,7 +1034,7 @@ func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Re
 
 	id := uuid.New().String()
 
-	// Create in PostgreSQL via raw SQL (pgPool is interface{} for now)
+	// Create in PostgreSQL via raw SQL
 	// In production: s.pgPool.(*pgxpool.Pool).Exec(...)
 
 	// Create in Neo4j

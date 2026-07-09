@@ -411,6 +411,49 @@ CREATE TABLE connectors (
     UNIQUE(tenant_id, name)
 );
 
+-- ─── Connector-Synced Identities ─────────────────────────
+-- Stores identities synced from external directories via connectors.
+CREATE TABLE connector_identities (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id),
+    connector_id    UUID NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    external_id     VARCHAR(500) NOT NULL,
+    username        VARCHAR(255),
+    email           VARCHAR(320),
+    display_name    VARCHAR(255),
+    first_name      VARCHAR(255),
+    last_name       VARCHAR(255),
+    department      VARCHAR(255),
+    title           VARCHAR(255),
+    employee_id     VARCHAR(100),
+    manager_id      VARCHAR(500),
+    phone           VARCHAR(100),
+    mobile          VARCHAR(100),
+    street_address  VARCHAR(255),
+    city            VARCHAR(100),
+    state           VARCHAR(100),
+    zip_code        VARCHAR(20),
+    country         VARCHAR(100),
+    cost_center     VARCHAR(100),
+    division        VARCHAR(100),
+    company         VARCHAR(255),
+    enabled         BOOLEAN NOT NULL DEFAULT TRUE,
+    locked          BOOLEAN NOT NULL DEFAULT FALSE,
+    groups          TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    roles           TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    raw_attributes  JSONB NOT NULL DEFAULT '{}',
+    first_synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_synced_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(connector_id, external_id)
+);
+
+CREATE INDEX idx_conn_id_tenant     ON connector_identities(tenant_id);
+CREATE INDEX idx_conn_id_connector  ON connector_identities(connector_id);
+CREATE INDEX idx_conn_id_email      ON connector_identities(email);
+CREATE INDEX idx_conn_id_enabled    ON connector_identities(enabled);
+CREATE INDEX idx_conn_id_dept       ON connector_identities(department);
+CREATE INDEX idx_conn_id_lookup     ON connector_identities(connector_id, external_id);
+
 -- ─── Auto-Update Timestamps ───────────────────────────────
 CREATE OR REPLACE FUNCTION update_timestamp()
 RETURNS TRIGGER AS $$

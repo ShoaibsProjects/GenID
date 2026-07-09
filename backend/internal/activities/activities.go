@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/client"
@@ -17,13 +18,13 @@ import (
 // ─── Activity Service ──────────────────────────────────────
 
 type ActivityService struct {
-	pgPool    interface{}  // Will use pgx in production
+	pgPool    *pgxpool.Pool
 	neo4j     neo4j.DriverWithContext
 	redis     *redis.Client
 	temporal  client.Client
 }
 
-func NewActivityService(pgPool interface{}, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *ActivityService {
+func NewActivityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *ActivityService {
 	return &ActivityService{
 		pgPool:   pgPool,
 		neo4j:    neo4j,
