@@ -1,0 +1,111 @@
+<svg width="1200" height="400" viewBox="0 0 1200 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#09090B"/>
+      <stop offset="50%" stop-color="#0F0F14"/>
+      <stop offset="100%" stop-color="#09090B"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="accentLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#3B82F6" stop-opacity="1"/>
+      <stop offset="70%" stop-color="#6366F1" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowSmall">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softShadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#3B82F6" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="400" fill="url(#bg)"/>
+
+  <!-- Grid Pattern -->
+  <g opacity="0.04">
+    <line x1="0" y1="50" x2="1200" y2="50" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="0" y1="100" x2="1200" y2="100" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="0" y1="150" x2="1200" y2="150" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="0" y1="200" x2="1200" y2="200" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="0" y1="250" x2="1200" y2="250" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="0" y1="300" x2="1200" y2="300" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="0" y1="350" x2="1200" y2="350" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="100" y1="0" x2="100" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="200" y1="0" x2="200" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="300" y1="0" x2="300" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="400" y1="0" x2="400" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="500" y1="0" x2="500" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="600" y1="0" x2="600" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="700" y1="0" x2="700" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="800" y1="0" x2="800" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="900" y1="0" x2="900" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="1000" y1="0" x2="1000" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+    <line x1="1100" y1="0" x2="1100" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
+  </g>
+
+  <!-- Decorative circuit lines -->
+  <g opacity="0.08">
+    <path d="M0 200 H300 V150 H600 V250 H900 V200 H1200" stroke="#3B82F6" stroke-width="1" fill="none"/>
+    <circle cx="300" cy="150" r="3" fill="#3B82F6"/>
+    <circle cx="600" cy="250" r="3" fill="#3B82F6"/>
+    <circle cx="900" cy="200" r="3" fill="#3B82F6"/>
+  </g>
+
+  <!-- Accent Line Top -->
+  <rect x="0" y="0" width="1200" height="1" fill="url(#accentLine)"/>
+
+  <!-- Logo / Icon -->
+  <g filter="url(#glow)">
+    <rect x="60" y="80" width="56" height="56" rx="14" fill="#0F0F14" stroke="url(#accent)" stroke-width="1.5" filter="url(#softShadow)"/>
+    <path d="M76 96L88 108L76 120M92 120H100" stroke="#3B82F6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M76 96L64 108L76 120" stroke="#6366F1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.6"/>
+  </g>
+
+  <!-- Title -->
+  <text x="135" y="110" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="36" font-weight="800" fill="#FAFAFA" letter-spacing="-0.5">ObserveID</text>
+  <text x="135" y="144" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="16" font-weight="500" fill="#A1A1AA" letter-spacing="0.3">Identity Fabric · IAM/IGA Platform</text>
+
+  <!-- Tagline -->
+  <text x="60" y="210" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="13" font-weight="400" fill="#52525B" letter-spacing="1.5">EVENT-DRIVEN · AI-NATIVE · REAL-TIME GOVERNANCE</text>
+  <text x="60" y="240" font-family="'JetBrains Mono', monospace" font-size="12" fill="#3B82F6" letter-spacing="0.5">Unify human &amp; non-human identity under a single policy engine</text>
+
+  <!-- Hexagon Grid Decoration -->
+  <g transform="translate(920, 60)" opacity="0.15">
+    <polygon points="30,0 60,17 60,52 30,69 0,52 0,17" fill="none" stroke="#3B82F6" stroke-width="1.5"/>
+    <polygon points="90,0 120,17 120,52 90,69 60,52 60,17" fill="none" stroke="#3B82F6" stroke-width="1.5"/>
+    <polygon points="60,69 90,86 90,121 60,138 30,121 30,86" fill="none" stroke="#3B82F6" stroke-width="1.5"/>
+    <polygon points="30,-69 60,-52 60,-17 30,0 0,-17 0,-52" fill="none" stroke="#6366F1" stroke-width="1"/>
+    <polygon points="90,-69 120,-52 120,-17 90,0 60,-17 60,-52" fill="none" stroke="#6366F1" stroke-width="1"/>
+  </g>
+
+  <!-- Bottom accent line -->
+  <rect x="60" y="370" width="300" height="2" rx="1" fill="url(#accentLine)"/>
+
+  <!-- Version badge -->
+  <rect x="60" y="325" width="80" height="24" rx="4" fill="#3B82F6" fill-opacity="0.1" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="0.5"/>
+  <text x="70" y="341" font-family="'JetBrains Mono', monospace" font-size="11" fill="#3B82F6" font-weight="500">2026.07</text>
+
+  <!-- Tech stack pills -->
+  <rect x="160" y="325" width="36" height="24" rx="4" fill="#1E1E24" stroke="#1E1E24" stroke-width="0.5"/>
+  <text x="170" y="341" font-family="'JetBrains Mono', monospace" font-size="10" fill="#A1A1AA">Go</text>
+
+  <rect x="204" y="325" width="50" height="24" rx="4" fill="#1E1E24" stroke="#1E1E24" stroke-width="0.5"/>
+  <text x="212" y="341" font-family="'JetBrains Mono', monospace" font-size="10" fill="#A1A1AA">Next</text>
+
+  <rect x="262" y="325" width="52" height="24" rx="4" fill="#1E1E24" stroke="#1E1E24" stroke-width="0.5"/>
+  <text x="270" y="341" font-family="'JetBrains Mono', monospace" font-size="10" fill="#A1A1AA">Neo4j</text>
+
+  <rect x="322" y="325" width="60" height="24" rx="4" fill="#1E1E24" stroke="#1E1E24" stroke-width="0.5"/>
+  <text x="328" y="341" font-family="'JetBrains Mono', monospace" font-size="10" fill="#A1A1AA">Kafka</text>
+</svg>
