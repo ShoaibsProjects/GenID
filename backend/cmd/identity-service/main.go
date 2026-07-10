@@ -101,6 +101,11 @@ func main() {
 	svc := service.NewIdentityService(pgPool, neo4jDriver, rdb, temporalClient)
 	auditLogStore := svc.AuditStore()
 
+	// Load persisted connectors from PostgreSQL on startup
+	if err := svc.LoadConnectors(context.Background()); err != nil {
+		log.Warn().Err(err).Msg("Failed to load persisted connectors")
+	}
+
 	// ─── Start Temporal Worker ────────────────────────────
 	w := worker.New(temporalClient, "critical-offboarding", worker.Options{
 		MaxConcurrentActivityExecutionSize: 500,
@@ -256,8 +261,11 @@ func main() {
 	api.HandleFunc("/connectors/{id}/connect", svc.ConnectConnector).Methods("POST")
 	api.HandleFunc("/connectors/{id}/disconnect", svc.DisconnectConnector).Methods("POST")
 	api.HandleFunc("/connectors/{id}/sync", svc.SyncConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/sync-delta", svc.SyncConnectorDelta).Methods("POST")
 	api.HandleFunc("/connectors/{id}/users", svc.GetConnectorUsers).Methods("GET")
 	api.HandleFunc("/connectors/{id}/identities", svc.GetConnectorIdentities).Methods("GET")
+	api.HandleFunc("/connectors/{id}/schema", svc.GetConnectorSchema).Methods("GET")
+	api.HandleFunc("/connectors/{id}/health", svc.GetConnectorHealth).Methods("GET")
 
 	// ─── IAM Lifecycle Management (LCM) ────────────
 	api.HandleFunc("/lcm", svc.ExecuteLCM).Methods("POST")

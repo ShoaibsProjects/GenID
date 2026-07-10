@@ -661,6 +661,142 @@ func (c *EntraConnector) RemoveGroupMember(ctx context.Context, groupID, userID 
 	return c.graphDelete(ctx, "/groups/"+url.PathEscape(groupID)+"/members/"+url.PathEscape(userID)+"/$ref")
 }
 
+// ─── Delta Sync (Microsoft Graph Delta Query) ─────────────────
+
+func (c *EntraConnector) ListUsersDelta(ctx context.Context, deltaToken string) ([]ConnectorUser, string, error) {
+	path := "/users/delta"
+	if deltaToken != "" {
+		path += "?$deltatoken=" + url.QueryEscape(deltaToken)
+	}
+
+	var users []ConnectorUser
+	body, err := c.graphGet(ctx, path, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("entra: delta query: %w", err)
+	}
+
+	var resp struct {
+		Value     []json.RawMessage `json:"value"`
+		DeltaLink string            `json:"@odata.deltaLink"`
+		NextLink  string            `json:"@odata.nextLink"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, "", fmt.Errorf("entra: delta decode: %w", err)
+	}
+
+	for _, raw := range resp.Value {
+		var u struct {
+			ID              string   `json:"id"`
+			UserPrincipalName string `json:"userPrincipalName"`
+			DisplayName     string   `json:"displayName"`
+			GivenName       string   `json:"givenName"`
+			Surname         string   `json:"surname"`
+			Department      string   `json:"department"`
+			JobTitle        string   `json:"jobTitle"`
+			Mail            string   `json:"mail"`
+			AccountEnabled  bool     `json:"accountEnabled"`
+			CreatedDateTime string   `json:"createdDateTime"`
+			EmployeeID      string   `json:"employeeId"`
+			Company         string   `json:"company"`
+			MobilePhone     string   `json:"mobilePhone"`
+			BusinessPhones  []string `json:"businessPhones"`
+			Manager         struct{ ID string } `json:"manager"`
+			Removed         json.RawMessage `json:"@removed"`
+		}
+		if err := json.Unmarshal(raw, &u); err != nil {
+			continue
+		}
+
+		// Skip deleted/removed users in delta results
+		if len(u.Removed) > 0 {
+			continue
+		}
+
+		phone := ""
+		if len(u.BusinessPhones) > 0 {
+			phone = u.BusinessPhones[0]
+		}
+		email := u.Mail
+		if email == "" {
+			email = u.UserPrincipalName
+		}
+		createdAt, _ := time.Parse(time.RFC3339, u.CreatedDateTime)
+
+		users = append(users, ConnectorUser{
+			ExternalID:    u.ID,
+			Username:      u.UserPrincipalName,
+			Email:         email,
+			DisplayName:   u.DisplayName,
+			FirstName:     u.GivenName,
+			LastName:      u.Surname,
+			Department:    u.Department,
+			Title:         u.JobTitle,
+			Phone:         phone,
+			Mobile:        u.MobilePhone,
+			EmployeeID:    u.EmployeeID,
+			Company:       u.Company,
+			Enabled:       u.AccountEnabled,
+			Manager:       u.Manager.ID,
+			CreatedAt:     createdAt,
+		})
+	}
+
+	newToken := extractDeltaToken(resp.DeltaLink)
+	return users, newToken, nil
+}
+
+// extractDeltaToken extracts the $deltatoken parameter from a Microsoft Graph delta link.
+func extractDeltaToken(link string) string {
+	u, err := url.Parse(link)
+	if err != nil {
+		return ""
+	}
+	return u.Query().Get("$deltatoken")
+}
+
+// ─── Schema Discovery ────────────────────────────────────────
+
+func (c *EntraConnector) DiscoverSchema(ctx context.Context) (*SchemaResult, error) {
+	return &SchemaResult{
+		ObjectType: "User",
+		Count:      32,
+		Attributes: []AttributeSchema{
+			{Name: "external_id", Type: "string", Required: true, Description: "Object ID in Microsoft Graph"},
+			{Name: "username", Type: "string", Required: true, Description: "User Principal Name (UPN)"},
+			{Name: "email", Type: "string", Required: true, Description: "Primary email address"},
+			{Name: "display_name", Type: "string", Required: true, Description: "Display name"},
+			{Name: "first_name", Type: "string", Required: false, Description: "Given name"},
+			{Name: "last_name", Type: "string", Required: false, Description: "Surname"},
+			{Name: "department", Type: "string", Required: false, Description: "Department"},
+			{Name: "title", Type: "string", Required: false, Description: "Job title"},
+			{Name: "employee_id", Type: "string", Required: false, Description: "Employee ID"},
+			{Name: "manager", Type: "string", Required: false, Description: "Manager's object ID"},
+			{Name: "phone", Type: "string", Required: false, Description: "Business phone"},
+			{Name: "mobile", Type: "string", Required: false, Description: "Mobile phone"},
+			{Name: "enabled", Type: "boolean", Required: true, Description: "Account enabled status"},
+			{Name: "locked", Type: "boolean", Required: false, Description: "Account locked"},
+			{Name: "company", Type: "string", Required: false, Description: "Company name"},
+			{Name: "division", Type: "string", Required: false, Description: "Division"},
+			{Name: "cost_center", Type: "string", Required: false, Description: "Cost center"},
+			{Name: "street_address", Type: "string", Required: false, Description: "Street address"},
+			{Name: "city", Type: "string", Required: false, Description: "City"},
+			{Name: "state", Type: "string", Required: false, Description: "State/Province"},
+			{Name: "zip_code", Type: "string", Required: false, Description: "Postal code"},
+			{Name: "country", Type: "string", Required: false, Description: "Country"},
+			{Name: "groups", Type: "string_list", Required: false, MultiValued: true, Description: "Group object IDs"},
+			{Name: "roles", Type: "string_list", Required: false, MultiValued: true, Description: "Directory roles"},
+			{Name: "created_at", Type: "datetime", Required: false, Description: "Created timestamp"},
+			{Name: "updated_at", Type: "datetime", Required: false, Description: "Updated timestamp"},
+			{Name: "attributes.saml_account_name", Type: "string", Required: false, Description: "On-premises SAM account name"},
+			{Name: "attributes.proxy_addresses", Type: "string_list", Required: false, Description: "Proxy addresses"},
+			{Name: "attributes.usage_location", Type: "string", Required: false, Description: "Usage location"},
+			{Name: "attributes.office_location", Type: "string", Required: false, Description: "Office location"},
+			{Name: "attributes.preferred_language", Type: "string", Required: false, Description: "Preferred language"},
+			{Name: "attributes.user_type", Type: "string", Required: false, Description: "User type (member/guest)"},
+		},
+	}, nil
+}
+
 // ─── Helpers ─────────────────────────────────────────────────
 
 func setIf(m *map[string]any, key, val string) {

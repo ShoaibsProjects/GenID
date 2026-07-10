@@ -528,3 +528,47 @@ func parseAttrTime(e *ldap.Entry, name string) time.Time {
 func isAccountDisabled(uac int) bool {
 	return uac&0x0002 != 0
 }
+
+// ─── Delta Sync (not supported for LDAP) ────────────────────
+
+func (c *LDAPConnector) ListUsersDelta(ctx context.Context, deltaToken string) ([]ConnectorUser, string, error) {
+	return nil, "", ErrDeltaNotSupported
+}
+
+// ─── Schema Discovery ────────────────────────────────────────
+
+func (c *LDAPConnector) DiscoverSchema(ctx context.Context) (*SchemaResult, error) {
+	return &SchemaResult{
+		ObjectType: "User",
+		Count:      28,
+		Attributes: []AttributeSchema{
+			{Name: "external_id", Type: "string", Required: true, Description: "DN or objectGUID"},
+			{Name: "username", Type: "string", Required: true, Description: "sAMAccountName (AD) or uid (LDAP)"},
+			{Name: "email", Type: "string", Required: false, Description: "mail"},
+			{Name: "display_name", Type: "string", Required: true, Description: "displayName or cn"},
+			{Name: "first_name", Type: "string", Required: false, Description: "givenName"},
+			{Name: "last_name", Type: "string", Required: false, Description: "sn"},
+			{Name: "department", Type: "string", Required: false, Description: "department"},
+			{Name: "title", Type: "string", Required: false, Description: "title"},
+			{Name: "employee_id", Type: "string", Required: false, Description: "employeeID"},
+			{Name: "manager", Type: "string", Required: false, Description: "manager DN"},
+			{Name: "phone", Type: "string", Required: false, Description: "telephoneNumber"},
+			{Name: "mobile", Type: "string", Required: false, Description: "mobile"},
+			{Name: "enabled", Type: "boolean", Required: true, Description: "Derived from userAccountControl"},
+			{Name: "company", Type: "string", Required: false, Description: "company"},
+			{Name: "street_address", Type: "string", Required: false, Description: "streetAddress"},
+			{Name: "city", Type: "string", Required: false, Description: "l (locality)"},
+			{Name: "state", Type: "string", Required: false, Description: "st"},
+			{Name: "zip_code", Type: "string", Required: false, Description: "postalCode"},
+			{Name: "country", Type: "string", Required: false, Description: "c (country)"},
+			{Name: "groups", Type: "string_list", Required: false, MultiValued: true, Description: "memberOf"},
+			{Name: "created_at", Type: "datetime", Required: false, Description: "whenCreated"},
+			{Name: "updated_at", Type: "datetime", Required: false, Description: "whenChanged"},
+			{Name: "attributes.object_category", Type: "string", Required: false, Description: "objectCategory"},
+			{Name: "attributes.object_class", Type: "string_list", Required: false, MultiValued: true, Description: "objectClass"},
+			{Name: "attributes.distinguished_name", Type: "string", Required: false, Description: "distinguishedName"},
+			{Name: "attributes.description", Type: "string", Required: false, Description: "description"},
+			{Name: "attributes.division", Type: "string", Required: false, Description: "division"},
+		},
+	}, nil
+}

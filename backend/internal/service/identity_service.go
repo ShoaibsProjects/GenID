@@ -37,7 +37,7 @@ type IdentityService struct {
 }
 
 func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *IdentityService {
-	connMgr := connector.NewManager()
+	connMgr := connector.NewManager(pgPool)
 	vaultPath := os.Getenv("VAULT_PATH")
 	if vaultPath == "" {
 		vaultPath = "/tmp/observeid-vault.json"
@@ -58,6 +58,14 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 
 func (s *IdentityService) AuditStore() *audit.Store { return s.auditLog }
 func (s *IdentityService) SaveVault() error         { return s.vault.Save() }
+func (s *IdentityService) LoadConnectors(ctx context.Context) error {
+	configs, err := s.connMgr.LoadAll(ctx)
+	if err != nil {
+		return err
+	}
+	logError("connector", fmt.Errorf("loaded %d connectors from database", len(configs)))
+	return nil
+}
 
 // ─── SCIM 2.0 Handlers ─────────────────────────────────────
 
@@ -966,6 +974,73 @@ func (s *IdentityService) GetConnectorUsers(w http.ResponseWriter, r *http.Reque
 		"users":        users,
 		"total":        len(users),
 	})
+}
+
+// ─── Delta Sync ──────────────────────────────────────────────
+
+func (s *IdentityService) SyncConnectorDelta(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	result, err := s.connMgr.SyncUsersDelta(r.Context(), id)
+	if err != nil {
+		respondJSON(w, http.StatusOK, map[string]any{
+			"status": "sync_completed_with_errors",
+			"result": result,
+		})
+		return
+	}
+
+	if result != nil && len(result.Users) > 0 {
+		created, updated, persistErr := s.persistSyncedUsers(r.Context(), id, result.Users)
+		if persistErr != nil {
+			s.auditLog.Append(audit.Entry{
+				Level: audit.LevelError, Service: "connector", Path: r.URL.Path,
+				Message: fmt.Sprintf("Delta sync persistence error: %s", persistErr.Error()),
+				Tags:    []string{"connector", "delta-sync", "error"},
+			})
+		}
+		result.UsersCreated = created
+		result.UsersUpdated = updated
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status": "delta_sync_completed",
+		"result": result,
+	})
+}
+
+// ─── Schema Discovery ────────────────────────────────────────
+
+func (s *IdentityService) GetConnectorSchema(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	schema, err := s.connMgr.GetConnectorSchema(r.Context(), id)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Schema discovery failed: %s", err.Error()))
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"connector_id": id,
+		"schema":       schema,
+	})
+}
+
+// ─── Health ──────────────────────────────────────────────────
+
+func (s *IdentityService) GetConnectorHealth(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	health, err := s.connMgr.GetConnectorHealth(id)
+	if err != nil {
+		respondError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, health)
 }
 
 func (s *IdentityService) TestConnectorConnection(w http.ResponseWriter, r *http.Request) {

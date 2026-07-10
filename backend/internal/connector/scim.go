@@ -668,3 +668,44 @@ func (c *SCIMConnector) RemoveGroupMember(ctx context.Context, groupID, userID s
 	})
 	return err
 }
+
+// ─── Delta Sync (not supported for SCIM) ────────────────────
+
+func (c *SCIMConnector) ListUsersDelta(ctx context.Context, deltaToken string) ([]ConnectorUser, string, error) {
+	return nil, "", ErrDeltaNotSupported
+}
+
+// ─── Schema Discovery ────────────────────────────────────────
+
+func (c *SCIMConnector) DiscoverSchema(ctx context.Context) (*SchemaResult, error) {
+	return &SchemaResult{
+		ObjectType: "User",
+		Count:      24,
+		Attributes: []AttributeSchema{
+			{Name: "external_id", Type: "string", Required: true, Description: "SCIM user ID"},
+			{Name: "username", Type: "string", Required: true, Description: "userName"},
+			{Name: "email", Type: "string", Required: true, Description: "Primary email from emails array"},
+			{Name: "display_name", Type: "string", Required: false, Description: "displayName"},
+			{Name: "first_name", Type: "string", Required: false, Description: "name.givenName"},
+			{Name: "last_name", Type: "string", Required: false, Description: "name.familyName"},
+			{Name: "department", Type: "string", Required: false, Description: "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.department"},
+			{Name: "title", Type: "string", Required: false, Description: "title"},
+			{Name: "employee_id", Type: "string", Required: false, Description: "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.employeeNumber"},
+			{Name: "manager", Type: "string", Required: false, Description: "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User.manager.value"},
+			{Name: "phone", Type: "string", Required: false, Description: "phoneNumbers where type=work"},
+			{Name: "mobile", Type: "string", Required: false, Description: "phoneNumbers where type=mobile"},
+			{Name: "enabled", Type: "boolean", Required: true, Description: "active"},
+			{Name: "company", Type: "string", Required: false, Description: "Enterprise extension: organization"},
+			{Name: "division", Type: "string", Required: false, Description: "Enterprise extension: division"},
+			{Name: "cost_center", Type: "string", Required: false, Description: "Enterprise extension: costCenter"},
+			{Name: "street_address", Type: "string", Required: false, Description: "addresses.streetAddress"},
+			{Name: "city", Type: "string", Required: false, Description: "addresses.locality"},
+			{Name: "state", Type: "string", Required: false, Description: "addresses.region"},
+			{Name: "zip_code", Type: "string", Required: false, Description: "addresses.postalCode"},
+			{Name: "country", Type: "string", Required: false, Description: "addresses.country"},
+			{Name: "groups", Type: "string_list", Required: false, MultiValued: true, Description: "groups array"},
+			{Name: "created_at", Type: "datetime", Required: false, Description: "meta.created"},
+			{Name: "updated_at", Type: "datetime", Required: false, Description: "meta.lastModified"},
+		},
+	}, nil
+}
