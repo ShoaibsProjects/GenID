@@ -65,13 +65,13 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
 // ─── Identities ───────────────────────────────────────────
 
 export interface Identity {
-  uuid: string
+  id: string
   name: string
   email: string
   status: string
   type: string
   department: string
-  risk_score: string
+  risk_score: number
 }
 
 export interface IdentitiesResponse {
@@ -80,12 +80,12 @@ export interface IdentitiesResponse {
 }
 
 export interface Agent {
-  uuid: string
+  id: string
   name: string
   type: string
   status: string
-  risk_score: string
-  is_governed: string
+  risk_score: number
+  is_governed: boolean
   owner_name: string
 }
 

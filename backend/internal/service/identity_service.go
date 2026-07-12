@@ -811,9 +811,11 @@ func (s *IdentityService) SyncConnector(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *IdentityService) persistSyncedUsers(ctx context.Context, connectorID string, users []connector.ConnectorUser) (int, int, error) {
+	if len(users) == 0 {
+		return 0, 0, nil
+	}
 	created, updated := 0, 0
 
-	// Get tenant_id from connector config
 	cfg, err := s.connMgr.GetConfig(connectorID)
 	if err != nil {
 		return 0, 0, fmt.Errorf("get connector config: %w", err)
@@ -823,8 +825,17 @@ func (s *IdentityService) persistSyncedUsers(ctx context.Context, connectorID st
 		tenantID = "00000000-0000-0000-0000-000000000001" // default tenant
 	}
 
+	tx, err := s.pgPool.Begin(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	for _, user := range users {
-		raw, _ := json.Marshal(user.Attributes)
+		var raw []byte
+		if user.Attributes != nil {
+			raw, _ = json.Marshal(user.Attributes)
+		}
 		if raw == nil {
 			raw = []byte("{}")
 		}
@@ -838,7 +849,7 @@ func (s *IdentityService) persistSyncedUsers(ctx context.Context, connectorID st
 			roles = []string{}
 		}
 
-		tag, err := s.pgPool.Exec(ctx, `
+		tag, err := tx.Exec(ctx, `
 			INSERT INTO connector_identities
 				(tenant_id, connector_id, external_id, username, email, display_name,
 				 first_name, last_name, department, title, employee_id, manager_id,
@@ -893,6 +904,9 @@ func (s *IdentityService) persistSyncedUsers(ctx context.Context, connectorID st
 		}
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return created, updated, fmt.Errorf("commit: %w", err)
+	}
 	return created, updated, nil
 }
 
@@ -1401,6 +1415,9 @@ func (s *IdentityService) FullSyncConnector(w http.ResponseWriter, r *http.Reque
 // ─── Persistence: Groups ───────────────────────────────────
 
 func (s *IdentityService) persistSyncedGroups(ctx context.Context, connectorID string, groups []connector.ConnectorGroup) (int, int, error) {
+	if len(groups) == 0 {
+		return 0, 0, nil
+	}
 	created, updated := 0, 0
 	cfg, err := s.connMgr.GetConfig(connectorID)
 	if err != nil {
@@ -1411,18 +1428,27 @@ func (s *IdentityService) persistSyncedGroups(ctx context.Context, connectorID s
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
+	tx, err := s.pgPool.Begin(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	for _, group := range groups {
 		members := group.Members
 		if members == nil {
 			members = []string{}
 		}
 
-		raw, _ := json.Marshal(group.Attributes)
+		var raw []byte
+		if group.Attributes != nil {
+			raw, _ = json.Marshal(group.Attributes)
+		}
 		if raw == nil {
 			raw = []byte("{}")
 		}
 
-		tag, err := s.pgPool.Exec(ctx, `
+		tag, err := tx.Exec(ctx, `
 			INSERT INTO connector_groups
 				(tenant_id, connector_id, external_id, name, description, group_type, scope, member_ids, raw_attributes, last_synced_at)
 			VALUES
@@ -1448,6 +1474,9 @@ func (s *IdentityService) persistSyncedGroups(ctx context.Context, connectorID s
 		}
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return created, updated, fmt.Errorf("commit: %w", err)
+	}
 	return created, updated, nil
 }
 
@@ -1715,9 +1744,16 @@ func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Re
 		managerID = input.ManagerID
 	}
 
-	// 1. Write to PostgreSQL
-	attrsJSON, _ := json.Marshal(input.Attributes)
-	_, err := s.pgPool.Exec(r.Context(), `
+	// 1. Write to PostgreSQL (RETURNING id to handle ON CONFLICT returning existing row)
+	var returnedID string
+	var attrsJSON []byte
+	if input.Attributes != nil {
+		attrsJSON, _ = json.Marshal(input.Attributes)
+	}
+	if attrsJSON == nil {
+		attrsJSON = []byte("{}")
+	}
+	err := s.pgPool.QueryRow(r.Context(), `
 		INSERT INTO identities (id, tenant_id, type, status, email, display_name, department, employee_id, manager_id, source, risk_score, attributes)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0.0, $11)
 		ON CONFLICT (tenant_id, email) DO UPDATE SET
@@ -1726,8 +1762,9 @@ func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Re
 			employee_id  = EXCLUDED.employee_id,
 			status       = 'active',
 			updated_at   = NOW()
+		RETURNING id
 	`, id, input.TenantID, input.Type, input.Status, input.Email, input.DisplayName,
-		input.Department, input.EmployeeID, managerID, input.Source, attrsJSON)
+		input.Department, input.EmployeeID, managerID, input.Source, attrsJSON).Scan(&returnedID)
 	if err != nil {
 		s.auditLog.Append(audit.Entry{
 			Level: audit.LevelError, Service: "identity", Path: r.URL.Path,
@@ -1737,6 +1774,8 @@ func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Re
 		respondError(w, http.StatusInternalServerError, "Failed to persist identity to database")
 		return
 	}
+	// Use the actual id from the database (handles ON CONFLICT returning existing row)
+	id = returnedID
 
 	// 2. Write to Neo4j (graph)
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
@@ -1763,7 +1802,7 @@ func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		s.auditLog.Append(audit.Entry{
 			Level: audit.LevelError, Service: "identity", Path: r.URL.Path,
-			Message: fmt.Sprintf("Neo4j create failed: %s", err.Error()),
+			Message: fmt.Sprintf("Neo4j create failed (PG written, id=%s): %s", id, err.Error()),
 			Tags:    []string{"identity", "create", "neo4j", "error"},
 		})
 	}
@@ -1793,29 +1832,49 @@ func (s *IdentityService) UpdateIdentityRecord(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Build Neo4j SET clause with property name validation
+	setClauses := ""
+	pgSet := ""
+	pgParams := []any{id}
+	pgIdx := 2
+	params := map[string]any{"uuid": id}
+	allowedKeys := map[string]string{
+		"display_name": "display_name", "first_name": "first_name", "last_name": "last_name",
+		"email": "email", "department": "department", "status": "status",
+		"type": "type", "title": "title", "manager_id": "manager_id",
+		"phone": "phone", "risk_score": "risk_score",
+	}
+	for key, val := range updates {
+		dbCol, ok := allowedKeys[key]
+		if !ok {
+			continue
+		}
+		paramKey := "p_" + key
+		setClauses += fmt.Sprintf("i.%s = $%s, ", key, paramKey)
+		params[paramKey] = val
+		pgSet += fmt.Sprintf("%s = $%d, ", dbCol, pgIdx)
+		pgParams = append(pgParams, val)
+		pgIdx++
+	}
+
+	if setClauses == "" {
+		respondJSON(w, http.StatusOK, map[string]string{"status": "no_changes"})
+		return
+	}
+	setClauses += "i.updated_at = datetime()"
+
 	// Update Neo4j
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(r.Context())
 
-	setClauses := ""
-	params := map[string]any{"uuid": id}
-	for key, val := range updates {
-		switch key {
-		case "display_name", "first_name", "last_name", "email", "department", "status", "type", "title", "manager_id", "phone", "risk_score":
-			paramKey := "p_" + key
-			setClauses += fmt.Sprintf("i.%s = $%s, ", key, paramKey)
-			params[paramKey] = val
-		}
-	}
-	setClauses += "i.updated_at = datetime()"
-
 	query := fmt.Sprintf("MATCH (i:Identity {uuid: $uuid}) SET %s", setClauses)
 	_, err := session.Run(r.Context(), query, params)
 
-	// Also update PostgreSQL
-	if _, errUpdate := s.pgPool.Exec(r.Context(), `
-		UPDATE identities SET updated_at = NOW() WHERE id = $1
-	`, id); errUpdate != nil {
+	// Also update PostgreSQL (same fields)
+	pgSet += "updated_at = NOW()"
+	if _, errUpdate := s.pgPool.Exec(r.Context(), fmt.Sprintf(`
+		UPDATE identities SET %s WHERE id = $1
+	`, pgSet), pgParams...); errUpdate != nil {
 		logError("postgres", fmt.Errorf("update failed: %w", errUpdate))
 	}
 

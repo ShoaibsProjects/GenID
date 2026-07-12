@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import {
   fetchConnectors, createConnector, testConnectorConnection,
   connectConnector, syncConnector, deleteConnector, fetchConnectorIdentities,
@@ -33,6 +33,7 @@ export default function ConnectorsPage() {
   const [testResult, setTestResult] = useState<any>(null)
   const [busySync, setBusySync] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const expandedRef = useRef<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabKey>("accounts")
   const [tabData, setTabData] = useState<Record<string, any>>({})
   const [tabLoad, setTabLoad] = useState<Record<string, boolean>>({})
@@ -141,18 +142,19 @@ export default function ConnectorsPage() {
           break
         }
       }
-      if (expanded !== id) return // stale — user switched connector
+      if (expandedRef.current !== id) return // stale — user switched connector
       setTabData(t => ({...t, [key]: data}))
     } catch (_) {
-      if (expanded !== id) return
+      if (expandedRef.current !== id) return
       setTabData(t => ({...t, [key]: { error: "Failed to load" }}))
     } finally {
-      if (expanded === id) setTabLoad(t => ({...t, [key]: false}))
+      if (expandedRef.current === id) setTabLoad(t => ({...t, [key]: false}))
     }
   }
 
   async function toggle(id: string) {
-    if (expanded === id) { setExpanded(null); setActiveTab("accounts"); setTabData({}); return }
+    if (expanded === id) { setExpanded(null); expandedRef.current = null; setActiveTab("accounts"); setTabData({}); return }
+    expandedRef.current = id
     setExpanded(id)
     setActiveTab("accounts")
     setTabData({})

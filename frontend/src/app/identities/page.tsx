@@ -134,13 +134,13 @@ export default function IdentitiesPage() {
                 }},
                 { key: "type", header: "Type", render: (row) => <span className="text-secondary capitalize">{(row.type || "human").replace("_"," ")}</span> },
                 { key: "actions", header: "", align: "right", render: (row) => (
-                  <Button variant="ghost" size="sm" onClick={(e) => { e?.stopPropagation?.(); handleDelete(row.uuid) }}>
+                  <Button variant="ghost" size="sm" onClick={(e) => { e?.stopPropagation?.(); handleDelete(row.id) }}>
                     Delete
                   </Button>
                 )},
               ]}
               data={filtered}
-              keyField="uuid"
+              keyField="id"
               emptyMessage="No matching identities"
             />
           )
@@ -153,10 +153,10 @@ export default function IdentitiesPage() {
                 { key: "name", header: "Agent", render: (row) => <span className="font-medium">{row.name}</span> },
                 { key: "type", header: "Type", render: (row) => <span className="text-secondary capitalize">{row.type?.replace("_"," ")}</span> },
                 { key: "status", header: "Status", render: (row) => <Badge variant={(row.status === "active") ? "success" : "neutral"}>{row.status}</Badge> },
-                { key: "governed", header: "Governed", render: (row) => <Badge variant={row.is_governed === "true" ? "success" : "danger"}>{row.is_governed === "true" ? "Yes" : "No"}</Badge> },
+                { key: "governed", header: "Governed", render: (row) => <Badge variant={row.is_governed ? "success" : "danger"}>{row.is_governed ? "Yes" : "No"}</Badge> },
               ]}
               data={agents}
-              keyField="uuid"
+              keyField="id"
             />
           )
         ) : (

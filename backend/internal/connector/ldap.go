@@ -354,9 +354,17 @@ func (c *LDAPConnector) DisableUser(ctx context.Context, externalID string) erro
 		return fmt.Errorf("ldap: not connected")
 	}
 
-	// AD: set userAccountControl to disable (0x0002 = ACCOUNTDISABLE)
+	// Read-modify-write userAccountControl bitmask (preserve all flags)
+	entries, err := c.search(externalID, "(objectClass=user)", []string{"userAccountControl"}, ldap.ScopeBaseObject)
+	if err != nil {
+		return fmt.Errorf("ldap: read uac: %w", err)
+	}
+	uac := 512 // default: NORMAL_ACCOUNT
+	if len(entries) > 0 {
+		uac = parseUAC(entries[0].GetAttributeValue("userAccountControl"))
+	}
 	modReq := ldap.NewModifyRequest(externalID, nil)
-	modReq.Replace("userAccountControl", []string{"514"}) // 512 (normal) + 2 (disabled)
+	modReq.Replace("userAccountControl", []string{fmt.Sprintf("%d", uac|2)}) // set ACCOUNTDISABLE bit
 	return c.conn.Modify(modReq)
 }
 
@@ -365,8 +373,17 @@ func (c *LDAPConnector) EnableUser(ctx context.Context, externalID string) error
 		return fmt.Errorf("ldap: not connected")
 	}
 
+	// Read-modify-write userAccountControl bitmask
+	entries, err := c.search(externalID, "(objectClass=user)", []string{"userAccountControl"}, ldap.ScopeBaseObject)
+	if err != nil {
+		return fmt.Errorf("ldap: read uac: %w", err)
+	}
+	uac := 512 // default: NORMAL_ACCOUNT
+	if len(entries) > 0 {
+		uac = parseUAC(entries[0].GetAttributeValue("userAccountControl"))
+	}
 	modReq := ldap.NewModifyRequest(externalID, nil)
-	modReq.Replace("userAccountControl", []string{"512"}) // normal account
+	modReq.Replace("userAccountControl", []string{fmt.Sprintf("%d", uac & ^2 | 512)}) // clear ACCOUNTDISABLE, ensure NORMAL_ACCOUNT
 	return c.conn.Modify(modReq)
 }
 
@@ -503,6 +520,12 @@ func parseAttrInt(e *ldap.Entry, name string) int {
 	var i int
 	fmt.Sscanf(v, "%d", &i)
 	return i
+}
+
+func parseUAC(val string) int {
+	var uac int
+	fmt.Sscanf(val, "%d", &uac)
+	return uac
 }
 
 func parseAttrTime(e *ldap.Entry, name string) time.Time {

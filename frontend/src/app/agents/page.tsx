@@ -44,7 +44,7 @@ export default function AgentsPage() {
             </thead>
             <tbody className="divide-y divide-gray-800/50">
               {agents.map((a) => (
-                <tr key={a.uuid} className="hover:bg-surface-100/50 transition-colors">
+                <tr key={a.id} className="hover:bg-surface-100/50 transition-colors">
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center text-xs font-medium text-violet-400 border border-violet-500/30">
@@ -59,11 +59,11 @@ export default function AgentsPage() {
                     <StatusBadge status={a.status} />
                   </td>
                   <td className="py-3 px-4">
-                    <RiskBadge score={parseFloat(a.risk_score || "0")} />
+                    <RiskBadge score={a.risk_score ?? 0} />
                   </td>
                   <td className="py-3 px-4">
-                    <span className={a.is_governed === "true" ? "badge-success" : "badge-danger"}>
-                      {a.is_governed === "true" ? "Governed" : "Shadow"}
+                    <span className={a.is_governed ? "badge-success" : "badge-danger"}>
+                      {a.is_governed ? "Governed" : "Shadow"}
                     </span>
                   </td>
                   <td className="py-3 px-4 text-right">

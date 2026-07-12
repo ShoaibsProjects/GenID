@@ -3,10 +3,12 @@ package connector
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
@@ -483,9 +485,6 @@ func (c *EntraConnector) UpdateUser(ctx context.Context, externalID string, user
 	setIf(&payload, "country", user.Country)
 
 	externalID = url.PathEscape(externalID)
-	if user.Username != "" {
-		externalID = url.PathEscape(user.Username)
-	}
 	return c.graphPatch(ctx, "/users/"+externalID, payload)
 }
 
@@ -1348,5 +1347,11 @@ func setIf(m *map[string]any, key, val string) {
 }
 
 func generateTempPassword() string {
-	return "ObserveID_" + fmt.Sprintf("%d", time.Now().UnixNano())[:10] + "!Aa1"
+	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+"
+	b := make([]byte, 20)
+	for i := range b {
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		b[i] = chars[n.Int64()]
+	}
+	return string(b)
 }
