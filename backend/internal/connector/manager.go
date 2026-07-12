@@ -218,14 +218,14 @@ func (m *Manager) Connect(ctx context.Context, id string) error {
 	if err := conn.Connect(ctx); err != nil {
 		config.Status = ConnectorStatusError
 		config.LastError = err.Error()
-		m.updateConfig(config)
+		m.updateConfig(ctx, config)
 		m.updateHealth(id, ConnectorStatusError, err.Error())
 		return err
 	}
 
 	config.Status = ConnectorStatusConnected
 	config.LastError = ""
-	m.updateConfig(config)
+	m.updateConfig(ctx, config)
 	m.updateHealth(id, ConnectorStatusConnected, "")
 	return nil
 }
@@ -242,7 +242,7 @@ func (m *Manager) Disconnect(ctx context.Context, id string) error {
 
 	conn.Disconnect(ctx)
 	config.Status = ConnectorStatusDisconnected
-	m.updateConfig(config)
+	m.updateConfig(ctx, config)
 	m.updateHealth(id, ConnectorStatusDisconnected, "")
 	return nil
 }
@@ -306,7 +306,7 @@ func (m *Manager) SyncUsers(ctx context.Context, id string) (*SyncResult, error)
 			result.CompletedAt = time.Now()
 			config.Status = ConnectorStatusError
 			config.LastError = err.Error()
-			m.updateConfig(config)
+			m.updateConfig(ctx, config)
 			m.updateHealth(id, ConnectorStatusError, err.Error())
 			m.results[id] = result
 			return result, err
@@ -314,7 +314,7 @@ func (m *Manager) SyncUsers(ctx context.Context, id string) (*SyncResult, error)
 	}
 
 	config.Status = ConnectorStatusSyncing
-	m.updateConfig(config)
+	m.updateConfig(ctx, config)
 
 	start := time.Now()
 	remoteUsers, err := conn.ListUsers(ctx)
@@ -326,7 +326,7 @@ func (m *Manager) SyncUsers(ctx context.Context, id string) (*SyncResult, error)
 		result.CompletedAt = time.Now()
 		config.Status = ConnectorStatusError
 		config.LastError = err.Error()
-		m.updateConfig(config)
+		m.updateConfig(ctx, config)
 		m.updateHealthWithDuration(id, ConnectorStatusError, err.Error(), elapsed)
 		m.results[id] = result
 		return result, err
@@ -341,7 +341,7 @@ func (m *Manager) SyncUsers(ctx context.Context, id string) (*SyncResult, error)
 	result.Success = true
 	result.CompletedAt = now
 
-	m.updateConfig(config)
+	m.updateConfig(ctx, config)
 	m.updateHealthWithDuration(id, ConnectorStatusConnected, "", elapsed)
 	m.mu.Lock()
 	if h := m.health[id]; h != nil {
@@ -390,7 +390,7 @@ func (m *Manager) SyncUsersDelta(ctx context.Context, id string) (*SyncResult, e
 		result.CompletedAt = time.Now()
 		config.Status = ConnectorStatusError
 		config.LastError = err.Error()
-		m.updateConfig(config)
+		m.updateConfig(ctx, config)
 		m.updateHealthWithDuration(id, ConnectorStatusError, err.Error(), elapsed)
 		m.results[id] = result
 		return result, err
@@ -402,7 +402,7 @@ func (m *Manager) SyncUsersDelta(ctx context.Context, id string) (*SyncResult, e
 		config.DeltaToken = newToken
 		m.configs[id] = config
 		m.mu.Unlock()
-		m.updateConfig(config)
+		m.updateConfig(ctx, config)
 	}
 
 	now := time.Now()
@@ -415,7 +415,7 @@ func (m *Manager) SyncUsersDelta(ctx context.Context, id string) (*SyncResult, e
 	result.Success = true
 	result.CompletedAt = now
 
-	m.updateConfig(config)
+	m.updateConfig(ctx, config)
 	m.updateHealthWithDuration(id, ConnectorStatusConnected, "", elapsed)
 	m.results[id] = result
 
@@ -442,14 +442,14 @@ func (m *Manager) SyncGroups(ctx context.Context, id string) ([]ConnectorGroup, 
 	if err != nil {
 		config.LastError = fmt.Sprintf("group sync: %v", err)
 		config.Status = ConnectorStatusError
-		m.updateConfig(config)
+		m.updateConfig(ctx, config)
 		m.updateHealthWithDuration(id, ConnectorStatusError, err.Error(), elapsed)
 		return nil, err
 	}
 
 	config.Status = ConnectorStatusConnected
 	config.LastError = ""
-	m.updateConfig(config)
+	m.updateConfig(ctx, config)
 	m.updateHealthWithDuration(id, ConnectorStatusConnected, "", elapsed)
 
 	log.Printf("[CONNECTOR] Groups sync for %s: %d groups in %s", config.Name, len(groups), elapsed.Round(time.Millisecond))
@@ -479,14 +479,14 @@ func (m *Manager) SyncEntitlements(ctx context.Context, id string) ([]ConnectorE
 	if err != nil {
 		config.LastError = fmt.Sprintf("entitlement sync: %v", err)
 		config.Status = ConnectorStatusError
-		m.updateConfig(config)
+		m.updateConfig(ctx, config)
 		m.updateHealthWithDuration(id, ConnectorStatusError, err.Error(), elapsed)
 		return nil, err
 	}
 
 	config.Status = ConnectorStatusConnected
 	config.LastError = ""
-	m.updateConfig(config)
+	m.updateConfig(ctx, config)
 	m.updateHealthWithDuration(id, ConnectorStatusConnected, "", elapsed)
 
 	log.Printf("[CONNECTOR] Entitlement sync for %s: %d entitlements in %s", config.Name, len(entitlements), elapsed.Round(time.Millisecond))
@@ -516,14 +516,14 @@ func (m *Manager) SyncResources(ctx context.Context, id string) ([]ConnectorReso
 	if err != nil {
 		config.LastError = fmt.Sprintf("resource sync: %v", err)
 		config.Status = ConnectorStatusError
-		m.updateConfig(config)
+		m.updateConfig(ctx, config)
 		m.updateHealthWithDuration(id, ConnectorStatusError, err.Error(), elapsed)
 		return nil, err
 	}
 
 	config.Status = ConnectorStatusConnected
 	config.LastError = ""
-	m.updateConfig(config)
+	m.updateConfig(ctx, config)
 	m.updateHealthWithDuration(id, ConnectorStatusConnected, "", elapsed)
 
 	log.Printf("[CONNECTOR] Resource sync for %s: %d resources in %s", config.Name, len(resources), elapsed.Round(time.Millisecond))
@@ -612,18 +612,19 @@ func (m *Manager) GetConnectorUsers(ctx context.Context, id string) ([]Connector
 
 // ─── Internal Helpers ─────────────────────────────────────────
 
-func (m *Manager) updateConfig(config ConnectorConfig) {
+func (m *Manager) updateConfig(ctx context.Context, config ConnectorConfig) {
 	m.mu.Lock()
 	config.UpdatedAt = time.Now()
 	m.configs[config.ID] = config
 	m.mu.Unlock()
 
-	// Persist to PG
 	cfgJSON, _ := json.Marshal(config)
-	m.pgPool.Exec(context.Background(), `
+	if _, err := m.pgPool.Exec(ctx, `
 		UPDATE connectors SET status = $1, config = $2, last_sync_at = $3, last_error = $4, updated_at = NOW()
 		WHERE id = $5
-	`, string(config.Status), cfgJSON, config.LastSyncAt, config.LastError, config.ID)
+	`, string(config.Status), cfgJSON, config.LastSyncAt, config.LastError, config.ID); err != nil {
+		log.Printf("[MANAGER] updateConfig: %v", err)
+	}
 }
 
 func (m *Manager) updateHealth(id string, status ConnectorStatus, lastError string) {

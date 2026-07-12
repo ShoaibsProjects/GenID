@@ -436,10 +436,13 @@ func (c *SCIMConnector) CreateUser(ctx context.Context, user ConnectorUser) (str
 		}
 	}
 	if user.Mobile != "" {
-		scimUser["phoneNumbers"] = append(
-			scimUser["phoneNumbers"].([]map[string]any),
-			map[string]any{"value": user.Mobile, "type": "mobile"},
-		)
+		if existing, ok := scimUser["phoneNumbers"].([]map[string]any); ok {
+			scimUser["phoneNumbers"] = append(existing, map[string]any{"value": user.Mobile, "type": "mobile"})
+		} else {
+			scimUser["phoneNumbers"] = []map[string]any{
+				{"value": user.Mobile, "type": "mobile"},
+			}
+		}
 	}
 
 	body, err := c.scimRequest(ctx, "POST", "Users", scimUser)

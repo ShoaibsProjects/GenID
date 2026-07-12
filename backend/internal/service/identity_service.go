@@ -1133,6 +1133,7 @@ func (s *IdentityService) GetConnectorEntitlements(w http.ResponseWriter, r *htt
 		var e EntitlementEntry
 		if err := rows.Scan(&e.IdentityExternalID, &e.Type, &e.SourceID, &e.SourceName, &e.SourceType,
 			&e.AppID, &e.AppName, &e.IsActive); err != nil {
+			log.Printf("[ENTITLEMENTS] scan row error: %v", err)
 			continue
 		}
 		entitlements = append(entitlements, e)
@@ -1181,6 +1182,7 @@ func (s *IdentityService) GetConnectorResources(w http.ResponseWriter, r *http.R
 		var firstSynced, lastSynced *time.Time
 		if err := rows.Scan(&e.ID, &e.ExternalID, &e.Type, &e.Name, &e.Description, &e.Enabled,
 			&e.OwnerIDs, &firstSynced, &lastSynced); err != nil {
+			log.Printf("[RESOURCES] scan row error: %v", err)
 			continue
 		}
 		if firstSynced != nil {
@@ -1307,59 +1309,83 @@ func (s *IdentityService) FullSyncConnector(w http.ResponseWriter, r *http.Reque
 	id := vars["id"]
 
 	start := time.Now()
+	var syncErrors []string
 
 	// 1. Sync users
 	usersResult, err := s.connMgr.SyncUsers(r.Context(), id)
 	if err != nil {
 		log.Printf("[SYNC] User sync error: %v", err)
+		syncErrors = append(syncErrors, fmt.Sprintf("users: %v", err))
 	}
 	usersCreated, usersUpdated := 0, 0
 	if usersResult != nil && len(usersResult.Users) > 0 {
-		usersCreated, usersUpdated, _ = s.persistSyncedUsers(r.Context(), id, usersResult.Users)
+		usersCreated, usersUpdated, err = s.persistSyncedUsers(r.Context(), id, usersResult.Users)
+		if err != nil {
+			log.Printf("[SYNC] User persist error: %v", err)
+			syncErrors = append(syncErrors, fmt.Sprintf("users persist: %v", err))
+		}
 	}
 
 	// 2. Sync groups
 	groups, err := s.connMgr.SyncGroups(r.Context(), id)
 	if err != nil {
 		log.Printf("[SYNC] Group sync error: %v", err)
+		syncErrors = append(syncErrors, fmt.Sprintf("groups: %v", err))
 	}
 	groupsCreated, groupsUpdated := 0, 0
 	if len(groups) > 0 {
-		groupsCreated, groupsUpdated, _ = s.persistSyncedGroups(r.Context(), id, groups)
+		groupsCreated, groupsUpdated, err = s.persistSyncedGroups(r.Context(), id, groups)
+		if err != nil {
+			log.Printf("[SYNC] Group persist error: %v", err)
+			syncErrors = append(syncErrors, fmt.Sprintf("groups persist: %v", err))
+		}
 	}
 
 	// 3. Sync entitlements
 	entitlements, err := s.connMgr.SyncEntitlements(r.Context(), id)
 	if err != nil {
 		log.Printf("[SYNC] Entitlement sync error: %v", err)
+		syncErrors = append(syncErrors, fmt.Sprintf("entitlements: %v", err))
 	}
 	if len(entitlements) > 0 {
-		s.persistSyncedEntitlements(r.Context(), id, entitlements)
+		if err := s.persistSyncedEntitlements(r.Context(), id, entitlements); err != nil {
+			log.Printf("[SYNC] Entitlement persist error: %v", err)
+			syncErrors = append(syncErrors, fmt.Sprintf("entitlements persist: %v", err))
+		}
 	}
 
 	// 4. Sync resources
 	resources, err := s.connMgr.SyncResources(r.Context(), id)
 	if err != nil {
 		log.Printf("[SYNC] Resource sync error: %v", err)
+		syncErrors = append(syncErrors, fmt.Sprintf("resources: %v", err))
 	}
 	if len(resources) > 0 {
-		s.persistSyncedResources(r.Context(), id, resources)
+		if err := s.persistSyncedResources(r.Context(), id, resources); err != nil {
+			log.Printf("[SYNC] Resource persist error: %v", err)
+			syncErrors = append(syncErrors, fmt.Sprintf("resources persist: %v", err))
+		}
 	}
 
 	elapsed := time.Since(start)
+
+	status := "full_sync_completed"
+	if len(syncErrors) > 0 {
+		status = "full_sync_with_errors"
+	}
 
 	s.auditLog.Append(audit.Entry{
 		Level:   audit.LevelInfo,
 		Service: "connector",
 		Method:  "POST",
 		Path:    r.URL.Path,
-		Message: fmt.Sprintf("Full sync complete for connector %s: %d users, %d groups, %d entitlements, %d resources in %s",
-			id, usersCreated+usersUpdated, groupsCreated+groupsUpdated, len(entitlements), len(resources), elapsed.Round(time.Millisecond)),
+		Message: fmt.Sprintf("Full sync %s for connector %s: %d users, %d groups, %d entitlements, %d resources in %s",
+			status, id, usersCreated+usersUpdated, groupsCreated+groupsUpdated, len(entitlements), len(resources), elapsed.Round(time.Millisecond)),
 		Tags: []string{"connector", "full-sync"},
 	})
 
 	respondJSON(w, http.StatusOK, map[string]any{
-		"status":             "full_sync_completed",
+		"status":             status,
 		"connector_id":       id,
 		"users_created":      usersCreated,
 		"users_updated":      usersUpdated,
@@ -1367,6 +1393,7 @@ func (s *IdentityService) FullSyncConnector(w http.ResponseWriter, r *http.Reque
 		"groups_updated":     groupsUpdated,
 		"entitlements_total": len(entitlements),
 		"resources_total":    len(resources),
+		"errors":             syncErrors,
 		"duration":           elapsed.Round(time.Millisecond).String(),
 	})
 }
@@ -1427,6 +1454,10 @@ func (s *IdentityService) persistSyncedGroups(ctx context.Context, connectorID s
 // ─── Persistence: Entitlements ───────────────────────────
 
 func (s *IdentityService) persistSyncedEntitlements(ctx context.Context, connectorID string, entitlements []connector.ConnectorEntitlement) error {
+	if len(entitlements) == 0 {
+		return nil
+	}
+
 	cfg, err := s.connMgr.GetConfig(connectorID)
 	if err != nil {
 		return fmt.Errorf("get connector config: %w", err)
@@ -1436,9 +1467,13 @@ func (s *IdentityService) persistSyncedEntitlements(ctx context.Context, connect
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
-	// Delete existing entitlements for this connector before re-inserting
-	_, err = s.pgPool.Exec(ctx, `DELETE FROM connector_entitlements WHERE connector_id = $1`, connectorID)
+	tx, err := s.pgPool.Begin(ctx)
 	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM connector_entitlements WHERE connector_id = $1`, connectorID); err != nil {
 		return fmt.Errorf("delete existing entitlements: %w", err)
 	}
 
@@ -1448,7 +1483,7 @@ func (s *IdentityService) persistSyncedEntitlements(ctx context.Context, connect
 			raw = []byte("{}")
 		}
 
-		_, err := s.pgPool.Exec(ctx, `
+		if _, err := tx.Exec(ctx, `
 			INSERT INTO connector_entitlements
 				(tenant_id, connector_id, identity_external_id, entitlement_type, source_id,
 				 source_name, source_type, app_id, app_name, assigned_at, is_active, raw_attributes, last_synced_at)
@@ -1456,19 +1491,21 @@ func (s *IdentityService) persistSyncedEntitlements(ctx context.Context, connect
 				($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
 		`, tenantID, connectorID, e.IdentityExternalID, e.EntitlementType,
 			e.SourceID, e.SourceName, e.SourceType,
-			e.AppID, e.AppName, e.AssignedAt, e.IsActive, raw)
-
-		if err != nil {
-			log.Printf("[PERSIST] Entitlement insert error: %v", err)
+			e.AppID, e.AppName, e.AssignedAt, e.IsActive, raw); err != nil {
+			return fmt.Errorf("insert entitlement: %w", err)
 		}
 	}
 
-	return nil
+	return tx.Commit(ctx)
 }
 
 // ─── Persistence: Resources ─────────────────────────────
 
 func (s *IdentityService) persistSyncedResources(ctx context.Context, connectorID string, resources []connector.ConnectorResource) error {
+	if len(resources) == 0 {
+		return nil
+	}
+
 	cfg, err := s.connMgr.GetConfig(connectorID)
 	if err != nil {
 		return fmt.Errorf("get connector config: %w", err)
@@ -1478,9 +1515,13 @@ func (s *IdentityService) persistSyncedResources(ctx context.Context, connectorI
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
-	// Delete existing resources before re-inserting
-	_, err = s.pgPool.Exec(ctx, `DELETE FROM connector_resources WHERE connector_id = $1`, connectorID)
+	tx, err := s.pgPool.Begin(ctx)
 	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM connector_resources WHERE connector_id = $1`, connectorID); err != nil {
 		return fmt.Errorf("delete existing resources: %w", err)
 	}
 
@@ -1494,7 +1535,7 @@ func (s *IdentityService) persistSyncedResources(ctx context.Context, connectorI
 			owners = []string{}
 		}
 
-		_, err := s.pgPool.Exec(ctx, `
+		if _, err := tx.Exec(ctx, `
 			INSERT INTO connector_resources
 				(tenant_id, connector_id, external_id, resource_type, name, description, enabled, owner_ids, raw_attributes, last_synced_at)
 			VALUES
@@ -1508,14 +1549,12 @@ func (s *IdentityService) persistSyncedResources(ctx context.Context, connectorI
 				raw_attributes  = EXCLUDED.raw_attributes,
 				last_synced_at  = NOW()
 		`, tenantID, connectorID, res.ExternalID, res.ResourceType,
-			res.Name, res.Description, res.Enabled, owners, raw)
-
-		if err != nil {
-			log.Printf("[PERSIST] Resource insert error: %v", err)
+			res.Name, res.Description, res.Enabled, owners, raw); err != nil {
+			return fmt.Errorf("upsert resource %s: %w", res.ExternalID, err)
 		}
 	}
 
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (s *IdentityService) TestExistingConnector(w http.ResponseWriter, r *http.Request) {

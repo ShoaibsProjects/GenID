@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,6 +19,7 @@ import (
 // Supports OAuth2 client credentials flow.
 
 type EntraConnector struct {
+	mu       sync.Mutex
 	config   ConnectorConfig
 	client   *http.Client
 	token    string
@@ -50,10 +53,26 @@ func (c *EntraConnector) Configure(config ConnectorConfig) error {
 	return nil
 }
 
+func (c *EntraConnector) resolveNextLink(nextLink string) string {
+	if nextLink == "" {
+		return ""
+	}
+	if strings.HasPrefix(nextLink, c.config.Endpoint) {
+		return strings.TrimPrefix(nextLink, c.config.Endpoint)
+	}
+	if u, err := url.Parse(nextLink); err == nil {
+		return u.RequestURI()
+	}
+	return nextLink
+}
+
 func (c *EntraConnector) ensureToken(ctx context.Context) error {
+	c.mu.Lock()
 	if c.token != "" && time.Now().Before(c.expires) {
+		c.mu.Unlock()
 		return nil
 	}
+	c.mu.Unlock()
 
 	data := url.Values{
 		"client_id":     {c.config.ClientID},
@@ -86,8 +105,10 @@ func (c *EntraConnector) ensureToken(ctx context.Context) error {
 		return fmt.Errorf("entra: oauth error: %s", result.Error)
 	}
 
+	c.mu.Lock()
 	c.token = result.AccessToken
 	c.expires = time.Now().Add(time.Duration(result.ExpiresIn-60) * time.Second)
+	c.mu.Unlock()
 	return nil
 }
 
@@ -310,12 +331,7 @@ func (c *EntraConnector) ListUsers(ctx context.Context) ([]ConnectorUser, error)
 		}
 
 		if result.NextLink != "" {
-			// Strip the base URL to get the relative path
-			if u, err := url.Parse(result.NextLink); err == nil {
-				nextLink = u.RequestURI()
-			} else {
-				nextLink = ""
-			}
+			nextLink = c.resolveNextLink(result.NextLink)
 		} else {
 			nextLink = ""
 		}
@@ -556,11 +572,7 @@ func (c *EntraConnector) ListGroups(ctx context.Context) ([]ConnectorGroup, erro
 		}
 
 		if result.NextLink != "" {
-			if u, err := url.Parse(result.NextLink); err == nil {
-				nextLink = u.RequestURI()
-			} else {
-				nextLink = ""
-			}
+			nextLink = c.resolveNextLink(result.NextLink)
 		} else {
 			nextLink = ""
 		}
@@ -808,32 +820,39 @@ func (c *EntraConnector) DiscoverSchema(ctx context.Context) (*SchemaResult, err
 func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntitlement, error) {
 	var entitlements []ConnectorEntitlement
 
-	// ── 1. Azure AD Unified Role Assignments (recommended API) ──
-	// GET /roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName,description)
-	unifiedBody, err := c.graphGet(ctx, "/roleManagement/directory/roleAssignments", url.Values{
-		"$expand": {"roleDefinition($select=id,displayName,description)"},
-		"$select": {"id,principalId,principalDisplayName,roleDefinitionId,directoryScopeId"},
-		"$top":    {"500"},
-	})
-	if err != nil {
-		log.Printf("[ENTRA] ListEntitlements: unified roleAssignments query failed: %v (continuing)", err)
-	} else {
-		var unifiedResult struct {
-			Value []struct {
-				ID                   string `json:"id"`
-				PrincipalID          string `json:"principalId"`
-				PrincipalDisplayName string `json:"principalDisplayName"`
-				RoleDefinitionID     string `json:"roleDefinitionId"`
-				DirectoryScopeID     string `json:"directoryScopeId"`
-				RoleDefinition       *struct {
-					ID          string `json:"id"`
-					DisplayName string `json:"displayName"`
-					Description string `json:"description"`
-				} `json:"roleDefinition"`
-			} `json:"value"`
-		}
-		if err := json.Unmarshal(unifiedBody, &unifiedResult); err == nil {
-			for _, a := range unifiedResult.Value {
+	// ── 1. Unified Role Assignments (paginated) ──
+	{
+		nextLink := "/roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName,description)&$select=id,principalId,principalDisplayName,roleDefinitionId,directoryScopeId&$top=500"
+		for nextLink != "" {
+			body, err := c.graphGet(ctx, nextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] ListEntitlements: unified roleAssignments failed: %v (continuing)", err)
+				break
+			}
+			var result struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(body, &result); err != nil {
+				log.Printf("[ENTRA] decode unified roleAssignments: %v", err)
+				break
+			}
+			for _, raw := range result.Value {
+				var a struct {
+					ID                   string `json:"id"`
+					PrincipalID          string `json:"principalId"`
+					PrincipalDisplayName string `json:"principalDisplayName"`
+					RoleDefinitionID     string `json:"roleDefinitionId"`
+					DirectoryScopeID     string `json:"directoryScopeId"`
+					RoleDefinition       *struct {
+						ID          string `json:"id"`
+						DisplayName string `json:"displayName"`
+						Description string `json:"description"`
+					} `json:"roleDefinition"`
+				}
+				if err := json.Unmarshal(raw, &a); err != nil {
+					continue
+				}
 				roleName := a.RoleDefinitionID
 				roleDesc := ""
 				if a.RoleDefinition != nil {
@@ -858,31 +877,40 @@ func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntit
 					},
 				})
 			}
-			log.Printf("[ENTRA] Listed %d unified role assignments", len(unifiedResult.Value))
+			nextLink = c.resolveNextLink(result.NextLink)
 		}
 	}
 
-	// ── 2. Legacy Directory Role Memberships (complementary) ──
-	roleBody, err := c.graphGet(ctx, "/directoryRoles", url.Values{
-		"$expand": {"members($select=id)"},
-		"$select": {"id,displayName,description,roleTemplateId"},
-	})
-	if err != nil {
-		log.Printf("[ENTRA] ListEntitlements: directoryRoles query failed: %v (continuing)", err)
-	} else {
-		var roleResult struct {
-			Value []struct {
-				ID             string `json:"id"`
-				DisplayName    string `json:"displayName"`
-				Description    string `json:"description"`
-				RoleTemplateID string `json:"roleTemplateId"`
-				Members        []struct {
-					ID string `json:"id"`
-				} `json:"members"`
-			} `json:"value"`
-		}
-		if err := json.Unmarshal(roleBody, &roleResult); err == nil {
-			for _, role := range roleResult.Value {
+	// ── 2. Directory Roles (paginated) ──
+	{
+		nextLink := "/directoryRoles?$expand=members($select=id)&$select=id,displayName,description,roleTemplateId&$top=100"
+		for nextLink != "" {
+			body, err := c.graphGet(ctx, nextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] ListEntitlements: directoryRoles failed: %v (continuing)", err)
+				break
+			}
+			var result struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(body, &result); err != nil {
+				log.Printf("[ENTRA] decode directoryRoles: %v", err)
+				break
+			}
+			for _, raw := range result.Value {
+				var role struct {
+					ID             string `json:"id"`
+					DisplayName    string `json:"displayName"`
+					Description    string `json:"description"`
+					RoleTemplateID string `json:"roleTemplateId"`
+					Members        []struct {
+						ID string `json:"id"`
+					} `json:"members"`
+				}
+				if err := json.Unmarshal(raw, &role); err != nil {
+					continue
+				}
 				for _, member := range role.Members {
 					entitlements = append(entitlements, ConnectorEntitlement{
 						IdentityExternalID: member.ID,
@@ -899,38 +927,39 @@ func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntit
 					})
 				}
 			}
-			log.Printf("[ENTRA] Listed %d legacy directory role memberships", len(roleResult.Value))
+			nextLink = c.resolveNextLink(result.NextLink)
 		}
 	}
 
-	// ── 3. App Role Assignments (with role name resolution) ──
-	// First, collect all service principals and their appRole definitions
-	spBody, err := c.graphGet(ctx, "/servicePrincipals", url.Values{
-		"$select": {"id,appId,displayName,appRoles"},
-		"$top":    {"100"},
-	})
-	if err != nil {
-		log.Printf("[ENTRA] ListEntitlements: servicePrincipals query failed: %v (continuing)", err)
-	} else {
-		var spResult struct {
-			Value    []json.RawMessage `json:"value"`
-			NextLink string            `json:"@odata.nextLink"`
-		}
-		if err := json.Unmarshal(spBody, &spResult); err != nil {
-			log.Printf("[ENTRA] ListEntitlements: decode servicePrincipals: %v", err)
-		} else {
+	// ── 3. App Role Assignments (paginated SP list + paginated per-SP assignments) ──
+	{
+		spNextLink := "/servicePrincipals?$select=id,appId,displayName,appRoles&$top=100"
+		for spNextLink != "" {
+			spBody, err := c.graphGet(ctx, spNextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] ListEntitlements: servicePrincipals failed: %v (continuing)", err)
+				break
+			}
+			var spResult struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(spBody, &spResult); err != nil {
+				log.Printf("[ENTRA] decode servicePrincipals: %v (continuing)", err)
+				spNextLink = ""
+				continue
+			}
 			type appRoleDef struct {
 				ID          string `json:"id"`
 				DisplayName string `json:"displayName"`
 				Description string `json:"description"`
 			}
 			type spInfo struct {
-				ID          string        `json:"id"`
-				AppID       string        `json:"appId"`
-				DisplayName string        `json:"displayName"`
-				AppRoles    []appRoleDef  `json:"appRoles"`
+				ID          string       `json:"id"`
+				AppID       string       `json:"appId"`
+				DisplayName string       `json:"displayName"`
+				AppRoles    []appRoleDef `json:"appRoles"`
 			}
-
 			for _, raw := range spResult.Value {
 				var sp spInfo
 				if err := json.Unmarshal(raw, &sp); err != nil {
@@ -939,100 +968,119 @@ func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntit
 				if sp.DisplayName == "" {
 					sp.DisplayName = sp.AppID
 				}
-
-				// Build role ID → name map
 				roleNameMap := make(map[string]string, len(sp.AppRoles))
 				for _, r := range sp.AppRoles {
 					roleNameMap[r.ID] = r.DisplayName
 				}
-
-				// Fetch app role assignments for this service principal
-				assignBody, assignErr := c.graphGet(ctx, "/servicePrincipals/"+
-					url.PathEscape(sp.ID)+"/appRoleAssignedTo", url.Values{
-					"$select": {"principalId,appRoleId,principalDisplayName,createdDateTime"},
-				})
-				if assignErr != nil {
-					continue
-				}
-
-				var assignResult struct {
-					Value []struct {
-						PrincipalID          string `json:"principalId"`
-						AppRoleID            string `json:"appRoleId"`
-						PrincipalDisplayName string `json:"principalDisplayName"`
-						CreatedDateTime      string `json:"createdDateTime"`
-					} `json:"value"`
-				}
-				if err := json.Unmarshal(assignBody, &assignResult); err != nil {
-					continue
-				}
-
-				for _, a := range assignResult.Value {
-					roleName := roleNameMap[a.AppRoleID]
-					if roleName == "" {
-						roleName = a.AppRoleID
+				assignNext := "/servicePrincipals/" + url.PathEscape(sp.ID) + "/appRoleAssignedTo?$select=principalId,appRoleId,principalDisplayName,createdDateTime&$top=100"
+				for assignNext != "" {
+					assignBody, assignErr := c.graphGet(ctx, assignNext, nil)
+					if assignErr != nil {
+						log.Printf("[ENTRA] ListEntitlements: appRoleAssignedTo for SP %s: %v", sp.ID, assignErr)
+						break
 					}
-					assignedAt, _ := time.Parse(time.RFC3339, a.CreatedDateTime)
-					entitlements = append(entitlements, ConnectorEntitlement{
-						IdentityExternalID: a.PrincipalID,
-						EntitlementType:    string(EntitlementTypeAppRole),
-						SourceID:           a.AppRoleID,
-						SourceName:         roleName,
-						SourceType:         "app_role",
-						AppID:              sp.AppID,
-						AppName:            sp.DisplayName,
-						AssignedAt:         assignedAt,
-						IsActive:           true,
-					})
+					var assignResult struct {
+						Value    []json.RawMessage `json:"value"`
+						NextLink string            `json:"@odata.nextLink"`
+					}
+					if err := json.Unmarshal(assignBody, &assignResult); err != nil {
+						log.Printf("[ENTRA] decode appRoleAssignedTo: %v", err)
+						break
+					}
+					for _, aRaw := range assignResult.Value {
+						var a struct {
+							PrincipalID          string `json:"principalId"`
+							AppRoleID            string `json:"appRoleId"`
+							PrincipalDisplayName string `json:"principalDisplayName"`
+							CreatedDateTime      string `json:"createdDateTime"`
+						}
+						if err := json.Unmarshal(aRaw, &a); err != nil {
+							continue
+						}
+						roleName := roleNameMap[a.AppRoleID]
+						if roleName == "" {
+							roleName = a.AppRoleID
+						}
+						assignedAt, _ := time.Parse(time.RFC3339, a.CreatedDateTime)
+						entitlements = append(entitlements, ConnectorEntitlement{
+							IdentityExternalID: a.PrincipalID,
+							EntitlementType:    string(EntitlementTypeAppRole),
+							SourceID:           a.AppRoleID,
+							SourceName:         roleName,
+							SourceType:         "app_role",
+							AppID:              sp.AppID,
+							AppName:            sp.DisplayName,
+							AssignedAt:         assignedAt,
+							IsActive:           true,
+						})
+					}
+					assignNext = c.resolveNextLink(assignResult.NextLink)
 				}
 			}
-			log.Printf("[ENTRA] Listed app role assignments")
+			spNextLink = c.resolveNextLink(spResult.NextLink)
 		}
 	}
 
-	// ── 4. License Assignments ──
-	// Step 1: Get all subscribed SKUs to resolve SKU IDs → product names
+	// ── 4. License Assignments (paginated users) ──
 	skuNameMap := make(map[string]string)
-	skuBody, err := c.graphGet(ctx, "/subscribedSkus", url.Values{
-		"$select": {"skuId,skuPartNumber,servicePlans,prepaidUnits"},
-	})
-	if err != nil {
-		log.Printf("[ENTRA] ListEntitlements: subscribedSkus query failed: %v (continuing)", err)
-	} else {
-		var skuResult struct {
-			Value []struct {
-				SkuID        string `json:"skuId"`
-				SkuPartNumber string `json:"skuPartNumber"`
-			} `json:"value"`
-		}
-		if err := json.Unmarshal(skuBody, &skuResult); err == nil {
-			for _, sku := range skuResult.Value {
+	{
+		nextLink := "/subscribedSkus?$select=skuId,skuPartNumber&$top=100"
+		for nextLink != "" {
+			body, err := c.graphGet(ctx, nextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] ListEntitlements: subscribedSkus failed: %v (continuing)", err)
+				break
+			}
+			var result struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(body, &result); err != nil {
+				log.Printf("[ENTRA] decode subscribedSkus: %v", err)
+				break
+			}
+			for _, raw := range result.Value {
+				var sku struct {
+					SkuID        string `json:"skuId"`
+					SkuPartNumber string `json:"skuPartNumber"`
+				}
+				if err := json.Unmarshal(raw, &sku); err != nil {
+					continue
+				}
 				skuNameMap[sku.SkuID] = sku.SkuPartNumber
 			}
-			log.Printf("[ENTRA] Loaded %d SKU definitions", len(skuNameMap))
+			nextLink = c.resolveNextLink(result.NextLink)
 		}
 	}
 
-	// Step 2: Get all users with their assigned licenses (one bulk call)
-	userBody, err := c.graphGet(ctx, "/users", url.Values{
-		"$select": {"id,displayName,assignedLicenses"},
-		"$top":    {"999"},
-	})
-	if err != nil {
-		log.Printf("[ENTRA] ListEntitlements: users (licenses) query failed: %v (continuing)", err)
-	} else {
-		type assignedLicense struct {
-			SkuID string `json:"skuId"`
-		}
-		var userResult struct {
-			Value []struct {
-				ID               string             `json:"id"`
-				DisplayName      string             `json:"displayName"`
-				AssignedLicenses []assignedLicense  `json:"assignedLicenses"`
-			} `json:"value"`
-		}
-		if err := json.Unmarshal(userBody, &userResult); err == nil {
-			for _, u := range userResult.Value {
+	{
+		nextLink := "/users?$select=id,displayName,assignedLicenses&$top=999"
+		for nextLink != "" {
+			body, err := c.graphGet(ctx, nextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] ListEntitlements: users (licenses) failed: %v (continuing)", err)
+				break
+			}
+			var result struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			type assignedLicense struct {
+				SkuID string `json:"skuId"`
+			}
+			if err := json.Unmarshal(body, &result); err != nil {
+				log.Printf("[ENTRA] decode users (licenses): %v", err)
+				break
+			}
+			for _, raw := range result.Value {
+				var u struct {
+					ID               string             `json:"id"`
+					DisplayName      string             `json:"displayName"`
+					AssignedLicenses []assignedLicense  `json:"assignedLicenses"`
+				}
+				if err := json.Unmarshal(raw, &u); err != nil {
+					continue
+				}
 				for _, lic := range u.AssignedLicenses {
 					skuName := skuNameMap[lic.SkuID]
 					if skuName == "" {
@@ -1051,29 +1099,39 @@ func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntit
 					})
 				}
 			}
-			log.Printf("[ENTRA] Listed license assignments from %d users", len(userResult.Value))
+			nextLink = c.resolveNextLink(result.NextLink)
 		}
 	}
 
-	// ── 5. OAuth2 Permission Grants (delegated permissions) ──
-	oauthBody, err := c.graphGet(ctx, "/oauth2PermissionGrants", url.Values{
-		"$select": {"clientId,consentType,principalId,scope,startTime,expiryTime"},
-	})
-	if err != nil {
-		log.Printf("[ENTRA] ListEntitlements: oauth2PermissionGrants query failed: %v (continuing)", err)
-	} else {
-		var oauthResult struct {
-			Value []struct {
-				ClientID    string `json:"clientId"`
-				ConsentType string `json:"consentType"`
-				PrincipalID string `json:"principalId"`
-				Scope       string `json:"scope"`
-				StartTime   string `json:"startTime"`
-				ExpiryTime  string `json:"expiryTime"`
-			} `json:"value"`
-		}
-		if err := json.Unmarshal(oauthBody, &oauthResult); err == nil {
-			for _, g := range oauthResult.Value {
+	// ── 5. OAuth2 Permission Grants (paginated) ──
+	{
+		nextLink := "/oauth2PermissionGrants?$select=clientId,consentType,principalId,scope,startTime,expiryTime&$top=100"
+		for nextLink != "" {
+			body, err := c.graphGet(ctx, nextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] ListEntitlements: oauth2PermissionGrants failed: %v (continuing)", err)
+				break
+			}
+			var result struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(body, &result); err != nil {
+				log.Printf("[ENTRA] decode oauth2PermissionGrants: %v", err)
+				break
+			}
+			for _, raw := range result.Value {
+				var g struct {
+					ClientID    string `json:"clientId"`
+					ConsentType string `json:"consentType"`
+					PrincipalID string `json:"principalId"`
+					Scope       string `json:"scope"`
+					StartTime   string `json:"startTime"`
+					ExpiryTime  string `json:"expiryTime"`
+				}
+				if err := json.Unmarshal(raw, &g); err != nil {
+					continue
+				}
 				principalID := g.PrincipalID
 				if principalID == "" {
 					principalID = "all_users"
@@ -1092,7 +1150,7 @@ func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntit
 					},
 				})
 			}
-			log.Printf("[ENTRA] Listed %d OAuth2 permission grants", len(oauthResult.Value))
+			nextLink = c.resolveNextLink(result.NextLink)
 		}
 	}
 
@@ -1104,28 +1162,37 @@ func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntit
 func (c *EntraConnector) ListResources(ctx context.Context) ([]ConnectorResource, error) {
 	var resources []ConnectorResource
 
-	// 1. Applications (app registrations)
-	appBody, err := c.graphGet(ctx, "/applications", url.Values{
-		"$select": {"id,appId,displayName,description,createdDateTime,publisherDomain,signInAudience,tags"},
-		"$top":    {"100"},
-	})
-	if err != nil {
-		log.Printf("[ENTRA] ListResources: applications query failed: %v (continuing)", err)
-	} else {
-		var appResult struct {
-			Value []struct {
-				ID              string   `json:"id"`
-				AppID           string   `json:"appId"`
-				DisplayName     string   `json:"displayName"`
-				Description     string   `json:"description"`
-				PublisherDomain string   `json:"publisherDomain"`
-				SignInAudience  string   `json:"signInAudience"`
-				CreatedDateTime string   `json:"createdDateTime"`
-				Tags            []string `json:"tags"`
-			} `json:"value"`
-		}
-		if err := json.Unmarshal(appBody, &appResult); err == nil {
-			for _, app := range appResult.Value {
+	// 1. Applications (app registrations, paginated)
+	{
+		nextLink := "/applications?$select=id,appId,displayName,description,createdDateTime,publisherDomain,signInAudience,tags&$top=100"
+		for nextLink != "" {
+			body, err := c.graphGet(ctx, nextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] ListResources: applications failed: %v (continuing)", err)
+				break
+			}
+			var result struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(body, &result); err != nil {
+				log.Printf("[ENTRA] decode applications: %v", err)
+				break
+			}
+			for _, raw := range result.Value {
+				var app struct {
+					ID              string   `json:"id"`
+					AppID           string   `json:"appId"`
+					DisplayName     string   `json:"displayName"`
+					Description     string   `json:"description"`
+					PublisherDomain string   `json:"publisherDomain"`
+					SignInAudience  string   `json:"signInAudience"`
+					CreatedDateTime string   `json:"createdDateTime"`
+					Tags            []string `json:"tags"`
+				}
+				if err := json.Unmarshal(raw, &app); err != nil {
+					continue
+				}
 				createdAt, _ := time.Parse(time.RFC3339, app.CreatedDateTime)
 				attrs := map[string]string{
 					"app_id":           app.AppID,
@@ -1142,45 +1209,52 @@ func (c *EntraConnector) ListResources(ctx context.Context) ([]ConnectorResource
 					CreatedAt:    createdAt,
 				})
 			}
-			log.Printf("[ENTRA] Listed %d applications", len(appResult.Value))
+			nextLink = c.resolveNextLink(result.NextLink)
 		}
 	}
 
-	// 2. Service principals (enterprise apps) with owners
-	spBody, err := c.graphGet(ctx, "/servicePrincipals", url.Values{
-		"$select": {"id,appId,displayName,appOwnerOrganizationId,createdDateTime,accountEnabled,tags"},
-		"$expand": {"owners($select=id,displayName)"},
-		"$top":    {"100"},
-	})
-	if err != nil {
-		log.Printf("[ENTRA] ListResources: servicePrincipals query failed: %v (continuing)", err)
-	} else {
-		var spResult struct {
-			Value []struct {
-				ID                     string   `json:"id"`
-				AppID                  string   `json:"appId"`
-				DisplayName            string   `json:"displayName"`
-				AppOwnerOrganizationID string   `json:"appOwnerOrganizationId"`
-				AccountEnabled         bool     `json:"accountEnabled"`
-				CreatedDateTime        string   `json:"createdDateTime"`
-				Tags                   []string `json:"tags"`
-				Owners                 []struct {
-					ID          string `json:"id"`
-					DisplayName string `json:"displayName"`
-				} `json:"owners"`
-			} `json:"value"`
-		}
-		if err := json.Unmarshal(spBody, &spResult); err == nil {
-			for _, sp := range spResult.Value {
+	// 2. Service principals (enterprise apps) with owners, paginated
+	{
+		nextLink := "/servicePrincipals?$select=id,appId,displayName,appOwnerOrganizationId,createdDateTime,accountEnabled,tags&$expand=owners($select=id,displayName)&$top=100"
+		for nextLink != "" {
+			body, err := c.graphGet(ctx, nextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] ListResources: servicePrincipals failed: %v (continuing)", err)
+				break
+			}
+			var result struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(body, &result); err != nil {
+				log.Printf("[ENTRA] decode servicePrincipals: %v", err)
+				break
+			}
+			for _, raw := range result.Value {
+				var sp struct {
+					ID                     string   `json:"id"`
+					AppID                  string   `json:"appId"`
+					DisplayName            string   `json:"displayName"`
+					AppOwnerOrganizationID string   `json:"appOwnerOrganizationId"`
+					AccountEnabled         bool     `json:"accountEnabled"`
+					CreatedDateTime        string   `json:"createdDateTime"`
+					Tags                   []string `json:"tags"`
+					Owners                 []struct {
+						ID          string `json:"id"`
+						DisplayName string `json:"displayName"`
+					} `json:"owners"`
+				}
+				if err := json.Unmarshal(raw, &sp); err != nil {
+					continue
+				}
 				createdAt, _ := time.Parse(time.RFC3339, sp.CreatedDateTime)
 				var ownerIDs []string
 				for _, o := range sp.Owners {
 					ownerIDs = append(ownerIDs, o.ID)
 				}
 				attrs := map[string]string{
-					"app_id":             sp.AppID,
-					"org_id":             sp.AppOwnerOrganizationID,
-					"app_owner_org_id":   sp.AppOwnerOrganizationID,
+					"app_id":   sp.AppID,
+					"org_id":   sp.AppOwnerOrganizationID,
 				}
 				resources = append(resources, ConnectorResource{
 					ExternalID:   sp.ID,
@@ -1192,36 +1266,45 @@ func (c *EntraConnector) ListResources(ctx context.Context) ([]ConnectorResource
 					CreatedAt:    createdAt,
 				})
 			}
-			log.Printf("[ENTRA] Listed %d service principals", len(spResult.Value))
+			nextLink = c.resolveNextLink(result.NextLink)
 		}
 	}
 
-	// 3. Devices
-	devBody, err := c.graphGet(ctx, "/devices", url.Values{
-		"$select": {"id,deviceId,displayName,operatingSystem,operatingSystemVersion,isManaged,isCompliant,enrollmentType,approximateLastSignInDateTime,createdDateTime,trustType,profileType"},
-		"$top":    {"100"},
-	})
-	if err != nil {
-		log.Printf("[ENTRA] ListResources: devices query failed: %v (continuing)", err)
-	} else {
-		var devResult struct {
-			Value []struct {
-				ID                           string `json:"id"`
-				DeviceID                     string `json:"deviceId"`
-				DisplayName                  string `json:"displayName"`
-				OperatingSystem              string `json:"operatingSystem"`
-				OperatingSystemVersion       string `json:"operatingSystemVersion"`
-				IsManaged                    *bool  `json:"isManaged"`
-				IsCompliant                  *bool  `json:"isCompliant"`
-				EnrollmentType               string `json:"enrollmentType"`
-				ApproximateLastSignInDateTime string `json:"approximateLastSignInDateTime"`
-				CreatedDateTime              string `json:"createdDateTime"`
-				TrustType                    string `json:"trustType"`
-				ProfileType                  string `json:"profileType"`
-			} `json:"value"`
-		}
-		if err := json.Unmarshal(devBody, &devResult); err == nil {
-			for _, d := range devResult.Value {
+	// 3. Devices, paginated
+	{
+		nextLink := "/devices?$select=id,deviceId,displayName,operatingSystem,operatingSystemVersion,isManaged,isCompliant,enrollmentType,approximateLastSignInDateTime,createdDateTime,trustType,profileType&$top=100"
+		for nextLink != "" {
+			body, err := c.graphGet(ctx, nextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] ListResources: devices failed: %v (continuing)", err)
+				break
+			}
+			var result struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(body, &result); err != nil {
+				log.Printf("[ENTRA] decode devices: %v", err)
+				break
+			}
+			for _, raw := range result.Value {
+				var d struct {
+					ID                           string `json:"id"`
+					DeviceID                     string `json:"deviceId"`
+					DisplayName                  string `json:"displayName"`
+					OperatingSystem              string `json:"operatingSystem"`
+					OperatingSystemVersion       string `json:"operatingSystemVersion"`
+					IsManaged                    *bool  `json:"isManaged"`
+					IsCompliant                  *bool  `json:"isCompliant"`
+					EnrollmentType               string `json:"enrollmentType"`
+					ApproximateLastSignInDateTime string `json:"approximateLastSignInDateTime"`
+					CreatedDateTime              string `json:"createdDateTime"`
+					TrustType                    string `json:"trustType"`
+					ProfileType                  string `json:"profileType"`
+				}
+				if err := json.Unmarshal(raw, &d); err != nil {
+					continue
+				}
 				createdAt, _ := time.Parse(time.RFC3339, d.CreatedDateTime)
 				enabled := true
 				if d.IsManaged != nil && !*d.IsManaged {
@@ -1231,14 +1314,14 @@ func (c *EntraConnector) ListResources(ctx context.Context) ([]ConnectorResource
 					enabled = false
 				}
 				attrs := map[string]string{
-					"device_id":        d.DeviceID,
-					"os":               d.OperatingSystem,
-					"os_version":       d.OperatingSystemVersion,
-					"is_managed":       fmt.Sprintf("%v", d.IsManaged != nil && *d.IsManaged),
-					"is_compliant":     fmt.Sprintf("%v", d.IsCompliant != nil && *d.IsCompliant),
-					"enrollment_type":  d.EnrollmentType,
-					"trust_type":       d.TrustType,
-					"profile_type":     d.ProfileType,
+					"device_id":       d.DeviceID,
+					"os":              d.OperatingSystem,
+					"os_version":      d.OperatingSystemVersion,
+					"is_managed":      fmt.Sprintf("%v", d.IsManaged != nil && *d.IsManaged),
+					"is_compliant":    fmt.Sprintf("%v", d.IsCompliant != nil && *d.IsCompliant),
+					"enrollment_type": d.EnrollmentType,
+					"trust_type":      d.TrustType,
+					"profile_type":    d.ProfileType,
 				}
 				resources = append(resources, ConnectorResource{
 					ExternalID:   d.ID,
@@ -1249,7 +1332,7 @@ func (c *EntraConnector) ListResources(ctx context.Context) ([]ConnectorResource
 					CreatedAt:    createdAt,
 				})
 			}
-			log.Printf("[ENTRA] Listed %d devices", len(devResult.Value))
+			nextLink = c.resolveNextLink(result.NextLink)
 		}
 	}
 

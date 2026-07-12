@@ -101,8 +101,11 @@ export default function ConnectorsPage() {
     setBusySync(id)
     try {
       await fullSyncConnector(id)
-      load()
-      if (expanded === id) { Object.keys(tabData).forEach(k => setTabData(d => ({...d, [k]: null}))) }
+      await load()
+      if (expanded === id) {
+        setTabData({})
+        loadTab(id, activeTab)
+      }
     } catch (e: any) { alert("Full sync failed: " + e.message) }
     finally { setBusySync(null) }
   }
@@ -115,7 +118,8 @@ export default function ConnectorsPage() {
 
   async function loadTab(id: string, tab: TabKey) {
     setActiveTab(tab)
-    setTabLoad(t => ({...t, [tab]: true}))
+    const key = `${id}:${tab}`
+    setTabLoad(t => ({...t, [key]: true}))
     try {
       let data: any = null
       switch (tab) {
@@ -137,9 +141,14 @@ export default function ConnectorsPage() {
           break
         }
       }
-      setTabData(t => ({...t, [tab]: data}))
-    } catch (_) { setTabData(t => ({...t, [tab]: { error: "Failed to load" }})) }
-    finally { setTabLoad(t => ({...t, [tab]: false})) }
+      if (expanded !== id) return // stale — user switched connector
+      setTabData(t => ({...t, [key]: data}))
+    } catch (_) {
+      if (expanded !== id) return
+      setTabData(t => ({...t, [key]: { error: "Failed to load" }}))
+    } finally {
+      if (expanded === id) setTabLoad(t => ({...t, [key]: false}))
+    }
   }
 
   async function toggle(id: string) {
@@ -294,20 +303,15 @@ export default function ConnectorsPage() {
                       <TabButton active={activeTab === "schema"} onClick={() => loadTab(c.id, "schema")}>Schema</TabButton>
                     </div>
 
-                    {/* Accounts tab */}
-                    {activeTab === "accounts" && renderAccountsTab(tabData.accounts, tabLoad.accounts)}
+                    {activeTab === "accounts" && renderAccountsTab(tabData[`${c.id}:accounts`], tabLoad[`${c.id}:accounts`])}
 
-                    {/* Groups tab */}
-                    {activeTab === "groups" && renderGroupsTab(tabData.groups, tabLoad.groups, c.id)}
+                    {activeTab === "groups" && renderGroupsTab(tabData[`${c.id}:groups`], tabLoad[`${c.id}:groups`], c.id)}
 
-                    {/* Entitlements tab */}
-                    {activeTab === "entitlements" && renderEntitlementsTab(tabData.entitlements, tabLoad.entitlements, c.id)}
+                    {activeTab === "entitlements" && renderEntitlementsTab(tabData[`${c.id}:entitlements`], tabLoad[`${c.id}:entitlements`], c.id)}
 
-                    {/* Resources tab */}
-                    {activeTab === "resources" && renderResourcesTab(tabData.resources, tabLoad.resources, c.id)}
+                    {activeTab === "resources" && renderResourcesTab(tabData[`${c.id}:resources`], tabLoad[`${c.id}:resources`], c.id)}
 
-                    {/* Schema tab */}
-                    {activeTab === "schema" && renderSchemaTab(tabData.schema, tabLoad.schema)}
+                    {activeTab === "schema" && renderSchemaTab(tabData[`${c.id}:schema`], tabLoad[`${c.id}:schema`])}
                   </div>
                 )}
               </Card>

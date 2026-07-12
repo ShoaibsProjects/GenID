@@ -495,6 +495,8 @@ CREATE TABLE connector_entitlements (
     last_synced_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE UNIQUE INDEX idx_ce_unique ON connector_entitlements(connector_id, identity_external_id, source_id, entitlement_type);
+
 CREATE INDEX idx_ce_connector    ON connector_entitlements(connector_id);
 CREATE INDEX idx_ce_identity     ON connector_entitlements(identity_external_id);
 CREATE INDEX idx_ce_type         ON connector_entitlements(entitlement_type);
