@@ -82,6 +82,21 @@ export default function ConnectorsPage() {
     finally { setBusySync(null) }
   }
 
+  const [testMsg, setTestMsg] = useState<Record<string, {ok: boolean; msg: string}>>({})
+
+  async function handleTestConnector(id: string) {
+    const prev = testMsg[id]
+    setTestMsg(t => ({...t, [id]: {ok: false, msg: "Testing..."}}))
+    try {
+      const r = await fetch(`/api/v1/connectors/${id}/test`, { method: "POST" }).then(r => r.json())
+      setTestMsg(t => ({...t, [id]: {ok: r.success, msg: r.success ? "OK" : (r.error || "Failed")}}))
+      setTimeout(() => setTestMsg(t => { const n = {...t}; delete n[id]; return n }), 3000)
+    } catch (e: any) {
+      setTestMsg(t => ({...t, [id]: {ok: false, msg: e.message}}))
+      setTimeout(() => setTestMsg(t => { const n = {...t}; delete n[id]; return n }), 3000)
+    }
+  }
+
   async function handleFullSync(id: string) {
     setBusySync(id)
     try {
@@ -246,6 +261,12 @@ export default function ConnectorsPage() {
                   </div>
                   <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                     {!isConnected && <Button variant="ghost" size="sm" onClick={() => handleConnect(c.id)}>Connect</Button>}
+                    <Button variant="ghost" size="sm" onClick={() => handleTestConnector(c.id)}>Test</Button>
+                    {testMsg[c.id] && (
+                      <span className={`text-[10px] font-mono ${testMsg[c.id].ok ? "text-green-400" : "text-red-400"}`}>
+                        {testMsg[c.id].msg}
+                      </span>
+                    )}
                     <Button variant="ghost" size="sm" onClick={() => handleFullSync(c.id)} disabled={busySync === c.id}>
                       {busySync === c.id ? "Syncing..." : "Full Sync"}
                     </Button>

@@ -260,6 +260,7 @@ func main() {
 	api.HandleFunc("/connectors/{id}", svc.DeleteConnector).Methods("DELETE")
 	api.HandleFunc("/connectors/{id}/connect", svc.ConnectConnector).Methods("POST")
 	api.HandleFunc("/connectors/{id}/disconnect", svc.DisconnectConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/test", svc.TestExistingConnector).Methods("POST")
 	api.HandleFunc("/connectors/{id}/sync", svc.SyncConnector).Methods("POST")
 	api.HandleFunc("/connectors/{id}/sync-delta", svc.SyncConnectorDelta).Methods("POST")
 	api.HandleFunc("/connectors/{id}/users", svc.GetConnectorUsers).Methods("GET")

@@ -1518,6 +1518,40 @@ func (s *IdentityService) persistSyncedResources(ctx context.Context, connectorI
 	return nil
 }
 
+func (s *IdentityService) TestExistingConnector(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	cfg, err := s.connMgr.GetConfig(id)
+	if err != nil {
+		respondError(w, http.StatusNotFound, fmt.Sprintf("Connector not found: %s", err.Error()))
+		return
+	}
+
+	if err := connector.TestConnection(r.Context(), cfg); err != nil {
+		s.auditLog.Append(audit.Entry{
+			Level: audit.LevelWarn, Service: "connector", Method: "POST", Path: r.URL.Path,
+			Message: fmt.Sprintf("TestConnection: %s (%s) — %s", cfg.Type, cfg.Name, err.Error()),
+			Tags:    []string{"connector", "test", "failed"},
+		})
+		respondJSON(w, http.StatusOK, map[string]any{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	s.auditLog.Append(audit.Entry{
+		Level: audit.LevelInfo, Service: "connector", Method: "POST", Path: r.URL.Path,
+		Message: fmt.Sprintf("TestConnection: %s (%s) — SUCCESS", cfg.Type, cfg.Name),
+		Tags:    []string{"connector", "test", "success"},
+	})
+	respondJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "Connection successful",
+	})
+}
+
 func (s *IdentityService) TestConnectorConnection(w http.ResponseWriter, r *http.Request) {
 	var cfg connector.ConnectorConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
