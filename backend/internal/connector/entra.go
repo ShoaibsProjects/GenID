@@ -799,10 +799,70 @@ func (c *EntraConnector) DiscoverSchema(ctx context.Context) (*SchemaResult, err
 
 // ─── Entitlement Operations ──────────────────────────────────
 
+// ListEntitlements discovers all entitlements from Microsoft Entra ID:
+//   1. Azure AD Unified Role Assignments (roleManagement/directory)
+//   2. Legacy Directory Role Memberships (directoryRoles)
+//   3. App Role Assignments (appRoleAssignedTo with role name resolution)
+//   4. License Assignments (assignedLicenses on users, resolved via subscribedSkus)
+//   5. OAuth2 Permission Grants (delegated permissions consented on behalf of users)
 func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntitlement, error) {
 	var entitlements []ConnectorEntitlement
 
-	// 1. Directory role memberships — GET /directoryRoles?$expand=members($select=id)
+	// ── 1. Azure AD Unified Role Assignments (recommended API) ──
+	// GET /roleManagement/directory/roleAssignments?$expand=roleDefinition($select=id,displayName,description)
+	unifiedBody, err := c.graphGet(ctx, "/roleManagement/directory/roleAssignments", url.Values{
+		"$expand": {"roleDefinition($select=id,displayName,description)"},
+		"$select": {"id,principalId,principalDisplayName,roleDefinitionId,directoryScopeId"},
+		"$top":    {"500"},
+	})
+	if err != nil {
+		log.Printf("[ENTRA] ListEntitlements: unified roleAssignments query failed: %v (continuing)", err)
+	} else {
+		var unifiedResult struct {
+			Value []struct {
+				ID                   string `json:"id"`
+				PrincipalID          string `json:"principalId"`
+				PrincipalDisplayName string `json:"principalDisplayName"`
+				RoleDefinitionID     string `json:"roleDefinitionId"`
+				DirectoryScopeID     string `json:"directoryScopeId"`
+				RoleDefinition       *struct {
+					ID          string `json:"id"`
+					DisplayName string `json:"displayName"`
+					Description string `json:"description"`
+				} `json:"roleDefinition"`
+			} `json:"value"`
+		}
+		if err := json.Unmarshal(unifiedBody, &unifiedResult); err == nil {
+			for _, a := range unifiedResult.Value {
+				roleName := a.RoleDefinitionID
+				roleDesc := ""
+				if a.RoleDefinition != nil {
+					roleName = a.RoleDefinition.DisplayName
+					roleDesc = a.RoleDefinition.Description
+				}
+				scope := "tenant"
+				if a.DirectoryScopeID != "" && a.DirectoryScopeID != "/" {
+					scope = a.DirectoryScopeID
+				}
+				entitlements = append(entitlements, ConnectorEntitlement{
+					IdentityExternalID: a.PrincipalID,
+					EntitlementType:    string(EntitlementTypeDirectoryRole),
+					SourceID:           a.RoleDefinitionID,
+					SourceName:         roleName,
+					SourceType:         "azure_ad_role",
+					IsActive:           true,
+					RawAttributes: map[string]any{
+						"assignment_id":   a.ID,
+						"description":     roleDesc,
+						"directory_scope": scope,
+					},
+				})
+			}
+			log.Printf("[ENTRA] Listed %d unified role assignments", len(unifiedResult.Value))
+		}
+	}
+
+	// ── 2. Legacy Directory Role Memberships (complementary) ──
 	roleBody, err := c.graphGet(ctx, "/directoryRoles", url.Values{
 		"$expand": {"members($select=id)"},
 		"$select": {"id,displayName,description,roleTemplateId"},
@@ -827,24 +887,26 @@ func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntit
 					entitlements = append(entitlements, ConnectorEntitlement{
 						IdentityExternalID: member.ID,
 						EntitlementType:    string(EntitlementTypeDirectoryRole),
-						SourceID:           role.ID,
-						SourceName:         role.DisplayName,
+						SourceID:           role.RoleTemplateID,
+						SourceName:         role.DisplayName + " (legacy)",
 						SourceType:         "directory_role",
 						IsActive:           true,
 						RawAttributes: map[string]any{
-							"description":     role.Description,
+							"description":      role.Description,
+							"role_id":          role.ID,
 							"role_template_id": role.RoleTemplateID,
 						},
 					})
 				}
 			}
-			log.Printf("[ENTRA] Listed %d directory role memberships", len(entitlements))
+			log.Printf("[ENTRA] Listed %d legacy directory role memberships", len(roleResult.Value))
 		}
 	}
 
-	// 2. App role assignments — list all service principals, then their app role assignments
+	// ── 3. App Role Assignments (with role name resolution) ──
+	// First, collect all service principals and their appRole definitions
 	spBody, err := c.graphGet(ctx, "/servicePrincipals", url.Values{
-		"$select": {"id,displayName,appId,appDisplayName,tags,appOwnerOrganizationId"},
+		"$select": {"id,appId,displayName,appRoles"},
 		"$top":    {"100"},
 	})
 	if err != nil {
@@ -854,18 +916,34 @@ func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntit
 			Value    []json.RawMessage `json:"value"`
 			NextLink string            `json:"@odata.nextLink"`
 		}
-		if err := json.Unmarshal(spBody, &spResult); err == nil {
+		if err := json.Unmarshal(spBody, &spResult); err != nil {
+			log.Printf("[ENTRA] ListEntitlements: decode servicePrincipals: %v", err)
+		} else {
+			type appRoleDef struct {
+				ID          string `json:"id"`
+				DisplayName string `json:"displayName"`
+				Description string `json:"description"`
+			}
+			type spInfo struct {
+				ID          string        `json:"id"`
+				AppID       string        `json:"appId"`
+				DisplayName string        `json:"displayName"`
+				AppRoles    []appRoleDef  `json:"appRoles"`
+			}
+
 			for _, raw := range spResult.Value {
-				var sp struct {
-					ID          string `json:"id"`
-					DisplayName string `json:"displayName"`
-					AppID       string `json:"appId"`
-				}
+				var sp spInfo
 				if err := json.Unmarshal(raw, &sp); err != nil {
 					continue
 				}
 				if sp.DisplayName == "" {
 					sp.DisplayName = sp.AppID
+				}
+
+				// Build role ID → name map
+				roleNameMap := make(map[string]string, len(sp.AppRoles))
+				for _, r := range sp.AppRoles {
+					roleNameMap[r.ID] = r.DisplayName
 				}
 
 				// Fetch app role assignments for this service principal
@@ -890,13 +968,17 @@ func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntit
 				}
 
 				for _, a := range assignResult.Value {
+					roleName := roleNameMap[a.AppRoleID]
+					if roleName == "" {
+						roleName = a.AppRoleID
+					}
 					assignedAt, _ := time.Parse(time.RFC3339, a.CreatedDateTime)
 					entitlements = append(entitlements, ConnectorEntitlement{
 						IdentityExternalID: a.PrincipalID,
 						EntitlementType:    string(EntitlementTypeAppRole),
 						SourceID:           a.AppRoleID,
-						SourceName:         a.PrincipalDisplayName,
-						SourceType:         "service_principal",
+						SourceName:         roleName,
+						SourceType:         "app_role",
 						AppID:              sp.AppID,
 						AppName:            sp.DisplayName,
 						AssignedAt:         assignedAt,
@@ -904,7 +986,113 @@ func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntit
 					})
 				}
 			}
-			log.Printf("[ENTRA] Listed app role assignments for %d service principals", len(spResult.Value))
+			log.Printf("[ENTRA] Listed app role assignments")
+		}
+	}
+
+	// ── 4. License Assignments ──
+	// Step 1: Get all subscribed SKUs to resolve SKU IDs → product names
+	skuNameMap := make(map[string]string)
+	skuBody, err := c.graphGet(ctx, "/subscribedSkus", url.Values{
+		"$select": {"skuId,skuPartNumber,servicePlans,prepaidUnits"},
+	})
+	if err != nil {
+		log.Printf("[ENTRA] ListEntitlements: subscribedSkus query failed: %v (continuing)", err)
+	} else {
+		var skuResult struct {
+			Value []struct {
+				SkuID        string `json:"skuId"`
+				SkuPartNumber string `json:"skuPartNumber"`
+			} `json:"value"`
+		}
+		if err := json.Unmarshal(skuBody, &skuResult); err == nil {
+			for _, sku := range skuResult.Value {
+				skuNameMap[sku.SkuID] = sku.SkuPartNumber
+			}
+			log.Printf("[ENTRA] Loaded %d SKU definitions", len(skuNameMap))
+		}
+	}
+
+	// Step 2: Get all users with their assigned licenses (one bulk call)
+	userBody, err := c.graphGet(ctx, "/users", url.Values{
+		"$select": {"id,displayName,assignedLicenses"},
+		"$top":    {"999"},
+	})
+	if err != nil {
+		log.Printf("[ENTRA] ListEntitlements: users (licenses) query failed: %v (continuing)", err)
+	} else {
+		type assignedLicense struct {
+			SkuID string `json:"skuId"`
+		}
+		var userResult struct {
+			Value []struct {
+				ID               string             `json:"id"`
+				DisplayName      string             `json:"displayName"`
+				AssignedLicenses []assignedLicense  `json:"assignedLicenses"`
+			} `json:"value"`
+		}
+		if err := json.Unmarshal(userBody, &userResult); err == nil {
+			for _, u := range userResult.Value {
+				for _, lic := range u.AssignedLicenses {
+					skuName := skuNameMap[lic.SkuID]
+					if skuName == "" {
+						skuName = lic.SkuID
+					}
+					entitlements = append(entitlements, ConnectorEntitlement{
+						IdentityExternalID: u.ID,
+						EntitlementType:    "license",
+						SourceID:           lic.SkuID,
+						SourceName:         skuName,
+						SourceType:         "subscribed_sku",
+						IsActive:           true,
+						RawAttributes: map[string]any{
+							"user_display_name": u.DisplayName,
+						},
+					})
+				}
+			}
+			log.Printf("[ENTRA] Listed license assignments from %d users", len(userResult.Value))
+		}
+	}
+
+	// ── 5. OAuth2 Permission Grants (delegated permissions) ──
+	oauthBody, err := c.graphGet(ctx, "/oauth2PermissionGrants", url.Values{
+		"$select": {"clientId,consentType,principalId,scope,startTime,expiryTime"},
+	})
+	if err != nil {
+		log.Printf("[ENTRA] ListEntitlements: oauth2PermissionGrants query failed: %v (continuing)", err)
+	} else {
+		var oauthResult struct {
+			Value []struct {
+				ClientID    string `json:"clientId"`
+				ConsentType string `json:"consentType"`
+				PrincipalID string `json:"principalId"`
+				Scope       string `json:"scope"`
+				StartTime   string `json:"startTime"`
+				ExpiryTime  string `json:"expiryTime"`
+			} `json:"value"`
+		}
+		if err := json.Unmarshal(oauthBody, &oauthResult); err == nil {
+			for _, g := range oauthResult.Value {
+				principalID := g.PrincipalID
+				if principalID == "" {
+					principalID = "all_users"
+				}
+				entitlements = append(entitlements, ConnectorEntitlement{
+					IdentityExternalID: principalID,
+					EntitlementType:    "oauth2_permission",
+					SourceID:           g.ClientID,
+					SourceName:         g.Scope,
+					SourceType:         "delegated_permission",
+					AppID:              g.ClientID,
+					IsActive:           true,
+					RawAttributes: map[string]any{
+						"consent_type": g.ConsentType,
+						"scope":        g.Scope,
+					},
+				})
+			}
+			log.Printf("[ENTRA] Listed %d OAuth2 permission grants", len(oauthResult.Value))
 		}
 	}
 

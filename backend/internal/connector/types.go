@@ -191,9 +191,11 @@ type ConnectorEntitlement struct {
 type EntitlementType string
 
 const (
-	EntitlementTypeDirectoryRole   EntitlementType = "directory_role"
-	EntitlementTypeAppRole         EntitlementType = "app_role"
-	EntitlementTypeGroupMembership EntitlementType = "group_membership"
+	EntitlementTypeDirectoryRole     EntitlementType = "directory_role"
+	EntitlementTypeAppRole           EntitlementType = "app_role"
+	EntitlementTypeGroupMembership   EntitlementType = "group_membership"
+	EntitlementTypeLicense           EntitlementType = "license"
+	EntitlementTypeOAuth2Permission  EntitlementType = "oauth2_permission"
 )
 
 // ─── Resources ───────────────────────────────────────────────
