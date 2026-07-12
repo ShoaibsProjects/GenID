@@ -157,6 +157,67 @@ type HealthReport struct {
 	SupportsSchema     bool          `json:"supports_schema"`
 }
 
+// ─── Full Sync Result ────────────────────────────────────────
+
+type FullSyncResult struct {
+	ConnectorID   string              `json:"connector_id"`
+	Users         []ConnectorUser      `json:"users,omitempty"`
+	Groups        []ConnectorGroup     `json:"groups,omitempty"`
+	Entitlements  []ConnectorEntitlement `json:"entitlements,omitempty"`
+	Resources     []ConnectorResource  `json:"resources,omitempty"`
+	UsersCreated  int                  `json:"users_created"`
+	UsersUpdated  int                  `json:"users_updated"`
+	UsersTotal    int                  `json:"users_total"`
+	Errors        []string             `json:"errors,omitempty"`
+	Success       bool                 `json:"success"`
+	CompletedAt   time.Time            `json:"completed_at"`
+}
+
+// ─── Entitlements ───────────────────────────────────────────
+
+type ConnectorEntitlement struct {
+	IdentityExternalID string    `json:"identity_external_id"`
+	EntitlementType    string    `json:"entitlement_type"`
+	SourceID           string    `json:"source_id"`
+	SourceName         string    `json:"source_name,omitempty"`
+	SourceType         string    `json:"source_type,omitempty"`
+	AppID              string    `json:"app_id,omitempty"`
+	AppName            string    `json:"app_name,omitempty"`
+	AssignedAt         time.Time `json:"assigned_at,omitempty"`
+	IsActive           bool      `json:"is_active"`
+	RawAttributes      map[string]any `json:"raw_attributes,omitempty"`
+}
+
+type EntitlementType string
+
+const (
+	EntitlementTypeDirectoryRole   EntitlementType = "directory_role"
+	EntitlementTypeAppRole         EntitlementType = "app_role"
+	EntitlementTypeGroupMembership EntitlementType = "group_membership"
+)
+
+// ─── Resources ───────────────────────────────────────────────
+
+type ConnectorResource struct {
+	ExternalID   string            `json:"external_id"`
+	ResourceType string            `json:"resource_type"`
+	Name         string            `json:"name"`
+	Description  string            `json:"description,omitempty"`
+	Enabled      bool              `json:"enabled"`
+	OwnerIDs     []string          `json:"owner_ids,omitempty"`
+	Attributes   map[string]string `json:"attributes,omitempty"`
+	CreatedAt    time.Time         `json:"created_at,omitempty"`
+	UpdatedAt    time.Time         `json:"updated_at,omitempty"`
+}
+
+type ResourceType string
+
+const (
+	ResourceTypeApplication     ResourceType = "application"
+	ResourceTypeServicePrincipal ResourceType = "service_principal"
+	ResourceTypeDevice          ResourceType = "device"
+)
+
 // ─── Provisioning ────────────────────────────────────────────
 
 type ProvisioningRequest struct {

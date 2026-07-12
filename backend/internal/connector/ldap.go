@@ -529,6 +529,18 @@ func isAccountDisabled(uac int) bool {
 	return uac&0x0002 != 0
 }
 
+// ─── Entitlements (not supported for LDAP) ──────────────────
+
+func (c *LDAPConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntitlement, error) {
+	return nil, ErrNotSupported
+}
+
+// ─── Resources (not supported for LDAP) ─────────────────────
+
+func (c *LDAPConnector) ListResources(ctx context.Context) ([]ConnectorResource, error) {
+	return nil, ErrNotSupported
+}
+
 // ─── Delta Sync (not supported for LDAP) ────────────────────
 
 func (c *LDAPConnector) ListUsersDelta(ctx context.Context, deltaToken string) ([]ConnectorUser, string, error) {

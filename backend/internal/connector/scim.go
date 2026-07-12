@@ -669,6 +669,18 @@ func (c *SCIMConnector) RemoveGroupMember(ctx context.Context, groupID, userID s
 	return err
 }
 
+// ─── Entitlements (not supported for SCIM) ─────────────────
+
+func (c *SCIMConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntitlement, error) {
+	return nil, ErrNotSupported
+}
+
+// ─── Resources (not supported for SCIM) ─────────────────────
+
+func (c *SCIMConnector) ListResources(ctx context.Context) ([]ConnectorResource, error) {
+	return nil, ErrNotSupported
+}
+
 // ─── Delta Sync (not supported for SCIM) ────────────────────
 
 func (c *SCIMConnector) ListUsersDelta(ctx context.Context, deltaToken string) ([]ConnectorUser, string, error) {

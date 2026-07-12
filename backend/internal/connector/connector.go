@@ -43,15 +43,32 @@ type Connector interface {
 	// If not supported, returns ErrDeltaNotSupported.
 	ListUsersDelta(ctx context.Context, deltaToken string) (users []ConnectorUser, newToken string, err error)
 
+	// ─── Entitlement Operations ────────────────────────────
+	// Lists all entitlements (role assignments, app roles) across the directory.
+	// Returns ErrNotSupported if the connector doesn't support entitlement enumeration.
+	ListEntitlements(ctx context.Context) ([]ConnectorEntitlement, error)
+
+	// ─── Resource Operations ───────────────────────────────
+	// Lists all resources (applications, service principals, devices) across the directory.
+	// Returns ErrNotSupported if the connector doesn't support resource enumeration.
+	ListResources(ctx context.Context) ([]ConnectorResource, error)
+
 	// ─── Schema Discovery ─────────────────────────────────
 	// Discovers the schema/attributes available from the source.
 	// Returns nil if not supported.
 	DiscoverSchema(ctx context.Context) (*SchemaResult, error)
 }
 
-// ErrDeltaNotSupported is returned by ListUsersDelta when the connector doesn't support delta queries.
-var ErrDeltaNotSupported = &DeltaNotSupportedError{}
+// Sentinel errors for optional connector features
+var (
+	ErrDeltaNotSupported  = &DeltaNotSupportedError{}
+	ErrNotSupported       = &NotSupportedError{}
+)
 
 type DeltaNotSupportedError struct{}
 
 func (e *DeltaNotSupportedError) Error() string { return "delta sync not supported by this connector" }
+
+type NotSupportedError struct{}
+
+func (e *NotSupportedError) Error() string { return "feature not supported by this connector" }

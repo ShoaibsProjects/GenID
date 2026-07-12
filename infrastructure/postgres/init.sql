@@ -454,6 +454,73 @@ CREATE INDEX idx_conn_id_enabled    ON connector_identities(enabled);
 CREATE INDEX idx_conn_id_dept       ON connector_identities(department);
 CREATE INDEX idx_conn_id_lookup     ON connector_identities(connector_id, external_id);
 
+-- ─── Connector Groups ───────────────────────────────────
+-- Stores groups synced from external directories.
+CREATE TABLE connector_groups (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id),
+    connector_id    UUID NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    external_id     VARCHAR(500) NOT NULL,
+    name            VARCHAR(255) NOT NULL,
+    description     TEXT,
+    group_type      VARCHAR(100),
+    scope           VARCHAR(100),
+    member_ids      TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    raw_attributes  JSONB NOT NULL DEFAULT '{}',
+    first_synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_synced_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(connector_id, external_id)
+);
+
+CREATE INDEX idx_cg_connector ON connector_groups(connector_id);
+CREATE INDEX idx_cg_name     ON connector_groups(name);
+
+-- ─── Connector Entitlements ────────────────────────────
+-- Stores role assignments, directory role memberships, app role assignments.
+CREATE TABLE connector_entitlements (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id           UUID NOT NULL REFERENCES tenants(id),
+    connector_id        UUID NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    identity_external_id VARCHAR(500) NOT NULL,
+    entitlement_type    VARCHAR(100) NOT NULL,
+    source_id           VARCHAR(500) NOT NULL,
+    source_name         VARCHAR(500),
+    source_type         VARCHAR(100),
+    app_id              VARCHAR(500),
+    app_name            VARCHAR(500),
+    assigned_at         TIMESTAMPTZ,
+    is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+    raw_attributes      JSONB NOT NULL DEFAULT '{}',
+    first_synced_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_synced_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_ce_connector    ON connector_entitlements(connector_id);
+CREATE INDEX idx_ce_identity     ON connector_entitlements(identity_external_id);
+CREATE INDEX idx_ce_type         ON connector_entitlements(entitlement_type);
+CREATE INDEX idx_ce_source       ON connector_entitlements(source_id);
+
+-- ─── Connector Resources ─────────────────────────────────
+-- Stores applications, service principals, devices synced from directories.
+CREATE TABLE connector_resources (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id),
+    connector_id    UUID NOT NULL REFERENCES connectors(id) ON DELETE CASCADE,
+    external_id     VARCHAR(500) NOT NULL,
+    resource_type   VARCHAR(100) NOT NULL,
+    name            VARCHAR(500),
+    description     TEXT,
+    enabled         BOOLEAN NOT NULL DEFAULT TRUE,
+    owner_ids       TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    raw_attributes  JSONB NOT NULL DEFAULT '{}',
+    first_synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_synced_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(connector_id, external_id)
+);
+
+CREATE INDEX idx_cr_connector ON connector_resources(connector_id);
+CREATE INDEX idx_cr_type     ON connector_resources(resource_type);
+
 -- ─── Auto-Update Timestamps ───────────────────────────────
 CREATE OR REPLACE FUNCTION update_timestamp()
 RETURNS TRIGGER AS $$
@@ -468,6 +535,9 @@ CREATE TRIGGER trg_nhi_updated          BEFORE UPDATE ON non_human_identities FO
 CREATE TRIGGER trg_roles_updated        BEFORE UPDATE ON roles                FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 CREATE TRIGGER trg_resources_updated    BEFORE UPDATE ON resources            FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 CREATE TRIGGER trg_connectors_updated   BEFORE UPDATE ON connectors           FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER trg_cg_updated          BEFORE UPDATE ON connector_groups      FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER trg_ce_updated          BEFORE UPDATE ON connector_entitlements FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER trg_cr_updated          BEFORE UPDATE ON connector_resources    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
 -- ─── Seed Data: Default Tenant ─────────────────────────────
 INSERT INTO tenants (id, name, slug, tier) VALUES

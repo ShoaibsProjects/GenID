@@ -797,6 +797,277 @@ func (c *EntraConnector) DiscoverSchema(ctx context.Context) (*SchemaResult, err
 	}, nil
 }
 
+// ─── Entitlement Operations ──────────────────────────────────
+
+func (c *EntraConnector) ListEntitlements(ctx context.Context) ([]ConnectorEntitlement, error) {
+	var entitlements []ConnectorEntitlement
+
+	// 1. Directory role memberships — GET /directoryRoles?$expand=members($select=id)
+	roleBody, err := c.graphGet(ctx, "/directoryRoles", url.Values{
+		"$expand": {"members($select=id)"},
+		"$select": {"id,displayName,description,roleTemplateId"},
+	})
+	if err != nil {
+		log.Printf("[ENTRA] ListEntitlements: directoryRoles query failed: %v (continuing)", err)
+	} else {
+		var roleResult struct {
+			Value []struct {
+				ID             string `json:"id"`
+				DisplayName    string `json:"displayName"`
+				Description    string `json:"description"`
+				RoleTemplateID string `json:"roleTemplateId"`
+				Members        []struct {
+					ID string `json:"id"`
+				} `json:"members"`
+			} `json:"value"`
+		}
+		if err := json.Unmarshal(roleBody, &roleResult); err == nil {
+			for _, role := range roleResult.Value {
+				for _, member := range role.Members {
+					entitlements = append(entitlements, ConnectorEntitlement{
+						IdentityExternalID: member.ID,
+						EntitlementType:    string(EntitlementTypeDirectoryRole),
+						SourceID:           role.ID,
+						SourceName:         role.DisplayName,
+						SourceType:         "directory_role",
+						IsActive:           true,
+						RawAttributes: map[string]any{
+							"description":     role.Description,
+							"role_template_id": role.RoleTemplateID,
+						},
+					})
+				}
+			}
+			log.Printf("[ENTRA] Listed %d directory role memberships", len(entitlements))
+		}
+	}
+
+	// 2. App role assignments — list all service principals, then their app role assignments
+	spBody, err := c.graphGet(ctx, "/servicePrincipals", url.Values{
+		"$select": {"id,displayName,appId,appDisplayName,tags,appOwnerOrganizationId"},
+		"$top":    {"100"},
+	})
+	if err != nil {
+		log.Printf("[ENTRA] ListEntitlements: servicePrincipals query failed: %v (continuing)", err)
+	} else {
+		var spResult struct {
+			Value    []json.RawMessage `json:"value"`
+			NextLink string            `json:"@odata.nextLink"`
+		}
+		if err := json.Unmarshal(spBody, &spResult); err == nil {
+			for _, raw := range spResult.Value {
+				var sp struct {
+					ID          string `json:"id"`
+					DisplayName string `json:"displayName"`
+					AppID       string `json:"appId"`
+				}
+				if err := json.Unmarshal(raw, &sp); err != nil {
+					continue
+				}
+				if sp.DisplayName == "" {
+					sp.DisplayName = sp.AppID
+				}
+
+				// Fetch app role assignments for this service principal
+				assignBody, assignErr := c.graphGet(ctx, "/servicePrincipals/"+
+					url.PathEscape(sp.ID)+"/appRoleAssignedTo", url.Values{
+					"$select": {"principalId,appRoleId,principalDisplayName,createdDateTime"},
+				})
+				if assignErr != nil {
+					continue
+				}
+
+				var assignResult struct {
+					Value []struct {
+						PrincipalID          string `json:"principalId"`
+						AppRoleID            string `json:"appRoleId"`
+						PrincipalDisplayName string `json:"principalDisplayName"`
+						CreatedDateTime      string `json:"createdDateTime"`
+					} `json:"value"`
+				}
+				if err := json.Unmarshal(assignBody, &assignResult); err != nil {
+					continue
+				}
+
+				for _, a := range assignResult.Value {
+					assignedAt, _ := time.Parse(time.RFC3339, a.CreatedDateTime)
+					entitlements = append(entitlements, ConnectorEntitlement{
+						IdentityExternalID: a.PrincipalID,
+						EntitlementType:    string(EntitlementTypeAppRole),
+						SourceID:           a.AppRoleID,
+						SourceName:         a.PrincipalDisplayName,
+						SourceType:         "service_principal",
+						AppID:              sp.AppID,
+						AppName:            sp.DisplayName,
+						AssignedAt:         assignedAt,
+						IsActive:           true,
+					})
+				}
+			}
+			log.Printf("[ENTRA] Listed app role assignments for %d service principals", len(spResult.Value))
+		}
+	}
+
+	return entitlements, nil
+}
+
+// ─── Resource Operations ─────────────────────────────────────
+
+func (c *EntraConnector) ListResources(ctx context.Context) ([]ConnectorResource, error) {
+	var resources []ConnectorResource
+
+	// 1. Applications (app registrations)
+	appBody, err := c.graphGet(ctx, "/applications", url.Values{
+		"$select": {"id,appId,displayName,description,createdDateTime,publisherDomain,signInAudience,tags"},
+		"$top":    {"100"},
+	})
+	if err != nil {
+		log.Printf("[ENTRA] ListResources: applications query failed: %v (continuing)", err)
+	} else {
+		var appResult struct {
+			Value []struct {
+				ID              string   `json:"id"`
+				AppID           string   `json:"appId"`
+				DisplayName     string   `json:"displayName"`
+				Description     string   `json:"description"`
+				PublisherDomain string   `json:"publisherDomain"`
+				SignInAudience  string   `json:"signInAudience"`
+				CreatedDateTime string   `json:"createdDateTime"`
+				Tags            []string `json:"tags"`
+			} `json:"value"`
+		}
+		if err := json.Unmarshal(appBody, &appResult); err == nil {
+			for _, app := range appResult.Value {
+				createdAt, _ := time.Parse(time.RFC3339, app.CreatedDateTime)
+				attrs := map[string]string{
+					"app_id":           app.AppID,
+					"publisher_domain": app.PublisherDomain,
+					"sign_in_audience": app.SignInAudience,
+				}
+				resources = append(resources, ConnectorResource{
+					ExternalID:   app.ID,
+					ResourceType: string(ResourceTypeApplication),
+					Name:         app.DisplayName,
+					Description:  app.Description,
+					Enabled:      true,
+					Attributes:   attrs,
+					CreatedAt:    createdAt,
+				})
+			}
+			log.Printf("[ENTRA] Listed %d applications", len(appResult.Value))
+		}
+	}
+
+	// 2. Service principals (enterprise apps) with owners
+	spBody, err := c.graphGet(ctx, "/servicePrincipals", url.Values{
+		"$select": {"id,appId,displayName,appOwnerOrganizationId,createdDateTime,accountEnabled,tags"},
+		"$expand": {"owners($select=id,displayName)"},
+		"$top":    {"100"},
+	})
+	if err != nil {
+		log.Printf("[ENTRA] ListResources: servicePrincipals query failed: %v (continuing)", err)
+	} else {
+		var spResult struct {
+			Value []struct {
+				ID                     string   `json:"id"`
+				AppID                  string   `json:"appId"`
+				DisplayName            string   `json:"displayName"`
+				AppOwnerOrganizationID string   `json:"appOwnerOrganizationId"`
+				AccountEnabled         bool     `json:"accountEnabled"`
+				CreatedDateTime        string   `json:"createdDateTime"`
+				Tags                   []string `json:"tags"`
+				Owners                 []struct {
+					ID          string `json:"id"`
+					DisplayName string `json:"displayName"`
+				} `json:"owners"`
+			} `json:"value"`
+		}
+		if err := json.Unmarshal(spBody, &spResult); err == nil {
+			for _, sp := range spResult.Value {
+				createdAt, _ := time.Parse(time.RFC3339, sp.CreatedDateTime)
+				var ownerIDs []string
+				for _, o := range sp.Owners {
+					ownerIDs = append(ownerIDs, o.ID)
+				}
+				attrs := map[string]string{
+					"app_id":             sp.AppID,
+					"org_id":             sp.AppOwnerOrganizationID,
+					"app_owner_org_id":   sp.AppOwnerOrganizationID,
+				}
+				resources = append(resources, ConnectorResource{
+					ExternalID:   sp.ID,
+					ResourceType: string(ResourceTypeServicePrincipal),
+					Name:         sp.DisplayName,
+					Enabled:      sp.AccountEnabled,
+					OwnerIDs:     ownerIDs,
+					Attributes:   attrs,
+					CreatedAt:    createdAt,
+				})
+			}
+			log.Printf("[ENTRA] Listed %d service principals", len(spResult.Value))
+		}
+	}
+
+	// 3. Devices
+	devBody, err := c.graphGet(ctx, "/devices", url.Values{
+		"$select": {"id,deviceId,displayName,operatingSystem,operatingSystemVersion,isManaged,isCompliant,enrollmentType,approximateLastSignInDateTime,createdDateTime,trustType,profileType"},
+		"$top":    {"100"},
+	})
+	if err != nil {
+		log.Printf("[ENTRA] ListResources: devices query failed: %v (continuing)", err)
+	} else {
+		var devResult struct {
+			Value []struct {
+				ID                           string `json:"id"`
+				DeviceID                     string `json:"deviceId"`
+				DisplayName                  string `json:"displayName"`
+				OperatingSystem              string `json:"operatingSystem"`
+				OperatingSystemVersion       string `json:"operatingSystemVersion"`
+				IsManaged                    *bool  `json:"isManaged"`
+				IsCompliant                  *bool  `json:"isCompliant"`
+				EnrollmentType               string `json:"enrollmentType"`
+				ApproximateLastSignInDateTime string `json:"approximateLastSignInDateTime"`
+				CreatedDateTime              string `json:"createdDateTime"`
+				TrustType                    string `json:"trustType"`
+				ProfileType                  string `json:"profileType"`
+			} `json:"value"`
+		}
+		if err := json.Unmarshal(devBody, &devResult); err == nil {
+			for _, d := range devResult.Value {
+				createdAt, _ := time.Parse(time.RFC3339, d.CreatedDateTime)
+				enabled := true
+				if d.IsManaged != nil && !*d.IsManaged {
+					enabled = false
+				}
+				if d.IsCompliant != nil && !*d.IsCompliant {
+					enabled = false
+				}
+				attrs := map[string]string{
+					"device_id":        d.DeviceID,
+					"os":               d.OperatingSystem,
+					"os_version":       d.OperatingSystemVersion,
+					"is_managed":       fmt.Sprintf("%v", d.IsManaged != nil && *d.IsManaged),
+					"is_compliant":     fmt.Sprintf("%v", d.IsCompliant != nil && *d.IsCompliant),
+					"enrollment_type":  d.EnrollmentType,
+					"trust_type":       d.TrustType,
+					"profile_type":     d.ProfileType,
+				}
+				resources = append(resources, ConnectorResource{
+					ExternalID:   d.ID,
+					ResourceType: string(ResourceTypeDevice),
+					Name:         d.DisplayName,
+					Enabled:      enabled,
+					Attributes:   attrs,
+					CreatedAt:    createdAt,
+				})
+			}
+			log.Printf("[ENTRA] Listed %d devices", len(devResult.Value))
+		}
+	}
+
+	return resources, nil
+}
+
 // ─── Helpers ─────────────────────────────────────────────────
 
 func setIf(m *map[string]any, key, val string) {

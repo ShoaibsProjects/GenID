@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -1041,6 +1042,480 @@ func (s *IdentityService) GetConnectorHealth(w http.ResponseWriter, r *http.Requ
 	}
 
 	respondJSON(w, http.StatusOK, health)
+}
+
+// ─── Connector Groups ─────────────────────────────────────────
+
+func (s *IdentityService) GetConnectorGroups(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	rows, err := s.pgPool.Query(r.Context(), `
+		SELECT id, external_id, name, description, group_type, scope, member_ids, first_synced_at, last_synced_at
+		FROM connector_groups
+		WHERE connector_id = $1
+		ORDER BY name NULLS LAST
+	`, id)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query failed: %s", err.Error()))
+		return
+	}
+	defer rows.Close()
+
+	type GroupEntry struct {
+		ID          string   `json:"id"`
+		ExternalID  string   `json:"external_id"`
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		GroupType   string   `json:"group_type"`
+		Scope       string   `json:"scope"`
+		MemberIDs   []string `json:"member_ids"`
+		FirstSynced string   `json:"first_synced_at"`
+		LastSynced  string   `json:"last_synced_at"`
+	}
+
+	groups := []GroupEntry{}
+	for rows.Next() {
+		var e GroupEntry
+		var firstSynced, lastSynced *time.Time
+		if err := rows.Scan(&e.ID, &e.ExternalID, &e.Name, &e.Description, &e.GroupType, &e.Scope,
+			&e.MemberIDs, &firstSynced, &lastSynced); err != nil {
+			continue
+		}
+		if firstSynced != nil {
+			e.FirstSynced = firstSynced.Format(time.RFC3339)
+		}
+		if lastSynced != nil {
+			e.LastSynced = lastSynced.Format(time.RFC3339)
+		}
+		groups = append(groups, e)
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"connector_id": id,
+		"groups":       groups,
+		"total":        len(groups),
+	})
+}
+
+// ─── Connector Entitlements ───────────────────────────────────
+
+func (s *IdentityService) GetConnectorEntitlements(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	rows, err := s.pgPool.Query(r.Context(), `
+		SELECT identity_external_id, entitlement_type, source_id, source_name, source_type,
+		       app_id, app_name, is_active
+		FROM connector_entitlements
+		WHERE connector_id = $1
+		ORDER BY entitlement_type, source_name NULLS LAST
+	`, id)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query failed: %s", err.Error()))
+		return
+	}
+	defer rows.Close()
+
+	type EntitlementEntry struct {
+		IdentityExternalID string `json:"identity_external_id"`
+		Type               string `json:"entitlement_type"`
+		SourceID           string `json:"source_id"`
+		SourceName         string `json:"source_name"`
+		SourceType         string `json:"source_type"`
+		AppID              string `json:"app_id"`
+		AppName            string `json:"app_name"`
+		IsActive           bool   `json:"is_active"`
+	}
+
+	entitlements := []EntitlementEntry{}
+	for rows.Next() {
+		var e EntitlementEntry
+		if err := rows.Scan(&e.IdentityExternalID, &e.Type, &e.SourceID, &e.SourceName, &e.SourceType,
+			&e.AppID, &e.AppName, &e.IsActive); err != nil {
+			continue
+		}
+		entitlements = append(entitlements, e)
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"connector_id":  id,
+		"entitlements":  entitlements,
+		"total":         len(entitlements),
+	})
+}
+
+// ─── Connector Resources ─────────────────────────────────────
+
+func (s *IdentityService) GetConnectorResources(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	rows, err := s.pgPool.Query(r.Context(), `
+		SELECT id, external_id, resource_type, name, description, enabled, owner_ids, first_synced_at, last_synced_at
+		FROM connector_resources
+		WHERE connector_id = $1
+		ORDER BY resource_type, name NULLS LAST
+	`, id)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query failed: %s", err.Error()))
+		return
+	}
+	defer rows.Close()
+
+	type ResourceEntry struct {
+		ID          string   `json:"id"`
+		ExternalID  string   `json:"external_id"`
+		Type        string   `json:"resource_type"`
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Enabled     bool     `json:"enabled"`
+		OwnerIDs    []string `json:"owner_ids"`
+		FirstSynced string   `json:"first_synced_at"`
+		LastSynced  string   `json:"last_synced_at"`
+	}
+
+	resources := []ResourceEntry{}
+	for rows.Next() {
+		var e ResourceEntry
+		var firstSynced, lastSynced *time.Time
+		if err := rows.Scan(&e.ID, &e.ExternalID, &e.Type, &e.Name, &e.Description, &e.Enabled,
+			&e.OwnerIDs, &firstSynced, &lastSynced); err != nil {
+			continue
+		}
+		if firstSynced != nil {
+			e.FirstSynced = firstSynced.Format(time.RFC3339)
+		}
+		if lastSynced != nil {
+			e.LastSynced = lastSynced.Format(time.RFC3339)
+		}
+		resources = append(resources, e)
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"connector_id": id,
+		"resources":    resources,
+		"total":        len(resources),
+	})
+}
+
+// ─── Sync Handlers ─────────────────────────────────────────
+
+func (s *IdentityService) SyncConnectorGroups(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	groups, err := s.connMgr.SyncGroups(r.Context(), id)
+	if err != nil {
+		respondJSON(w, http.StatusOK, map[string]any{
+			"status": "sync_failed",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	created, updated, persistErr := s.persistSyncedGroups(r.Context(), id, groups)
+	if persistErr != nil {
+		s.auditLog.Append(audit.Entry{
+			Level: audit.LevelError, Service: "connector", Path: r.URL.Path,
+			Message: fmt.Sprintf("Group sync persistence error: %s", persistErr.Error()),
+			Tags:    []string{"connector", "group-sync", "error"},
+		})
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":        "groups_sync_completed",
+		"groups_created": created,
+		"groups_updated": updated,
+		"groups_total":   len(groups),
+		"connector_id":   id,
+	})
+}
+
+func (s *IdentityService) SyncConnectorEntitlements(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	entitlements, err := s.connMgr.SyncEntitlements(r.Context(), id)
+	if err != nil {
+		respondJSON(w, http.StatusOK, map[string]any{
+			"status": "sync_failed",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	if err := s.persistSyncedEntitlements(r.Context(), id, entitlements); err != nil {
+		s.auditLog.Append(audit.Entry{
+			Level: audit.LevelError, Service: "connector", Path: r.URL.Path,
+			Message: fmt.Sprintf("Entitlement sync persistence error: %s", err.Error()),
+			Tags:    []string{"connector", "entitlement-sync", "error"},
+		})
+		respondJSON(w, http.StatusOK, map[string]any{
+			"status":      "sync_completed_with_errors",
+			"connector_id": id,
+			"error":       err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":            "entitlements_sync_completed",
+		"entitlements_total": len(entitlements),
+		"connector_id":      id,
+	})
+}
+
+func (s *IdentityService) SyncConnectorResources(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	resources, err := s.connMgr.SyncResources(r.Context(), id)
+	if err != nil {
+		respondJSON(w, http.StatusOK, map[string]any{
+			"status": "sync_failed",
+			"error":  err.Error(),
+		})
+		return
+	}
+
+	if err := s.persistSyncedResources(r.Context(), id, resources); err != nil {
+		s.auditLog.Append(audit.Entry{
+			Level: audit.LevelError, Service: "connector", Path: r.URL.Path,
+			Message: fmt.Sprintf("Resource sync persistence error: %s", err.Error()),
+			Tags:    []string{"connector", "resource-sync", "error"},
+		})
+		respondJSON(w, http.StatusOK, map[string]any{
+			"status":      "sync_completed_with_errors",
+			"connector_id": id,
+			"error":       err.Error(),
+		})
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":          "resources_sync_completed",
+		"resources_total": len(resources),
+		"connector_id":    id,
+	})
+}
+
+// ─── Full Sync ────────────────────────────────────────────────
+
+func (s *IdentityService) FullSyncConnector(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	start := time.Now()
+
+	// 1. Sync users
+	usersResult, err := s.connMgr.SyncUsers(r.Context(), id)
+	if err != nil {
+		log.Printf("[SYNC] User sync error: %v", err)
+	}
+	usersCreated, usersUpdated := 0, 0
+	if usersResult != nil && len(usersResult.Users) > 0 {
+		usersCreated, usersUpdated, _ = s.persistSyncedUsers(r.Context(), id, usersResult.Users)
+	}
+
+	// 2. Sync groups
+	groups, err := s.connMgr.SyncGroups(r.Context(), id)
+	if err != nil {
+		log.Printf("[SYNC] Group sync error: %v", err)
+	}
+	groupsCreated, groupsUpdated := 0, 0
+	if len(groups) > 0 {
+		groupsCreated, groupsUpdated, _ = s.persistSyncedGroups(r.Context(), id, groups)
+	}
+
+	// 3. Sync entitlements
+	entitlements, err := s.connMgr.SyncEntitlements(r.Context(), id)
+	if err != nil {
+		log.Printf("[SYNC] Entitlement sync error: %v", err)
+	}
+	if len(entitlements) > 0 {
+		s.persistSyncedEntitlements(r.Context(), id, entitlements)
+	}
+
+	// 4. Sync resources
+	resources, err := s.connMgr.SyncResources(r.Context(), id)
+	if err != nil {
+		log.Printf("[SYNC] Resource sync error: %v", err)
+	}
+	if len(resources) > 0 {
+		s.persistSyncedResources(r.Context(), id, resources)
+	}
+
+	elapsed := time.Since(start)
+
+	s.auditLog.Append(audit.Entry{
+		Level:   audit.LevelInfo,
+		Service: "connector",
+		Method:  "POST",
+		Path:    r.URL.Path,
+		Message: fmt.Sprintf("Full sync complete for connector %s: %d users, %d groups, %d entitlements, %d resources in %s",
+			id, usersCreated+usersUpdated, groupsCreated+groupsUpdated, len(entitlements), len(resources), elapsed.Round(time.Millisecond)),
+		Tags: []string{"connector", "full-sync"},
+	})
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":             "full_sync_completed",
+		"connector_id":       id,
+		"users_created":      usersCreated,
+		"users_updated":      usersUpdated,
+		"groups_created":     groupsCreated,
+		"groups_updated":     groupsUpdated,
+		"entitlements_total": len(entitlements),
+		"resources_total":    len(resources),
+		"duration":           elapsed.Round(time.Millisecond).String(),
+	})
+}
+
+// ─── Persistence: Groups ───────────────────────────────────
+
+func (s *IdentityService) persistSyncedGroups(ctx context.Context, connectorID string, groups []connector.ConnectorGroup) (int, int, error) {
+	created, updated := 0, 0
+	cfg, err := s.connMgr.GetConfig(connectorID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("get connector config: %w", err)
+	}
+	tenantID := cfg.TenantID
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	for _, group := range groups {
+		members := group.Members
+		if members == nil {
+			members = []string{}
+		}
+
+		raw, _ := json.Marshal(group.Attributes)
+		if raw == nil {
+			raw = []byte("{}")
+		}
+
+		tag, err := s.pgPool.Exec(ctx, `
+			INSERT INTO connector_groups
+				(tenant_id, connector_id, external_id, name, description, group_type, scope, member_ids, raw_attributes, last_synced_at)
+			VALUES
+				($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+			ON CONFLICT (connector_id, external_id) DO UPDATE SET
+				name            = EXCLUDED.name,
+				description     = EXCLUDED.description,
+				group_type      = EXCLUDED.group_type,
+				scope           = EXCLUDED.scope,
+				member_ids      = EXCLUDED.member_ids,
+				raw_attributes  = EXCLUDED.raw_attributes,
+				last_synced_at  = NOW()
+		`, tenantID, connectorID, group.ExternalID, group.Name, group.Description,
+			group.Type, group.Scope, members, raw)
+
+		if err != nil {
+			return created, updated, fmt.Errorf("upsert group %s: %w", group.ExternalID, err)
+		}
+		if tag.Insert() {
+			created++
+		} else {
+			updated++
+		}
+	}
+
+	return created, updated, nil
+}
+
+// ─── Persistence: Entitlements ───────────────────────────
+
+func (s *IdentityService) persistSyncedEntitlements(ctx context.Context, connectorID string, entitlements []connector.ConnectorEntitlement) error {
+	cfg, err := s.connMgr.GetConfig(connectorID)
+	if err != nil {
+		return fmt.Errorf("get connector config: %w", err)
+	}
+	tenantID := cfg.TenantID
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	// Delete existing entitlements for this connector before re-inserting
+	_, err = s.pgPool.Exec(ctx, `DELETE FROM connector_entitlements WHERE connector_id = $1`, connectorID)
+	if err != nil {
+		return fmt.Errorf("delete existing entitlements: %w", err)
+	}
+
+	for _, e := range entitlements {
+		raw, _ := json.Marshal(e.RawAttributes)
+		if raw == nil {
+			raw = []byte("{}")
+		}
+
+		_, err := s.pgPool.Exec(ctx, `
+			INSERT INTO connector_entitlements
+				(tenant_id, connector_id, identity_external_id, entitlement_type, source_id,
+				 source_name, source_type, app_id, app_name, assigned_at, is_active, raw_attributes, last_synced_at)
+			VALUES
+				($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+		`, tenantID, connectorID, e.IdentityExternalID, e.EntitlementType,
+			e.SourceID, e.SourceName, e.SourceType,
+			e.AppID, e.AppName, e.AssignedAt, e.IsActive, raw)
+
+		if err != nil {
+			log.Printf("[PERSIST] Entitlement insert error: %v", err)
+		}
+	}
+
+	return nil
+}
+
+// ─── Persistence: Resources ─────────────────────────────
+
+func (s *IdentityService) persistSyncedResources(ctx context.Context, connectorID string, resources []connector.ConnectorResource) error {
+	cfg, err := s.connMgr.GetConfig(connectorID)
+	if err != nil {
+		return fmt.Errorf("get connector config: %w", err)
+	}
+	tenantID := cfg.TenantID
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	// Delete existing resources before re-inserting
+	_, err = s.pgPool.Exec(ctx, `DELETE FROM connector_resources WHERE connector_id = $1`, connectorID)
+	if err != nil {
+		return fmt.Errorf("delete existing resources: %w", err)
+	}
+
+	for _, res := range resources {
+		raw, _ := json.Marshal(res.Attributes)
+		if raw == nil {
+			raw = []byte("{}")
+		}
+		owners := res.OwnerIDs
+		if owners == nil {
+			owners = []string{}
+		}
+
+		_, err := s.pgPool.Exec(ctx, `
+			INSERT INTO connector_resources
+				(tenant_id, connector_id, external_id, resource_type, name, description, enabled, owner_ids, raw_attributes, last_synced_at)
+			VALUES
+				($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+			ON CONFLICT (connector_id, external_id) DO UPDATE SET
+				name            = EXCLUDED.name,
+				description     = EXCLUDED.description,
+				resource_type   = EXCLUDED.resource_type,
+				enabled         = EXCLUDED.enabled,
+				owner_ids       = EXCLUDED.owner_ids,
+				raw_attributes  = EXCLUDED.raw_attributes,
+				last_synced_at  = NOW()
+		`, tenantID, connectorID, res.ExternalID, res.ResourceType,
+			res.Name, res.Description, res.Enabled, owners, raw)
+
+		if err != nil {
+			log.Printf("[PERSIST] Resource insert error: %v", err)
+		}
+	}
+
+	return nil
 }
 
 func (s *IdentityService) TestConnectorConnection(w http.ResponseWriter, r *http.Request) {

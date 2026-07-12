@@ -186,6 +186,24 @@ export function deleteConnector(id: string): Promise<any> {
   return apiRequest<any>(`/api/v1/connectors/${id}`, { method: "DELETE" })
 }
 
+// ─── Connector: Groups / Entitlements / Resources / Full Sync ──
+
+export function fetchConnectorGroups(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/connectors/${id}/groups`)
+}
+
+export function fetchConnectorEntitlements(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/connectors/${id}/entitlements`)
+}
+
+export function fetchConnectorResources(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/connectors/${id}/resources`)
+}
+
+export function fullSyncConnector(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/connectors/${id}/full-sync`, { method: "POST" })
+}
+
 // ─── IAM Lifecycle Management ────────────────────────────
 
 export function executeLCM(req: {

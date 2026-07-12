@@ -266,6 +266,13 @@ func main() {
 	api.HandleFunc("/connectors/{id}/identities", svc.GetConnectorIdentities).Methods("GET")
 	api.HandleFunc("/connectors/{id}/schema", svc.GetConnectorSchema).Methods("GET")
 	api.HandleFunc("/connectors/{id}/health", svc.GetConnectorHealth).Methods("GET")
+	api.HandleFunc("/connectors/{id}/groups", svc.GetConnectorGroups).Methods("GET")
+	api.HandleFunc("/connectors/{id}/entitlements", svc.GetConnectorEntitlements).Methods("GET")
+	api.HandleFunc("/connectors/{id}/resources", svc.GetConnectorResources).Methods("GET")
+	api.HandleFunc("/connectors/{id}/full-sync", svc.FullSyncConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/sync-groups", svc.SyncConnectorGroups).Methods("POST")
+	api.HandleFunc("/connectors/{id}/sync-entitlements", svc.SyncConnectorEntitlements).Methods("POST")
+	api.HandleFunc("/connectors/{id}/sync-resources", svc.SyncConnectorResources).Methods("POST")
 
 	// ─── IAM Lifecycle Management (LCM) ────────────
 	api.HandleFunc("/lcm", svc.ExecuteLCM).Methods("POST")

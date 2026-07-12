@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -128,7 +129,7 @@ func (m *Manager) supportsSchema(conn Connector) bool {
 
 func (m *Manager) Register(ctx context.Context, config ConnectorConfig) (string, error) {
 	if config.ID == "" {
-		config.ID = fmt.Sprintf("conn-%d", time.Now().UnixNano())
+		config.ID = uuid.New().String()
 	}
 	if config.Status == "" {
 		config.Status = ConnectorStatusDisconnected
@@ -419,6 +420,157 @@ func (m *Manager) SyncUsersDelta(ctx context.Context, id string) (*SyncResult, e
 	m.results[id] = result
 
 	log.Printf("[CONNECTOR] Delta sync complete for %s: %d changes in %s", config.Name, len(users), elapsed.Round(time.Millisecond))
+	return result, nil
+}
+
+// ─── Group Sync ───────────────────────────────────────────────
+
+func (m *Manager) SyncGroups(ctx context.Context, id string) ([]ConnectorGroup, error) {
+	conn, err := m.GetConnector(id)
+	if err != nil {
+		return nil, err
+	}
+
+	m.mu.RLock()
+	config := m.configs[id]
+	m.mu.RUnlock()
+
+	start := time.Now()
+	groups, err := conn.ListGroups(ctx)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		config.LastError = fmt.Sprintf("group sync: %v", err)
+		config.Status = ConnectorStatusError
+		m.updateConfig(config)
+		m.updateHealthWithDuration(id, ConnectorStatusError, err.Error(), elapsed)
+		return nil, err
+	}
+
+	config.Status = ConnectorStatusConnected
+	config.LastError = ""
+	m.updateConfig(config)
+	m.updateHealthWithDuration(id, ConnectorStatusConnected, "", elapsed)
+
+	log.Printf("[CONNECTOR] Groups sync for %s: %d groups in %s", config.Name, len(groups), elapsed.Round(time.Millisecond))
+	return groups, nil
+}
+
+// ─── Entitlement Sync ────────────────────────────────────
+
+func (m *Manager) SyncEntitlements(ctx context.Context, id string) ([]ConnectorEntitlement, error) {
+	conn, err := m.GetConnector(id)
+	if err != nil {
+		return nil, err
+	}
+
+	m.mu.RLock()
+	config := m.configs[id]
+	m.mu.RUnlock()
+
+	start := time.Now()
+	entitlements, err := conn.ListEntitlements(ctx)
+	elapsed := time.Since(start)
+
+	if err == ErrNotSupported {
+		log.Printf("[CONNECTOR] %s: entitlements not supported", config.Name)
+		return nil, nil
+	}
+	if err != nil {
+		config.LastError = fmt.Sprintf("entitlement sync: %v", err)
+		config.Status = ConnectorStatusError
+		m.updateConfig(config)
+		m.updateHealthWithDuration(id, ConnectorStatusError, err.Error(), elapsed)
+		return nil, err
+	}
+
+	config.Status = ConnectorStatusConnected
+	config.LastError = ""
+	m.updateConfig(config)
+	m.updateHealthWithDuration(id, ConnectorStatusConnected, "", elapsed)
+
+	log.Printf("[CONNECTOR] Entitlement sync for %s: %d entitlements in %s", config.Name, len(entitlements), elapsed.Round(time.Millisecond))
+	return entitlements, nil
+}
+
+// ─── Resource Sync ───────────────────────────────────────
+
+func (m *Manager) SyncResources(ctx context.Context, id string) ([]ConnectorResource, error) {
+	conn, err := m.GetConnector(id)
+	if err != nil {
+		return nil, err
+	}
+
+	m.mu.RLock()
+	config := m.configs[id]
+	m.mu.RUnlock()
+
+	start := time.Now()
+	resources, err := conn.ListResources(ctx)
+	elapsed := time.Since(start)
+
+	if err == ErrNotSupported {
+		log.Printf("[CONNECTOR] %s: resources not supported", config.Name)
+		return nil, nil
+	}
+	if err != nil {
+		config.LastError = fmt.Sprintf("resource sync: %v", err)
+		config.Status = ConnectorStatusError
+		m.updateConfig(config)
+		m.updateHealthWithDuration(id, ConnectorStatusError, err.Error(), elapsed)
+		return nil, err
+	}
+
+	config.Status = ConnectorStatusConnected
+	config.LastError = ""
+	m.updateConfig(config)
+	m.updateHealthWithDuration(id, ConnectorStatusConnected, "", elapsed)
+
+	log.Printf("[CONNECTOR] Resource sync for %s: %d resources in %s", config.Name, len(resources), elapsed.Round(time.Millisecond))
+	return resources, nil
+}
+
+// FullSync performs a complete sync: users, groups, entitlements, and resources.
+func (m *Manager) FullSync(ctx context.Context, id string) (*FullSyncResult, error) {
+	result := &FullSyncResult{ConnectorID: id}
+
+	// 1. Users
+	usersResult, err := m.SyncUsers(ctx, id)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("users: %v", err))
+	} else if usersResult != nil {
+		result.Users = usersResult.Users
+		result.UsersCreated = usersResult.UsersCreated
+		result.UsersUpdated = usersResult.UsersUpdated
+		result.UsersTotal = usersResult.UsersTotal
+	}
+
+	// 2. Groups
+	groups, err := m.SyncGroups(ctx, id)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("groups: %v", err))
+	} else {
+		result.Groups = groups
+	}
+
+	// 3. Entitlements
+	entitlements, err := m.SyncEntitlements(ctx, id)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("entitlements: %v", err))
+	} else {
+		result.Entitlements = entitlements
+	}
+
+	// 4. Resources
+	resources, err := m.SyncResources(ctx, id)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("resources: %v", err))
+	} else {
+		result.Resources = resources
+	}
+
+	result.Success = len(result.Errors) == 0
+	result.CompletedAt = time.Now()
 	return result, nil
 }
 
