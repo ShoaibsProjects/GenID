@@ -68,6 +68,9 @@ wrangler.toml
 **/.vault-token
 **/.vault-password
 
+# Generated PNG (SVG is the source)
+media/*.png
+
 # Temp
 **/tmp
 **/temp

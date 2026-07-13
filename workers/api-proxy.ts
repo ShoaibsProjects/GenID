@@ -3,7 +3,8 @@
 // Provides CORS, caching, and DDoS protection
 
 export interface Env {
-  API_ORIGIN: string;  // e.g. https://api.observeid.io
+  API_ORIGIN: string;       // e.g. https://api.observeid.io (backend origin)
+  FRONTEND_ORIGIN?: string; // e.g. https://app.observeid.io (for CORS)
 }
 
 export default {
@@ -12,8 +13,9 @@ export default {
     const origin = env.API_ORIGIN || "https://api.observeid.io";
 
     // ─── CORS Headers ─────────────────────────────────────
+    const frontendOrigin = env.FRONTEND_ORIGIN || "https://app.observeid.io";
     const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": frontendOrigin,
       "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Correlation-ID",
       "Access-Control-Max-Age": "86400",

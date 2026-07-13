@@ -40,6 +40,23 @@ import (
 )
 
 func main() {
+	// ─── Load .env if present ────────────────────────────
+	if data, err := os.ReadFile(".env"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			if parts := strings.SplitN(line, "=", 2); len(parts) == 2 {
+				key := strings.TrimSpace(parts[0])
+				val := strings.TrimSpace(parts[1])
+				if os.Getenv(key) == "" {
+					os.Setenv(key, val)
+				}
+			}
+		}
+	}
+
 	// ─── Initialize Structured Logger ─────────────────────
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	log.Logger = zerolog.New(os.Stdout).
@@ -139,11 +156,12 @@ func main() {
 
 	// ─── Initialize Security Middleware ────────────────────
 	rateLimiter := middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200
-	apiKeyAuth := middleware.NewAPIKeyAuth(loadAPIKeys(), "/health", "/ready", "/metrics", "/graphql", "/")
+	apiKeyAuth := middleware.NewAPIKeyAuth(loadAPIKeys(), "/health", "/ready", "/")
 	requestValidation := middleware.NewRequestValidation()
 
 	// ─── Start HTTP/gRPC Server ───────────────────────────
 	r := mux.NewRouter()
+	r.Use(securityHeadersMiddleware)
 	r.Use(corsMiddleware)
 	r.Use(otelhttp.NewMiddleware("observeid-api"))
 	r.Use(rateLimiter.Middleware)
@@ -394,22 +412,39 @@ func main() {
 	log.Info().Msg("Server stopped")
 }
 
+// ─── Security Headers Middleware ────────────────────────────
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "0")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // ─── CORS Middleware ───────────────────────────────────────
 func corsMiddleware(next http.Handler) http.Handler {
-	allowedOrigin := getEnv("CORS_ORIGIN", "*")
+	allowedOrigin := getEnv("CORS_ORIGIN", "")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if allowedOrigin != "" {
 		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Requested-With")
-		w.Header().Set("Access-Control-Max-Age", "86400")
-		if allowedOrigin != "*" {
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-		}
+	}
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Requested-With")
+	w.Header().Set("Access-Control-Max-Age", "86400")
+	if allowedOrigin != "" && allowedOrigin != "*" {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+	}
 
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 
 		next.ServeHTTP(w, r)
 	})
@@ -430,7 +465,7 @@ func loadConfig() *Config {
 		DatabaseURL:   getEnv("DATABASE_URL", "postgresql://observeid:observeid@localhost:5432/observeid?sslmode=disable"),
 		Neo4jURI:      getEnv("NEO4J_URI", "bolt://localhost:7687"),
 		Neo4jUser:     getEnv("NEO4J_USER", "neo4j"),
-		Neo4jPassword: getEnv("NEO4J_PASSWORD", "observeid123"),
+		Neo4jPassword: getEnv("NEO4J_PASSWORD", ""),
 		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
 		TemporalHost:  getEnv("TEMPORAL_HOST", "localhost:7233"),
 		QdrantAddr:    getEnv("QDRANT_ADDR", "localhost:6333"),

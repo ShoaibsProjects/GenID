@@ -191,12 +191,10 @@ func (v *Vault) decrypt(ciphertext []byte) ([]byte, error) {
 
 func deriveKey(masterKey string) []byte {
 	if masterKey == "" {
-		log.Println("[VAULT] ⚠ WARNING: VAULT_MASTER_KEY not set — using dev-only fallback key. Secrets are NOT secure in production!")
-		log.Println("[VAULT] ⚠ Set VAULT_MASTER_KEY to a 32+ character random string.")
-		masterKey = "observeid-default-dev-key-change-in-production-!!"
+		log.Fatal("[VAULT] VAULT_MASTER_KEY is not set. Set a 64-char hex key in .env or environment. Exiting.")
 	}
 	if len(masterKey) < 32 {
-		log.Printf("[VAULT] ⚠ WARNING: VAULT_MASTER_KEY is only %d characters. Recommended: 32+ characters.", len(masterKey))
+		log.Fatalf("[VAULT] VAULT_MASTER_KEY is too short (%d chars). Minimum 32 characters required. Exiting.", len(masterKey))
 	}
 	h := sha256.Sum256([]byte(masterKey))
 	return h[:]
