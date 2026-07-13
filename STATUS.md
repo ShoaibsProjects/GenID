@@ -7,34 +7,9 @@
 
 ##  Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Cloudflare Pages                       │
-│  (Frontend: observeid-frontend.pages.dev)                │
-└──────────────────────┬──────────────────────────────────┘
-                       │ API calls (HTTPS)
-┌──────────────────────▼──────────────────────────────────┐
-│              Cloudflare Tunnel (Quick Tunnel)            │
-│         https://[random].trycloudflare.com               │
-└──────────────────────┬──────────────────────────────────┘
-                       │ localhost:8080
-┌──────────────────────▼──────────────────────────────────┐
-│              Go Backend (identity-service)               │
-│  ┌─────────────┬──────────────┬──────────────┬────────┐ │
-│  │ HTTP Router │  Temporal    │  Connector   │ Vault  │ │
-│  │ (gorilla)   │  Workflows   │  Framework   │ (AES)  │ │
-│  └──────┬──────┴──────┬───────┴──────┬───────┴───┬────┘ │
-└─────────┼─────────────┼──────────────┼───────────┼───────┘
-          │             │              │           │
-     ┌────▼──┐    ┌─────▼─────┐  ┌────▼────┐ ┌───▼────┐
-     │Postgres│    │   Neo4j   │  │  Redis  │ │ Kafka  │
-     │  :5432 │    │  :7687    │  │ :6379   │ │ :9092  │
-     └───────┘    └──────────┘  └─────────┘ └────────┘
-          ┌──────────┐   ┌─────────┐   ┌────────┐
-          │ Temporal │   │ Qdrant  │   │Grafana │
-          │  :7233   │   │ :6333   │   │ :3000  │
-          └──────────┘   └─────────┘   └────────┘
-```
+![Architecture Diagram](media/architecture.svg)
+
+**Deployment flow:** Cloudflare Pages (Frontend) → HTTPS → Cloudflare Tunnel → `localhost:8080` → Go Backend (HTTP Router, Temporal Workflows, Connector Framework, Vault) → PostgreSQL 16, Neo4j 5, Redis 7, Kafka 7.6, Temporal 1.25, Qdrant 1.10, Grafana 11.1, OpenTelemetry Collector.
 
 ##  What's Running
 

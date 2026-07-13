@@ -44,36 +44,12 @@ ObserveID is a next-generation IAM/IGA platform architected for the 2026 securit
 
 ## ⎯ Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          OBSERVEID PLATFORM                           │
-├──────────────────────────────────────────────────────────────────────┤
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ ┌────────┐ │
-│  │ Identity │  │  Access  │  │ Policy   │  │AI Copilot│ │ CAEP   │ │
-│  │ Service  │  │ Service  │  │ Engine   │  │(GraphRAG)│ │ Stream │ │
-│  │ (SCIM)   │  │(RBAC/    │  │ (Cedar)  │  │          │ │        │ │
-│  │          │  │ ABAC)    │  │          │  │          │ │        │ │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘ └───┬────┘ │
-│       │             │             │             │           │       │
-│  ┌────┴─────────────┴─────────────┴─────────────┴───────────┴────┐ │
-│  │                  Event Bus · Kafka/Redpanda                     │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│       │             │             │             │           │       │
-│  ┌────┴─────────────┴─────────────┴─────────────┴───────────┴────┐ │
-│  │              Temporal Workflow Engine (Durable Exec)            │ │
-│  │  Namespaces: offboarding · provisioning · reconciliation ·     │ │
-│  │              analysis · agent_monitoring                       │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│       │             │             │             │           │       │
-│  ┌────┴─────────────┴─────────────┴─────────────┴───────────┴────┐ │
-│  │         Data: PostgreSQL · Neo4j · Qdrant · Redis · QLDB       │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│       │             │             │             │           │       │
-│  ┌────┴─────────────┴─────────────┴─────────────┴───────────┴────┐ │
-│  │       Security: SPIFFE/SPIRE · FIDO2 · PQC · mTLS · Vault     │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────┘
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="media/architecture.svg">
+  <img alt="ObserveID Architecture Diagram" src="media/architecture.svg" width="100%">
+</picture>
+
+*Six-layer architecture: Presentation (Cloudflare + Next.js) → API Gateway (Go) → Application Services (Identity, Access, Policy, Connectors, Copilot, CAEP, Vault) → Workflow & Events (Temporal + Kafka) → Data Layer (PostgreSQL, Neo4j, Redis, Qdrant) → Security & Observability (SPIFFE, Cedar, OTel, Grafana, Prometheus). Deployment: Docker Compose (dev) / Kubernetes EKS (prod) / Cloudflare Edge.*
 
 ## ⎯ Key Features
 
