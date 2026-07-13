@@ -1,0 +1,198 @@
+scalar DateTime
+scalar JSON
+
+enum IdentityType {
+    HUMAN
+    SERVICE_ACCOUNT
+    AI_AGENT
+    ROBOT
+    IOT_DEVICE
+    RPA_BOT
+    API_KEY
+}
+
+enum IdentityStatus {
+    ACTIVE
+    INACTIVE
+    SUSPENDED
+    TERMINATED
+    REVOKED
+    PENDING_REVIEW
+}
+
+enum ConnectorStatus {
+    connected
+    disconnected
+    error
+    syncing
+    full_sync_with_errors
+}
+
+enum ConnectorType {
+    entra_id
+    ldap
+    active_directory
+    scim
+    okta
+    aws_iam
+    gcp_iam
+    generic
+}
+
+type Identity {
+    id: ID!
+    tenantId: ID!
+    type: IdentityType!
+    status: IdentityStatus!
+    email: String!
+    displayName: String!
+    department: String
+    employeeId: String
+    managerId: ID
+    source: String!
+    riskScore: Float!
+    riskFactors: [String!]!
+    assuranceLevel: String!
+    attributes: JSON!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+type NonHumanIdentity {
+    id: ID!
+    tenantId: ID!
+    name: String!
+    type: IdentityType!
+    status: IdentityStatus!
+    agentCardId: String
+    protocols: [String!]!
+    ownerId: ID
+    teamId: String
+    isGoverned: Boolean!
+    riskScore: Float!
+    expiresAt: DateTime
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+type Connector {
+    id: ID!
+    tenantId: ID!
+    name: String!
+    connectorType: ConnectorType!
+    status: ConnectorStatus!
+    lastSyncAt: DateTime
+    lastError: String
+    createdAt: DateTime!
+    updatedAt: DateTime!
+}
+
+type ConnectorUser {
+    externalId: String!
+    username: String
+    email: String
+    displayName: String
+    department: String
+    enabled: Boolean!
+}
+
+type ConnectorGroup {
+    externalId: String!
+    name: String!
+    description: String
+    groupType: String
+}
+
+type ConnectorHealth {
+    connectorId: ID!
+    connectorName: String!
+    status: String!
+    deltaSupported: Boolean!
+    supportsSchema: Boolean!
+}
+
+type AuditEntry {
+    id: ID!
+    timestamp: DateTime!
+    level: String!
+    service: String!
+    method: String
+    path: String
+    status: Int
+    latency: String
+    message: String!
+    sourceIp: String
+    tags: [String!]
+}
+
+type HealthStatus {
+    status: String!
+    service: String!
+    version: String!
+}
+
+type ReadinessResult {
+    status: String!
+    checks: ReadinessChecks!
+}
+
+type ReadinessChecks {
+    redis: String!
+    postgres: String!
+    neo4j: String!
+}
+
+input CreateIdentityInput {
+    type: IdentityType!
+    email: String!
+    displayName: String!
+    department: String
+    employeeId: String
+    source: String
+    attributes: JSON
+}
+
+input UpdateIdentityInput {
+    displayName: String
+    department: String
+    email: String
+    status: IdentityStatus
+    attributes: JSON
+}
+
+input CreateConnectorInput {
+    name: String!
+    connectorType: ConnectorType!
+    config: JSON!
+}
+
+input SyncConnectorInput {
+    connectorId: ID!
+}
+
+type Query {
+    identities(limit: Int, offset: Int): [Identity!]!
+    identity(id: ID!): Identity
+    agents(limit: Int, offset: Int): [NonHumanIdentity!]!
+    agent(id: ID!): NonHumanIdentity
+    connectors: [Connector!]!
+    connector(id: ID!): Connector
+    connectorUsers(connectorId: ID!, limit: Int, offset: Int): [ConnectorUser!]!
+    connectorGroups(connectorId: ID!): [ConnectorGroup!]!
+    connectorHealth(connectorId: ID!): ConnectorHealth
+    auditLogs(limit: Int, offset: Int, level: String, path: String): [AuditEntry!]!
+    health: HealthStatus!
+    ready: ReadinessResult!
+}
+
+type Mutation {
+    createIdentity(input: CreateIdentityInput!): Identity!
+    updateIdentity(id: ID!, input: UpdateIdentityInput!): Identity!
+    deleteIdentity(id: ID!): Boolean!
+    createConnector(input: CreateConnectorInput!): Connector!
+    deleteConnector(id: ID!): Boolean!
+    connectConnector(id: ID!): Connector!
+    disconnectConnector(id: ID!): Connector!
+    syncConnector(id: ID!): Connector!
+    syncConnectorDelta(id: ID!): Connector!
+}

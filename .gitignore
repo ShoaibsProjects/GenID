@@ -24,6 +24,7 @@
 **/*.out
 **/go.work.sum
 **/vendor
+**/bin
 
 # Generated
 **/pkg/proto

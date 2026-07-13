@@ -59,6 +59,11 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 
 func (s *IdentityService) AuditStore() *audit.Store { return s.auditLog }
 func (s *IdentityService) SaveVault() error         { return s.vault.Save() }
+func (s *IdentityService) ConnectorManager() *connector.Manager { return s.connMgr }
+func (s *IdentityService) Pool() *pgxpool.Pool                 { return s.pgPool }
+func (s *IdentityService) Neo4j() neo4j.DriverWithContext      { return s.neo4j }
+func (s *IdentityService) Redis() *redis.Client                { return s.redis }
+func (s *IdentityService) Vault() *vault.Vault                { return s.vault }
 func (s *IdentityService) LoadConnectors(ctx context.Context) error {
 	configs, err := s.connMgr.LoadAll(ctx)
 	if err != nil {

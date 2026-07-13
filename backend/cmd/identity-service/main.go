@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/gorilla/mux"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/redis/go-redis/v9"
@@ -30,6 +32,8 @@ import (
 
 	"github.com/observeid/identity-platform/internal/activities"
 	"github.com/observeid/identity-platform/internal/audit"
+	"github.com/observeid/identity-platform/internal/graphql"
+	"github.com/observeid/identity-platform/internal/middleware"
 	"github.com/observeid/identity-platform/internal/service"
 	"github.com/observeid/identity-platform/internal/workflow"
 	"github.com/observeid/identity-platform/pkg/telemetry"
@@ -121,6 +125,8 @@ func main() {
 	w.RegisterWorkflow(workflow.JustInTimeAccessWorkflow)
 	w.RegisterWorkflow(workflow.AgentAnomalyDetectionWorkflow)
 	w.RegisterWorkflow(workflow.DetectSoDViolationsWorkflow)
+	w.RegisterWorkflow(workflow.CascadeRevokeWorkflow)
+	w.RegisterWorkflow(workflow.RevokeAccessChildWorkflow)
 
 	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient)
 	w.RegisterActivity(act)
@@ -131,10 +137,18 @@ func main() {
 	defer w.Stop()
 	log.Info().Msg("Temporal worker started")
 
+	// ─── Initialize Security Middleware ────────────────────
+	rateLimiter := middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200
+	apiKeyAuth := middleware.NewAPIKeyAuth(loadAPIKeys(), "/health", "/ready", "/metrics", "/graphql", "/")
+	requestValidation := middleware.NewRequestValidation()
+
 	// ─── Start HTTP/gRPC Server ───────────────────────────
 	r := mux.NewRouter()
 	r.Use(corsMiddleware)
 	r.Use(otelhttp.NewMiddleware("observeid-api"))
+	r.Use(rateLimiter.Middleware)
+	r.Use(requestValidation.Middleware)
+	r.Use(apiKeyAuth.Middleware)
 	r.Use(audit.LoggingMiddleware(auditLogStore))
 
 	// Serve static frontend from the frontend/out directory
@@ -240,6 +254,14 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{"status": "ready", "checks": checks})
 	}).Methods("GET")
 
+	// GraphQL API
+	gqlSrv := handler.NewDefaultServer(
+		graphql.NewExecutableSchema(graphql.Config{
+			Resolvers: &graphql.Resolver{Svc: svc},
+		}),
+	)
+	r.Handle("/graphql", gqlSrv).Methods("POST")
+
 	// SCIM endpoints
 	scim := r.PathPrefix("/scim/v2").Subrouter()
 	scim.HandleFunc("/Users", svc.ScimListUsers).Methods("GET")
@@ -331,11 +353,13 @@ func main() {
 	r.Handle("/metrics", telemetry.MetricsHandler()).Methods("GET")
 
 	srv := &http.Server{
-		Addr:         ":8080",
-		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              ":8080",
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    262144, // 256 KB
 	}
 
 	// Graceful Shutdown
@@ -372,11 +396,15 @@ func main() {
 
 // ─── CORS Middleware ───────────────────────────────────────
 func corsMiddleware(next http.Handler) http.Handler {
+	allowedOrigin := getEnv("CORS_ORIGIN", "*")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Requested-With")
 		w.Header().Set("Access-Control-Max-Age", "86400")
+		if allowedOrigin != "*" {
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -414,6 +442,21 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func loadAPIKeys() map[string]string {
+	keys := make(map[string]string)
+	val := os.Getenv("API_KEYS")
+	if val == "" {
+		return keys
+	}
+	for _, pair := range strings.Split(val, ",") {
+		pair = strings.TrimSpace(pair)
+		if parts := strings.SplitN(pair, ":", 2); len(parts) == 2 {
+			keys[strings.TrimSpace(parts[1])] = strings.TrimSpace(parts[0])
+		}
+	}
+	return keys
 }
 
 func initTelemetry(cfg *Config) func() {

@@ -301,3 +301,418 @@ export function deleteSecret(id: string): Promise<any> {
 export function fetchHealth(): Promise<any> {
   return apiRequest<any>("/health")
 }
+
+// ─── GraphQL Client ─────────────────────────────────────────
+// Provides GraphQL queries and mutations alongside the REST API.
+// All requests go to POST /graphql on the same base URL.
+
+const GQL_ENDPOINT = "/graphql"
+
+interface GQLResponse<T> {
+  data?: T
+  errors?: Array<{ message: string; locations?: any[]; path?: string[] }>
+}
+
+async function gqlRequest<T>(
+  query: string,
+  variables?: Record<string, any>,
+): Promise<T> {
+  const base = getApiBase()
+  const res = await fetch(`${base}${GQL_ENDPOINT}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables }),
+  })
+
+  const json: GQLResponse<T> = await res.json()
+
+  if (json.errors && json.errors.length > 0) {
+    throw new Error(`GraphQL: ${json.errors.map((e) => e.message).join(", ")}`)
+  }
+
+  if (!json.data) {
+    throw new Error("GraphQL: empty response")
+  }
+
+  return json.data
+}
+
+// ─── GraphQL Types ──────────────────────────────────────────
+
+export interface GQLIdentity {
+  id: string
+  tenantId: string
+  type: string
+  status: string
+  email: string
+  displayName: string
+  department?: string | null
+  employeeId?: string | null
+  managerId?: string | null
+  source: string
+  riskScore: number
+  riskFactors: string[]
+  assuranceLevel: string
+  attributes: any
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GQLNonHumanIdentity {
+  id: string
+  tenantId: string
+  name: string
+  type: string
+  status: string
+  agentCardId?: string | null
+  protocols: string[]
+  ownerId?: string | null
+  teamId?: string | null
+  isGoverned: boolean
+  riskScore: number
+  expiresAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GQLConnector {
+  id: string
+  tenantId: string
+  name: string
+  connectorType: string
+  status: string
+  lastSyncAt?: string | null
+  lastError?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GQLConnectorUser {
+  externalId: string
+  username?: string | null
+  email?: string | null
+  displayName?: string | null
+  department?: string | null
+  enabled: boolean
+}
+
+export interface GQLConnectorGroup {
+  externalId: string
+  name: string
+  description?: string | null
+  groupType?: string | null
+}
+
+export interface GQLConnectorHealth {
+  connectorId: string
+  connectorName: string
+  status: string
+  deltaSupported: boolean
+  supportsSchema: boolean
+}
+
+export interface GQLAuditEntry {
+  id: string
+  timestamp: string
+  level: string
+  service: string
+  method?: string | null
+  path?: string | null
+  status?: number | null
+  latency?: string | null
+  message: string
+  sourceIp?: string | null
+  tags?: string[]
+}
+
+export interface GQLHealthStatus {
+  status: string
+  service: string
+  version: string
+}
+
+export interface GQLReadinessResult {
+  status: string
+  checks: { redis: string; postgres: string; neo4j: string }
+}
+
+// ─── Identity Queries ─────────────────────────────────────
+
+const LIST_IDENTITIES_QUERY = `
+  query ListIdentities($limit: Int, $offset: Int) {
+    identities(limit: $limit, offset: $offset) {
+      id tenantId type status email displayName department employeeId
+      managerId source riskScore riskFactors assuranceLevel
+      attributes createdAt updatedAt
+    }
+  }
+`
+
+const GET_IDENTITY_QUERY = `
+  query GetIdentity($id: ID!) {
+    identity(id: $id) {
+      id tenantId type status email displayName department employeeId
+      managerId source riskScore riskFactors assuranceLevel
+      attributes createdAt updatedAt
+    }
+  }
+`
+
+export function gqlFetchIdentities(limit?: number, offset?: number): Promise<{ identities: GQLIdentity[] }> {
+  return gqlRequest(LIST_IDENTITIES_QUERY, { limit, offset })
+}
+
+export function gqlFetchIdentity(id: string): Promise<{ identity: GQLIdentity | null }> {
+  return gqlRequest(GET_IDENTITY_QUERY, { id })
+}
+
+// ─── Agent Queries ───────────────────────────────────────
+
+const LIST_AGENTS_QUERY = `
+  query ListAgents($limit: Int, $offset: Int) {
+    agents(limit: $limit, offset: $offset) {
+      id tenantId name type status agentCardId protocols
+      ownerId teamId isGoverned riskScore expiresAt createdAt updatedAt
+    }
+  }
+`
+
+const GET_AGENT_QUERY = `
+  query GetAgent($id: ID!) {
+    agent(id: $id) {
+      id tenantId name type status agentCardId protocols
+      ownerId teamId isGoverned riskScore expiresAt createdAt updatedAt
+    }
+  }
+`
+
+export function gqlFetchAgents(limit?: number, offset?: number): Promise<{ agents: GQLNonHumanIdentity[] }> {
+  return gqlRequest(LIST_AGENTS_QUERY, { limit, offset })
+}
+
+export function gqlFetchAgent(id: string): Promise<{ agent: GQLNonHumanIdentity | null }> {
+  return gqlRequest(GET_AGENT_QUERY, { id })
+}
+
+// ─── Connector Queries ───────────────────────────────────
+
+const LIST_CONNECTORS_QUERY = `
+  query ListConnectors {
+    connectors { id tenantId name connectorType status lastSyncAt lastError createdAt updatedAt }
+  }
+`
+
+const GET_CONNECTOR_QUERY = `
+  query GetConnector($id: ID!) {
+    connector(id: $id) {
+      id tenantId name connectorType status lastSyncAt lastError createdAt updatedAt
+    }
+  }
+`
+
+const CONNECTOR_USERS_QUERY = `
+  query ConnectorUsers($connectorId: ID!, $limit: Int, $offset: Int) {
+    connectorUsers(connectorId: $connectorId, limit: $limit, offset: $offset) {
+      externalId username email displayName department enabled
+    }
+  }
+`
+
+const CONNECTOR_GROUPS_QUERY = `
+  query ConnectorGroups($connectorId: ID!) {
+    connectorGroups(connectorId: $connectorId) {
+      externalId name description groupType
+    }
+  }
+`
+
+const CONNECTOR_HEALTH_QUERY = `
+  query ConnectorHealth($connectorId: ID!) {
+    connectorHealth(connectorId: $connectorId) {
+      connectorId connectorName status deltaSupported supportsSchema
+    }
+  }
+`
+
+export function gqlFetchConnectors(): Promise<{ connectors: GQLConnector[] }> {
+  return gqlRequest(LIST_CONNECTORS_QUERY)
+}
+
+export function gqlFetchConnector(id: string): Promise<{ connector: GQLConnector | null }> {
+  return gqlRequest(GET_CONNECTOR_QUERY, { id })
+}
+
+export function gqlFetchConnectorUsers(connectorId: string, limit?: number, offset?: number): Promise<{ connectorUsers: GQLConnectorUser[] }> {
+  return gqlRequest(CONNECTOR_USERS_QUERY, { connectorId, limit, offset })
+}
+
+export function gqlFetchConnectorGroups(connectorId: string): Promise<{ connectorGroups: GQLConnectorGroup[] }> {
+  return gqlRequest(CONNECTOR_GROUPS_QUERY, { connectorId })
+}
+
+export function gqlFetchConnectorHealth(connectorId: string): Promise<{ connectorHealth: GQLConnectorHealth }> {
+  return gqlRequest(CONNECTOR_HEALTH_QUERY, { connectorId })
+}
+
+// ─── Audit / Health Queries ──────────────────────────────
+
+const AUDIT_LOGS_QUERY = `
+  query AuditLogs($limit: Int, $offset: Int, $level: String, $path: String) {
+    auditLogs(limit: $limit, offset: $offset, level: $level, path: $path) {
+      id timestamp level service method path status latency message sourceIp tags
+    }
+  }
+`
+
+const HEALTH_QUERY = `
+  query Health { health { status service version } }
+`
+
+const READY_QUERY = `
+  query Ready { ready { status checks { redis postgres neo4j } } }
+`
+
+export function gqlFetchAuditLogs(limit?: number, offset?: number, level?: string, path?: string): Promise<{ auditLogs: GQLAuditEntry[] }> {
+  return gqlRequest(AUDIT_LOGS_QUERY, { limit, offset, level, path })
+}
+
+export function gqlFetchHealth(): Promise<{ health: GQLHealthStatus }> {
+  return gqlRequest(HEALTH_QUERY)
+}
+
+export function gqlFetchReady(): Promise<{ ready: GQLReadinessResult }> {
+  return gqlRequest(READY_QUERY)
+}
+
+// ─── Identity Mutations ─────────────────────────────────
+
+const CREATE_IDENTITY_MUTATION = `
+  mutation CreateIdentity($input: CreateIdentityInput!) {
+    createIdentity(input: $input) {
+      id tenantId type status email displayName department employeeId
+      managerId source riskScore riskFactors assuranceLevel
+      attributes createdAt updatedAt
+    }
+  }
+`
+
+const UPDATE_IDENTITY_MUTATION = `
+  mutation UpdateIdentity($id: ID!, $input: UpdateIdentityInput!) {
+    updateIdentity(id: $id, input: $input) {
+      id tenantId type status email displayName department employeeId
+      managerId source riskScore riskFactors assuranceLevel
+      attributes createdAt updatedAt
+    }
+  }
+`
+
+const DELETE_IDENTITY_MUTATION = `
+  mutation DeleteIdentity($id: ID!) {
+    deleteIdentity(id: $id)
+  }
+`
+
+export function gqlCreateIdentity(input: {
+  type: string
+  email: string
+  displayName: string
+  department?: string | null
+  employeeId?: string | null
+  source?: string | null
+  attributes?: any
+}): Promise<{ createIdentity: GQLIdentity }> {
+  return gqlRequest(CREATE_IDENTITY_MUTATION, { input })
+}
+
+export function gqlUpdateIdentity(
+  id: string,
+  input: {
+    displayName?: string | null
+    department?: string | null
+    email?: string | null
+    status?: string | null
+    attributes?: any
+  },
+): Promise<{ updateIdentity: GQLIdentity }> {
+  return gqlRequest(UPDATE_IDENTITY_MUTATION, { id, input })
+}
+
+export function gqlDeleteIdentity(id: string): Promise<{ deleteIdentity: boolean }> {
+  return gqlRequest(DELETE_IDENTITY_MUTATION, { id })
+}
+
+// ─── Connector Mutations ────────────────────────────────
+
+const CREATE_CONNECTOR_MUTATION = `
+  mutation CreateConnector($input: CreateConnectorInput!) {
+    createConnector(input: $input) {
+      id tenantId name connectorType status lastSyncAt lastError createdAt updatedAt
+    }
+  }
+`
+
+const DELETE_CONNECTOR_MUTATION = `
+  mutation DeleteConnector($id: ID!) {
+    deleteConnector(id: $id)
+  }
+`
+
+const CONNECT_CONNECTOR_MUTATION = `
+  mutation ConnectConnector($id: ID!) {
+    connectConnector(id: $id) {
+      id tenantId name connectorType status lastSyncAt lastError createdAt updatedAt
+    }
+  }
+`
+
+const DISCONNECT_CONNECTOR_MUTATION = `
+  mutation DisconnectConnector($id: ID!) {
+    disconnectConnector(id: $id) {
+      id tenantId name connectorType status lastSyncAt lastError createdAt updatedAt
+    }
+  }
+`
+
+const SYNC_CONNECTOR_MUTATION = `
+  mutation SyncConnector($id: ID!) {
+    syncConnector(id: $id) {
+      id tenantId name connectorType status lastSyncAt lastError createdAt updatedAt
+    }
+  }
+`
+
+const SYNC_CONNECTOR_DELTA_MUTATION = `
+  mutation SyncConnectorDelta($id: ID!) {
+    syncConnectorDelta(id: $id) {
+      id tenantId name connectorType status lastSyncAt lastError createdAt updatedAt
+    }
+  }
+`
+
+export function gqlCreateConnector(input: {
+  name: string
+  connectorType: string
+  config: any
+}): Promise<{ createConnector: GQLConnector }> {
+  return gqlRequest(CREATE_CONNECTOR_MUTATION, { input })
+}
+
+export function gqlDeleteConnector(id: string): Promise<{ deleteConnector: boolean }> {
+  return gqlRequest(DELETE_CONNECTOR_MUTATION, { id })
+}
+
+export function gqlConnectConnector(id: string): Promise<{ connectConnector: GQLConnector }> {
+  return gqlRequest(CONNECT_CONNECTOR_MUTATION, { id })
+}
+
+export function gqlDisconnectConnector(id: string): Promise<{ disconnectConnector: GQLConnector }> {
+  return gqlRequest(DISCONNECT_CONNECTOR_MUTATION, { id })
+}
+
+export function gqlSyncConnector(id: string): Promise<{ syncConnector: GQLConnector }> {
+  return gqlRequest(SYNC_CONNECTOR_MUTATION, { id })
+}
+
+export function gqlSyncConnectorDelta(id: string): Promise<{ syncConnectorDelta: GQLConnector }> {
+  return gqlRequest(SYNC_CONNECTOR_DELTA_MUTATION, { id })
+}

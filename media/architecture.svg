@@ -1,14 +1,33 @@
-<svg width="1400" height="1100" viewBox="0 0 1400 1100" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="1600" height="1450" viewBox="0 0 1600 1450" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1400" y2="1100" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#09090B"/>
-      <stop offset="50%" stop-color="#0F0F14"/>
-      <stop offset="100%" stop-color="#09090B"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1600" y2="1450" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0B0D11"/>
+      <stop offset="50%" stop-color="#111318"/>
+      <stop offset="100%" stop-color="#0B0D11"/>
     </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#3B82F6"/>
-      <stop offset="50%" stop-color="#6366F1"/>
-      <stop offset="100%" stop-color="#8B5CF6"/>
+    <linearGradient id="cloudflareLogo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F38020"/>
+      <stop offset="100%" stop-color="#FCBC6B"/>
+    </linearGradient>
+    <linearGradient id="networkGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.08"/>
+      <stop offset="50%" stop-color="#3B82F6" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.08"/>
+    </linearGradient>
+    <linearGradient id="computeGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.08"/>
+      <stop offset="50%" stop-color="#8B5CF6" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.08"/>
+    </linearGradient>
+    <linearGradient id="dataGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22C55E" stop-opacity="0.08"/>
+      <stop offset="50%" stop-color="#22C55E" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#22C55E" stop-opacity="0.08"/>
+    </linearGradient>
+    <linearGradient id="observabilityGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#EAB308" stop-opacity="0.08"/>
+      <stop offset="50%" stop-color="#EAB308" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#EAB308" stop-opacity="0.08"/>
     </linearGradient>
     <linearGradient id="accentLine" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#3B82F6" stop-opacity="0"/>
@@ -16,430 +35,542 @@
       <stop offset="70%" stop-color="#6366F1" stop-opacity="1"/>
       <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="layerBg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#18181B" stop-opacity="0.95"/>
-      <stop offset="100%" stop-color="#18181B" stop-opacity="0.6"/>
-    </linearGradient>
     <linearGradient id="serviceGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1E1E28"/>
-      <stop offset="100%" stop-color="#14141C"/>
+      <stop offset="0%" stop-color="#1C1E26"/>
+      <stop offset="100%" stop-color="#14151C"/>
     </linearGradient>
     <filter id="glow">
-      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feGaussianBlur stdDeviation="6" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="glowSmall">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="softShadow">
-      <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#3B82F6" flood-opacity="0.12"/>
     </filter>
     <filter id="boxShadow">
-      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#000" flood-opacity="0.4"/>
+      <feDropShadow dx="0" dy="1" stdDeviation="4" flood-color="#000" flood-opacity="0.5"/>
     </filter>
-    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <polygon points="0 0, 8 3, 0 6" fill="#3B82F6" fill-opacity="0.5"/>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#3B82F6"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#22C55E"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8B5CF6"/>
+    </marker>
+    <marker id="arrowPink" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#EC4899"/>
     </marker>
   </defs>
 
-  <!-- Background -->
-  <rect width="1400" height="1100" fill="url(#bg)"/>
+  <rect width="1600" height="1450" fill="url(#bg)"/>
 
-  <!-- Subtle Grid -->
-  <g opacity="0.03">
-    <line x1="0" y1="100" x2="1400" y2="100" stroke="#3B82F6" stroke-width="0.5"/>
-    <line x1="0" y1="200" x2="1400" y2="200" stroke="#3B82F6" stroke-width="0.5"/>
-    <line x1="0" y1="300" x2="1400" y2="300" stroke="#3B82F6" stroke-width="0.5"/>
-    <line x1="0" y1="400" x2="1400" y2="400" stroke="#3B82F6" stroke-width="0.5"/>
-    <line x1="0" y1="500" x2="1400" y2="500" stroke="#3B82F6" stroke-width="0.5"/>
-    <line x1="0" y1="600" x2="1400" y2="600" stroke="#3B82F6" stroke-width="0.5"/>
-    <line x1="0" y1="700" x2="1400" y2="700" stroke="#3B82F6" stroke-width="0.5"/>
-    <line x1="0" y1="800" x2="1400" y2="800" stroke="#3B82F6" stroke-width="0.5"/>
-    <line x1="0" y1="900" x2="1400" y2="900" stroke="#3B82F6" stroke-width="0.5"/>
-    <line x1="0" y1="1000" x2="1400" y2="1000" stroke="#3B82F6" stroke-width="0.5"/>
-  </g>
+  <!-- Title bar -->
+  <rect x="0" y="0" width="1600" height="52" fill="#16171E"/>
+  <rect x="0" y="0" width="1600" height="1" fill="url(#accentLine)"/>
+  
+  <!-- AWS-style service icon dots -->
+  <circle cx="28" cy="26" r="6" fill="#3B82F6"/>
+  <text x="42" y="31" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="16" font-weight="700" fill="#F0F0F0" letter-spacing="-0.2">ObserveID</text>
+  <text x="145" y="31" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="500" fill="#717D96">IAM/IGA Platform Architecture</text>
+  
+  <text x="1540" y="31" font-family="'JetBrains Mono', monospace" font-size="10" fill="#52525B" text-anchor="end">v1.0.0</text>
 
-  <!-- Top accent line -->
-  <rect x="0" y="0" width="1400" height="1" fill="url(#accentLine)"/>
+  <!-- ══════════════════════════════════════════════════════════════════
+     REGION / VPC BOUNDARIES
+     ══════════════════════════════════════════════════════════════════ -->
 
-  <!-- Title -->
-  <text x="40" y="42" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="24" font-weight="800" fill="#FAFAFA" letter-spacing="-0.3">ObserveID</text>
-  <text x="185" y="42" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="14" font-weight="500" fill="#52525B">Architecture</text>
+  <!-- Cloudflare Edge -->
+  <rect x="40" y="72" width="1520" height="98" rx="8" fill="#F38020" fill-opacity="0.04" stroke="#F38020" stroke-opacity="0.15" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="56" y="92" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="700" fill="#F38020" letter-spacing="0.5">CLOUDFLARE EDGE NETWORK</text>
+  <text x="56" y="108" font-family="'JetBrains Mono', monospace" font-size="9" fill="#F38020" fill-opacity="0.6">DDoS Protection · WAF · SSL/TLS · Pages · Workers · Tunnel</text>
 
-  <rect x="40" y="58" width="1320" height="1" fill="#27272A"/>
+  <!-- AWS VPC -->
+  <rect x="40" y="190" width="1520" height="1070" rx="8" fill="#3B82F6" fill-opacity="0.03" stroke="#3B82F6" stroke-opacity="0.12" stroke-width="1"/>
+  <rect x="40" y="190" width="1520" height="24" rx="8" fill="#3B82F6" fill-opacity="0.06"/>
+  <rect x="40" y="206" width="1520" height="8" fill="#3B82F6" fill-opacity="0.06"/>
+  <text x="56" y="207" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="11" font-weight="700" fill="#3B82F6" letter-spacing="0.5">AWS VPC · us-east-1</text>
+  <text x="200" y="207" font-family="'JetBrains Mono', monospace" font-size="8" fill="#3B82F6" fill-opacity="0.5">10.0.0.0/16</text>
 
-  <!-- ═══════════════ LAYER 1: PRESENTATION & EDGE ═══════════════ -->
-  <rect x="40" y="72" width="1320" height="98" rx="8" fill="url(#layerBg)" stroke="#27272A" stroke-width="1"/>
+  <!-- Public Subnet -->
+  <rect x="60" y="224" width="1480" height="220" rx="6" fill="#3B82F6" fill-opacity="0.05" stroke="#3B82F6" stroke-opacity="0.1" stroke-width="1"/>
+  <text x="70" y="242" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="11" font-weight="600" fill="#60A5FA">Public Subnet · 10.0.1.0/24</text>
 
-  <!-- Layer label -->
-  <rect x="56" y="80" width="120" height="20" rx="4" fill="#3B82F6" fill-opacity="0.15"/>
-  <text x="64" y="93" font-family="'JetBrains Mono', monospace" font-size="10" fill="#3B82F6" font-weight="500">PRESENTATION</text>
+  <!-- Private Compute Subnet -->
+  <rect x="60" y="458" width="1480" height="434" rx="6" fill="#8B5CF6" fill-opacity="0.04" stroke="#8B5CF6" stroke-opacity="0.08" stroke-width="1"/>
+  <text x="70" y="476" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="11" font-weight="600" fill="#A78BFA">Private Subnet · Compute · 10.0.2.0/24</text>
 
-  <rect x="40" y="72" width="8" height="98" rx="4" fill="#3B82F6" fill-opacity="0.3"/>
+  <!-- Private Data Subnet -->
+  <rect x="60" y="906" width="1480" height="184" rx="6" fill="#22C55E" fill-opacity="0.04" stroke="#22C55E" stroke-opacity="0.08" stroke-width="1"/>
+  <text x="70" y="924" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="11" font-weight="600" fill="#4ADE80">Private Subnet · Data · 10.0.3.0/24</text>
 
-  <!-- Cloudflare -->
+  <!-- Observability Plane (spans across) -->
+  <rect x="60" y="1104" width="1480" height="140" rx="6" fill="#EAB308" fill-opacity="0.03" stroke="#EAB308" stroke-opacity="0.07" stroke-width="1"/>
+  <text x="70" y="1122" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="11" font-weight="600" fill="#EAB308">Management &amp; Observability Plane</text>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+     PUBLIC SUBNET — EDGE &amp; GATEWAY
+     ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- Cloudflare services -->
   <g filter="url(#boxShadow)">
-    <rect x="56" y="108" width="240" height="50" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="70" y="128" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FAFAFA">Cloudflare</text>
-    <text x="70" y="146" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Pages + Worker (API Proxy)</text>
+    <rect x="80" y="255" width="220" height="46" rx="6" fill="url(#serviceGrad)" stroke="#F38020" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="80" y="255" width="4" height="46" rx="2" fill="#F38020"/>
+    <text x="96" y="276" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FBC394">Cloudflare Pages</text>
+    <text x="96" y="292" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Static frontend hosting</text>
   </g>
 
-  <!-- HTTPS arrow -->
-  <line x1="296" y1="133" x2="340" y2="133" stroke="#3B82F6" stroke-opacity="0.4" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-  <!-- Frontend -->
   <g filter="url(#boxShadow)">
-    <rect x="350" y="108" width="310" height="50" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="364" y="128" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FAFAFA">Frontend · Next.js 14</text>
-    <text x="364" y="146" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">13 routes · 10 UI components · Static Export</text>
+    <rect x="320" y="255" width="220" height="46" rx="6" fill="url(#serviceGrad)" stroke="#F38020" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="320" y="255" width="4" height="46" rx="2" fill="#F38020"/>
+    <text x="336" y="276" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FBC394">Cloudflare Workers</text>
+    <text x="336" y="292" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">API proxy · auth header injection</text>
   </g>
 
-  <!-- Cloudflare Tunnel -->
   <g filter="url(#boxShadow)">
-    <rect x="700" y="108" width="240" height="50" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="714" y="128" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FAFAFA">Cloudflare Tunnel</text>
-    <text x="714" y="146" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">HTTPS → localhost:8080</text>
+    <rect x="560" y="255" width="220" height="46" rx="6" fill="url(#serviceGrad)" stroke="#F38020" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="560" y="255" width="4" height="46" rx="2" fill="#F38020"/>
+    <text x="576" y="276" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FBC394">Cloudflare Tunnel</text>
+    <text x="576" y="292" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">HTTPS → localhost:8080</text>
   </g>
 
-  <line x1="660" y1="133" x2="700" y2="133" stroke="#3B82F6" stroke-opacity="0.4" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <!-- Arrow from Cloudflare to ALB -->
+  <line x1="800" y1="278" x2="920" y2="278" stroke="#3B82F6" stroke-opacity="0.6" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <text x="830" y="272" font-family="'JetBrains Mono', monospace" font-size="8" fill="#3B82F6">HTTPS · TLS 1.3</text>
 
-  <!-- Local Dev -->
+  <!-- ALB -->
   <g filter="url(#boxShadow)">
-    <rect x="990" y="108" width="170" height="50" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="1004" y="128" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FAFAFA">Local Dev</text>
-    <text x="1004" y="146" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Docker Compose · 11 ctns</text>
+    <rect x="930" y="255" width="260" height="46" rx="6" fill="url(#serviceGrad)" stroke="#3B82F6" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="930" y="255" width="4" height="46" rx="2" fill="#3B82F6"/>
+    <text x="946" y="276" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="600" fill="#93C5FD">Application Load Balancer</text>
+    <text x="946" y="292" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">NLB/ALB · port 443 → 8080</text>
   </g>
 
-  <line x1="940" y1="133" x2="990" y2="133" stroke="#3B82F6" stroke-opacity="0.4" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-  <!-- Down arrow from Presentation to API -->
-  <line x1="700" y1="170" x2="700" y2="192" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-  <!-- ═══════════════ LAYER 2: API GATEWAY ═══════════════ -->
-  <rect x="40" y="195" width="1320" height="82" rx="8" fill="url(#layerBg)" stroke="#27272A" stroke-width="1"/>
-  <rect x="40" y="195" width="8" height="82" rx="4" fill="#6366F1" fill-opacity="0.3"/>
-
-  <rect x="56" y="203" width="100" height="20" rx="4" fill="#6366F1" fill-opacity="0.15"/>
-  <text x="64" y="216" font-family="'JetBrains Mono', monospace" font-size="10" fill="#6366F1" font-weight="500">API GATEWAY</text>
-
-  <!-- HTTP Router -->
+  <!-- Next.js Frontend (left side, public subnet) -->
   <g filter="url(#boxShadow)">
-    <rect x="56" y="229" width="160" height="38" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="70" y="246" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA">HTTP Router</text>
-    <text x="70" y="259" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">gorilla/mux · :8080</text>
+    <rect x="80" y="318" width="280" height="110" rx="6" fill="url(#serviceGrad)" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1"/>
+    <circle cx="104" cy="340" r="8" fill="#3B82F6" fill-opacity="0.2"/>
+    <text x="104" y="344" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA" text-anchor="middle">N</text>
+    <text x="120" y="344" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Next.js 14 Frontend</text>
+    <text x="96" y="364" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">React · Tailwind · Radix UI</text>
+    <text x="96" y="380" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Static export → Cloudflare Pages</text>
+    <rect x="96" y="390" width="244" height="26" rx="4" fill="#27272A"/>
+    <text x="104" y="408" font-family="'JetBrains Mono', monospace" font-size="8" fill="#717D96">Pages: dashboard, identities, agents, connectors, audit, vault…</text>
   </g>
 
-  <!-- SCIM -->
+  <!-- Arrow from ALB to NGINX -->
+  <line x1="1060" y1="301" x2="1060" y2="340" stroke="#3B82F6" stroke-opacity="0.4" stroke-width="1.5" marker-end="url(#arrowBlue)"/>
+
+  <!-- Go API Gateway (right side, public subnet) -->
   <g filter="url(#boxShadow)">
-    <rect x="240" y="229" width="140" height="38" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="254" y="246" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA">SCIM 2.0</text>
-    <text x="254" y="259" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">/scim/v2 · 6 endpoints</text>
+    <rect x="880" y="350" width="360" height="80" rx="6" fill="url(#serviceGrad)" stroke="#3B82F6" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="880" y="350" width="4" height="80" rx="2" fill="#3B82F6"/>
+    <text x="896" y="372" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#93C5FD">Go HTTP Server · :8080</text>
+    <text x="896" y="390" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">gorilla/mux · gorilla/websocket · otelhttp</text>
+    <text x="896" y="406" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">ReadHeaderTimeout: 10s · MaxHeaderBytes: 256KB</text>
+    <text x="896" y="422" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">TLS_CERT_FILE optional</text>
   </g>
 
-  <!-- REST API -->
+  <!-- Middleware stack callout -->
   <g filter="url(#boxShadow)">
-    <rect x="404" y="229" width="180" height="38" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="418" y="246" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA">REST API v1</text>
-    <text x="418" y="259" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">/api/v1 · 60+ endpoints</text>
+    <rect x="1260" y="350" width="260" height="80" rx="6" fill="url(#serviceGrad)" stroke="#3B82F6" stroke-opacity="0.25" stroke-width="1"/>
+    <text x="1276" y="372" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="11" font-weight="600" fill="#93C5FD">Middleware Chain</text>
+    <text x="1276" y="390" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">CORS (configurable origin)</text>
+    <text x="1276" y="406" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Rate Limiter (100/s, burst 200)</text>
+    <text x="1276" y="422" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">API Key Auth · Request Validation</text>
   </g>
 
-  <!-- Middleware stack -->
-  <g filter="url(#boxShadow)">
-    <rect x="608" y="229" width="190" height="38" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="622" y="246" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA">Middleware Stack</text>
-    <text x="622" y="259" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">CORS · OTel · Audit</text>
-  </g>
+  <!-- Arrow: Go API → private subnet -->
+  <line x1="1060" y1="430" x2="1060" y2="502" stroke="#8B5CF6" stroke-opacity="0.5" stroke-width="2" marker-end="url(#arrowPurple)"/>
+  <line x1="360" y1="428" x2="360" y2="502" stroke="#8B5CF6" stroke-opacity="0.5" stroke-width="2" marker-end="url(#arrowPurple)"/>
 
-  <!-- TLS -->
-  <g filter="url(#boxShadow)">
-    <rect x="822" y="229" width="140" height="38" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="836" y="246" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA">TLS (optional)</text>
-    <text x="836" y="259" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">TLS_CERT_FILE</text>
-  </g>
+  <!-- ══════════════════════════════════════════════════════════════════
+     PRIVATE SUBNET — COMPUTE (APPLICATION SERVICES)
+     ══════════════════════════════════════════════════════════════════ -->
 
-  <!-- Prometheus -->
-  <g filter="url(#boxShadow)">
-    <rect x="986" y="229" width="160" height="38" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="1000" y="246" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA">Metrics</text>
-    <text x="1000" y="259" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">14 metric families</text>
-  </g>
-
-  <!-- Down arrow -->
-  <line x1="700" y1="277" x2="700" y2="302" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-  <!-- ═══════════════ LAYER 3: APPLICATION SERVICES ═══════════════ -->
-  <rect x="40" y="305" width="1320" height="210" rx="8" fill="url(#layerBg)" stroke="#27272A" stroke-width="1"/>
-  <rect x="40" y="305" width="8" height="210" rx="4" fill="#8B5CF6" fill-opacity="0.3"/>
-
-  <rect x="56" y="313" width="130" height="20" rx="4" fill="#8B5CF6" fill-opacity="0.15"/>
-  <text x="64" y="326" font-family="'JetBrains Mono', monospace" font-size="10" fill="#8B5CF6" font-weight="500">APPLICATION SERVICES</text>
-
-  <!-- Row 1: Core Services -->
+  <!-- Row 1: Core Domain Services -->
+  
   <!-- Identity Service -->
   <g filter="url(#boxShadow)">
-    <rect x="56" y="341" width="195" height="70" rx="6" fill="url(#serviceGrad)" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="70" y="361" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#3B82F6">Identity Service</text>
-    <text x="70" y="376" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">CRUD · Bulk · Blast Radius</text>
-    <text x="70" y="390" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">PG + Neo4j dual-write</text>
-    <text x="70" y="404" font-family="'JetBrains Mono', monospace" font-size="8" fill="#52525B">PG onboarding · Neo4j graph</text>
+    <rect x="80" y="498" width="260" height="86" rx="6" fill="url(#serviceGrad)" stroke="#8B5CF6" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="80" y="498" width="4" height="86" rx="2" fill="#8B5CF6"/>
+    <text x="96" y="520" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#C4B5FD">Identity Service</text>
+    <text x="96" y="538" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">CRUD · Bulk import · Blast radius</text>
+    <text x="96" y="554" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">PG + Neo4j dual-write</text>
+    <text x="96" y="570" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Entitlements · Manager chain</text>
   </g>
 
   <!-- Access Service -->
   <g filter="url(#boxShadow)">
-    <rect x="271" y="341" width="195" height="70" rx="6" fill="url(#serviceGrad)" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="285" y="361" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#3B82F6">Access Service</text>
-    <text x="285" y="376" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">RBAC / ABAC / ReBAC</text>
-    <text x="285" y="390" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">Check · Grant · Revoke</text>
-    <text x="285" y="404" font-family="'JetBrains Mono', monospace" font-size="8" fill="#52525B">Triggers Temporal workflow</text>
+    <rect x="360" y="498" width="260" height="86" rx="6" fill="url(#serviceGrad)" stroke="#8B5CF6" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="360" y="498" width="4" height="86" rx="2" fill="#8B5CF6"/>
+    <text x="376" y="520" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#C4B5FD">Access Service</text>
+    <text x="376" y="538" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">RBAC · ABAC · ReBAC</text>
+    <text x="376" y="554" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Check / Grant / Revoke</text>
+    <text x="376" y="570" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Temporal workflow trigger</text>
   </g>
 
   <!-- Policy Engine -->
   <g filter="url(#boxShadow)">
-    <rect x="486" y="341" width="195" height="70" rx="6" fill="url(#serviceGrad)" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="500" y="361" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#3B82F6">Policy Engine</text>
-    <text x="500" y="376" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">Cedar Policies</text>
-    <text x="500" y="390" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">5 policy files · CI validation</text>
-    <text x="500" y="404" font-family="'JetBrains Mono', monospace" font-size="8" fill="#52525B">Schema + RBAC + ABAC</text>
+    <rect x="640" y="498" width="260" height="86" rx="6" fill="url(#serviceGrad)" stroke="#8B5CF6" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="640" y="498" width="4" height="86" rx="2" fill="#8B5CF6"/>
+    <text x="656" y="520" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#C4B5FD">Policy Engine</text>
+    <text x="656" y="538" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Cedar · OPA-style policies</text>
+    <text x="656" y="554" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">5 cedar files · CI validation</text>
+    <text x="656" y="570" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Schema · RBAC · ABAC rules</text>
   </g>
 
   <!-- AI Copilot -->
   <g filter="url(#boxShadow)">
-    <rect x="701" y="341" width="195" height="70" rx="6" fill="url(#serviceGrad)" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="715" y="361" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#3B82F6">AI Copilot</text>
-    <text x="715" y="376" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">GraphRAG Pipeline</text>
-    <text x="715" y="390" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">9 query classifications</text>
-    <text x="715" y="404" font-family="'JetBrains Mono', monospace" font-size="8" fill="#52525B">Neo4j + Qdrant</text>
-  </g>
-
-  <!-- Vault -->
-  <g filter="url(#boxShadow)">
-    <rect x="916" y="341" width="195" height="70" rx="6" fill="url(#serviceGrad)" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="930" y="361" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#3B82F6">Credential Vault</text>
-    <text x="930" y="376" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">AES-256-GCM</text>
-    <text x="930" y="390" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">File-persisted · VAULT_KEY</text>
-    <text x="930" y="404" font-family="'JetBrains Mono', monospace" font-size="8" fill="#52525B">Encrypted JSON store</text>
+    <rect x="920" y="498" width="260" height="86" rx="6" fill="url(#serviceGrad)" stroke="#8B5CF6" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="920" y="498" width="4" height="86" rx="2" fill="#8B5CF6"/>
+    <text x="936" y="520" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#C4B5FD">AI Copilot</text>
+    <text x="936" y="538" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">GraphRAG query pipeline</text>
+    <text x="936" y="554" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">9 intent classifications</text>
+    <text x="936" y="570" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Neo4j + Qdrant embeddings</text>
   </g>
 
   <!-- CAEP Stream -->
   <g filter="url(#boxShadow)">
-    <rect x="1131" y="341" width="195" height="70" rx="6" fill="url(#serviceGrad)" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="1145" y="361" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#3B82F6">CAEP Stream</text>
-    <text x="1145" y="376" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">Session Revocation</text>
-    <text x="1145" y="390" font-family="'JetBrains Mono', monospace" font-size="8" fill="#A1A1AA">SET Token Broadcast</text>
-    <text x="1145" y="404" font-family="'JetBrains Mono', monospace" font-size="8" fill="#52525B">PG + Temporal</text>
+    <rect x="1200" y="498" width="260" height="86" rx="6" fill="url(#serviceGrad)" stroke="#8B5CF6" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="1200" y="498" width="4" height="86" rx="2" fill="#8B5CF6"/>
+    <text x="1216" y="520" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#C4B5FD">CAEP Event Stream</text>
+    <text x="1216" y="538" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Session revocation broadcasts</text>
+    <text x="1216" y="554" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">SET Token lifecycle</text>
+    <text x="1216" y="570" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">PG persistence + Temporal</text>
   </g>
 
-  <!-- Row 2: Connector Framework + LCM -->
-  <!-- Connector Framework -->
+  <!-- Row 2: Integration &amp; Infrastructure Services -->
+
+  <!-- Connector Framework (wide) -->
   <g filter="url(#boxShadow)">
-    <rect x="56" y="425" width="400" height="78" rx="6" fill="url(#serviceGrad)" stroke="#6366F1" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="70" y="443" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#6366F1">Connector Framework</text>
-    <text x="70" y="459" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Entra ID (Graph)  ·  LDAP / AD  ·  SCIM 2.0  ·  Okta</text>
-    <text x="70" y="475" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">ListUsers · ListGroups · ListEntitlements · ListResources</text>
-    <text x="70" y="491" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Delta Sync · Schema Discovery · Health Monitoring</text>
+    <rect x="80" y="600" width="540" height="120" rx="6" fill="url(#serviceGrad)" stroke="#6366F1" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="80" y="600" width="4" height="120" rx="2" fill="#6366F1"/>
+    <text x="96" y="622" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#A5B4FC">Connector Framework</text>
+    
+    <!-- Sub-connectors -->
+    <g filter="url(#boxShadow)">
+      <rect x="96" y="634" width="120" height="34" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
+      <text x="104" y="650" font-family="'JetBrains Mono', monospace" font-size="9" fill="#93C5FD">Entra ID</text>
+      <text x="104" y="662" font-family="'JetBrains Mono', monospace" font-size="7" fill="#717D96">Graph API</text>
+    </g>
+    <g filter="url(#boxShadow)">
+      <rect x="226" y="634" width="120" height="34" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
+      <text x="238" y="650" font-family="'JetBrains Mono', monospace" font-size="9" fill="#93C5FD">LDAP / AD</text>
+      <text x="238" y="662" font-family="'JetBrains Mono', monospace" font-size="7" fill="#717D96">LDAP(S)</text>
+    </g>
+    <g filter="url(#boxShadow)">
+      <rect x="356" y="634" width="120" height="34" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
+      <text x="368" y="650" font-family="'JetBrains Mono', monospace" font-size="9" fill="#93C5FD">SCIM 2.0</text>
+      <text x="368" y="662" font-family="'JetBrains Mono', monospace" font-size="7" fill="#717D96">Okta · Azure</text>
+    </g>
+    <g filter="url(#boxShadow)">
+      <rect x="486" y="634" width="120" height="34" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
+      <text x="498" y="650" font-family="'JetBrains Mono', monospace" font-size="9" fill="#93C5FD">Generic</text>
+      <text x="498" y="662" font-family="'JetBrains Mono', monospace" font-size="7" fill="#717D96">REST · CSV · gRPC</text>
+    </g>
+    
+    <text x="96" y="686" font-family="'JetBrains Mono', monospace" font-size="8" fill="#717D96">ListUsers · ListGroups · ListEntitlements · ListResources · Delta Sync · Schema Discovery</text>
   </g>
 
-  <!-- Provisioning Engine -->
+  <!-- Vault -->
   <g filter="url(#boxShadow)">
-    <rect x="476" y="425" width="280" height="78" rx="6" fill="url(#serviceGrad)" stroke="#6366F1" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="490" y="443" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#6366F1">LCM Provisioning Engine</text>
-    <text x="490" y="459" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Lifecycle Management</text>
-    <text x="490" y="475" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Create / Update / Delete user</text>
-    <text x="490" y="491" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Provisioning history (1000)</text>
+    <rect x="640" y="600" width="260" height="120" rx="6" fill="url(#serviceGrad)" stroke="#EF4444" stroke-opacity="0.3" stroke-width="1"/>
+    <rect x="640" y="600" width="4" height="120" rx="2" fill="#EF4444"/>
+    <text x="656" y="622" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FCA5A5">Credential Vault</text>
+    <text x="656" y="642" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">AES-256-GCM encryption</text>
+    <text x="656" y="660" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">File-persisted JSON store</text>
+    <text x="656" y="678" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">VAULT_MASTER_KEY env</text>
+    <text x="656" y="696" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Store/Retrieve/Delete/List</text>
   </g>
 
-  <!-- Connector Manager -->
+  <!-- LCM Provisioning -->
   <g filter="url(#boxShadow)">
-    <rect x="776" y="425" width="290" height="78" rx="6" fill="url(#serviceGrad)" stroke="#6366F1" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="790" y="443" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#6366F1">Connector Manager</text>
-    <text x="790" y="459" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">PG-persisted configs · In-memory cache</text>
-    <text x="790" y="475" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Full/Delta sync orchestration</text>
-    <text x="790" y="491" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Health tracking · Audit logging</text>
+    <rect x="920" y="600" width="260" height="120" rx="6" fill="url(#serviceGrad)" stroke="#6366F1" stroke-opacity="0.3" stroke-width="1"/>
+    <rect x="920" y="600" width="4" height="120" rx="2" fill="#6366F1"/>
+    <text x="936" y="622" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#A5B4FC">LCM Provisioning Engine</text>
+    <text x="936" y="642" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Lifecycle Management</text>
+    <text x="936" y="660" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Create / Update / Delete</text>
+    <text x="936" y="678" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Provisioning history (1000)</text>
+    <text x="936" y="696" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Temporal workflow per action</text>
   </g>
 
-  <!-- Persist layer -->
+  <!-- GraphQL -->
   <g filter="url(#boxShadow)">
-    <rect x="1086" y="425" width="240" height="78" rx="6" fill="url(#serviceGrad)" stroke="#6366F1" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="1100" y="443" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#6366F1">Sync Persistence</text>
-    <text x="1100" y="459" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">PG connectors (25 tables)</text>
-    <text x="1100" y="475" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Connector identities/groups</text>
-    <text x="1100" y="491" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Entitlements/resources</text>
+    <rect x="1200" y="600" width="260" height="120" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.3" stroke-width="1"/>
+    <rect x="1200" y="600" width="4" height="120" rx="2" fill="#22C55E"/>
+    <text x="1216" y="622" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#86EFAC">GraphQL API</text>
+    <text x="1216" y="642" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">gqlgen · 25 types</text>
+    <text x="1216" y="660" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">13 queries · 11 mutations</text>
+    <text x="1216" y="678" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Identity CRUD · Connector mgmt</text>
+    <text x="1216" y="696" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Audit · Health · Readiness</text>
   </g>
 
-  <!-- Down arrow -->
-  <line x1="700" y1="515" x2="700" y2="542" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-  <!-- ═══════════════ LAYER 4: WORKFLOW & EVENTS ═══════════════ -->
-  <rect x="40" y="545" width="1320" height="150" rx="8" fill="url(#layerBg)" stroke="#27272A" stroke-width="1"/>
-  <rect x="40" y="545" width="8" height="150" rx="4" fill="#EC4899" fill-opacity="0.3"/>
-
-  <rect x="56" y="553" width="140" height="20" rx="4" fill="#EC4899" fill-opacity="0.15"/>
-  <text x="64" y="566" font-family="'JetBrains Mono', monospace" font-size="10" fill="#EC4899" font-weight="500">WORKFLOW & EVENTS</text>
-
-  <!-- Temporal -->
+  <!-- Row 3: Workflow &amp; Events Layer -->
+  
+  <!-- Temporal Server -->
   <g filter="url(#boxShadow)">
-    <rect x="56" y="581" width="390" height="100" rx="6" fill="url(#serviceGrad)" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="70" y="599" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#EC4899">Temporal Workflow Engine v1.25</text>
-    <text x="70" y="615" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">4 namespaces: offboarding · provisioning · reconciliation · analysis</text>
-    <text x="70" y="633" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Onboard · Offboard (fan-out) · Grant · Revoke · JIT</text>
-    <text x="70" y="649" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">AgentAnomalyDetection · DetectSoDViolations · 15+ activities</text>
-    <text x="70" y="665" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">500 concurrent · 500 max activities · 5 retries</text>
+    <rect x="80" y="740" width="380" height="78" rx="6" fill="url(#serviceGrad)" stroke="#EC4899" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="80" y="740" width="4" height="78" rx="2" fill="#EC4899"/>
+    <text x="96" y="762" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FDA4AF">Temporal Server v1.25</text>
+    <text x="96" y="782" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Offboarding · Provisioning · Reconciliation · Analysis</text>
+    <text x="96" y="798" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">Namespaces: critical-offboarding, provisioning, reconciliation, soc-analysis</text>
+  </g>
+
+  <!-- Temporal Worker -->
+  <g filter="url(#boxShadow)">
+    <rect x="480" y="740" width="360" height="78" rx="6" fill="url(#serviceGrad)" stroke="#EC4899" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="480" y="740" width="4" height="78" rx="2" fill="#EC4899"/>
+    <text x="496" y="762" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FDA4AF">Temporal Worker (in-process)</text>
+    <text x="496" y="782" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">7 workflows · 15+ activities · 500 concurrent</text>
+    <text x="496" y="798" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">Onboard · Offboard (fan-out) · Grant · Revoke · JIT · Anomaly · SoD</text>
   </g>
 
   <!-- Kafka -->
   <g filter="url(#boxShadow)">
-    <rect x="466" y="581" width="350" height="100" rx="6" fill="url(#serviceGrad)" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="480" y="599" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#EC4899">Apache Kafka 7.6.1</text>
-    <text x="480" y="615" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Topics: identity · access · policy · audit · agent · caep</text>
-    <text x="480" y="633" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">+ 2 DLQ topics · 12 partitions each</text>
-    <text x="480" y="649" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Schema Registry (Avro/Protobuf)</text>
-    <text x="480" y="665" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Zookeeper · Retention: 168h</text>
+    <rect x="860" y="740" width="360" height="78" rx="6" fill="url(#serviceGrad)" stroke="#EC4899" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="860" y="740" width="4" height="78" rx="2" fill="#EC4899"/>
+    <text x="876" y="762" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FDA4AF">Apache Kafka 7.6.1</text>
+    <text x="876" y="782" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Topics: identity · access · policy · audit · agent · caep</text>
+    <text x="876" y="798" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">Schema Registry (Avro) · Zookeeper · Retention: 168h</text>
   </g>
 
   <!-- Outbox -->
   <g filter="url(#boxShadow)">
-    <rect x="836" y="581" width="200" height="100" rx="6" fill="url(#serviceGrad)" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="850" y="599" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#EC4899">Transactional Outbox</text>
-    <text x="850" y="615" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">PG outbox table</text>
-    <text x="850" y="633" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Reliable event delivery</text>
-    <text x="850" y="649" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Aggregate tracking</text>
-    <text x="850" y="665" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Pending + published</text>
+    <rect x="1240" y="740" width="220" height="78" rx="6" fill="url(#serviceGrad)" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1"/>
+    <rect x="1240" y="740" width="4" height="78" rx="2" fill="#EC4899"/>
+    <text x="1256" y="762" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FDA4AF">Transactional Outbox</text>
+    <text x="1256" y="782" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">PG outbox table</text>
+    <text x="1256" y="798" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">Reliable event delivery</text>
   </g>
 
-  <!-- Temporal worker -->
-  <g filter="url(#boxShadow)">
-    <rect x="1056" y="581" width="270" height="100" rx="6" fill="url(#serviceGrad)" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="1070" y="599" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#EC4899">Temporal Worker</text>
-    <text x="1070" y="615" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">MaxConcurrent: 500</text>
-    <text x="1070" y="633" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Namespace: offboarding</text>
-    <text x="1070" y="649" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Task Queue</text>
-    <text x="1070" y="665" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">500 concurrent tasks</text>
-  </g>
+  <!-- ══════════════════════════════════════════════════════════════════
+     CONNECTION ARROWS (SERVICE → SERVICE) within Compute Subnet
+     ══════════════════════════════════════════════════════════════════ -->
 
-  <!-- Down arrow -->
-  <line x1="700" y1="695" x2="700" y2="720" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <!-- Identity → Access (gRPC) -->
+  <line x1="340" y1="541" x2="358" y2="541" stroke="#8B5CF6" stroke-opacity="0.4" stroke-width="1.5" marker-end="url(#arrowPurple)"/>
+  
+  <!-- Identity → Vault (gRPC) -->
+  <path d="M 210 584 L 210 598 L 770 598 L 770 598" stroke="#EF4444" stroke-opacity="0.3" stroke-width="1" fill="none"/>
 
-  <!-- ═══════════════ LAYER 5: DATA LAYER ═══════════════ -->
-  <rect x="40" y="723" width="1320" height="115" rx="8" fill="url(#layerBg)" stroke="#27272A" stroke-width="1"/>
-  <rect x="40" y="723" width="8" height="115" rx="4" fill="#22C55E" fill-opacity="0.3"/>
+  <!-- Policy Engine → Access -->
+  <line x1="770" y1="541" x2="618" y2="541" stroke="#8B5CF6" stroke-opacity="0.4" stroke-width="1.5" marker-end="url(#arrowPurple)" stroke-dasharray="4,3"/>
 
-  <rect x="56" y="731" width="80" height="20" rx="4" fill="#22C55E" fill-opacity="0.15"/>
-  <text x="64" y="744" font-family="'JetBrains Mono', monospace" font-size="10" fill="#22C55E" font-weight="500">DATA LAYER</text>
+  <!-- Connector → Identity (data sync) -->
+  <path d="M 350 660 L 340 660 L 340 584" stroke="#6366F1" stroke-opacity="0.3" stroke-width="1" fill="none" stroke-dasharray="4,3"/>
+
+  <!-- Vault → Connector (credential injection) -->
+  <path d="M 770 660 L 620 660" stroke="#EF4444" stroke-opacity="0.3" stroke-width="1" marker-end="url(#arrowPurple)"/>
+
+  <!-- All services → Kafka -->
+  <path d="M 210 660 L 210 720 L 1040 720 L 1040 738" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1" fill="none"/>
+  <path d="M 490 660 L 490 720 L 1040 720 L 1040 738" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1" fill="none"/>
+  <path d="M 770 660 L 770 720 L 1040 720 L 1040 738" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1" fill="none"/>
+  
+  <!-- All services → Temporal -->
+  <path d="M 210 584 L 210 550 L 270 550 L 270 738" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1" fill="none"/>
+  <path d="M 490 584 L 490 550 L 310 550 L 310 738" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1" fill="none"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+     PRIVATE SUBNET — DATA LAYER
+     ══════════════════════════════════════════════════════════════════ -->
 
   <!-- PostgreSQL -->
   <g filter="url(#boxShadow)">
-    <rect x="56" y="757" width="310" height="70" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="70" y="777" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#22C55E">PostgreSQL 16</text>
-    <text x="70" y="795" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">21 tables · Full-text search · GIN indexes</text>
-    <text x="70" y="811" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Connectors · Identities · Roles · Entitlements · Audit · Outbox</text>
+    <rect x="80" y="942" width="320" height="90" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="80" y="942" width="4" height="90" rx="2" fill="#22C55E"/>
+    <rect x="96" y="952" width="24" height="24" rx="4" fill="#22C55E" fill-opacity="0.15"/>
+    <text x="100" y="968" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="11" fill="#22C55E">P</text>
+    <text x="128" y="969" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">PostgreSQL 16</text>
+    <text x="96" y="992" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">21 tables · GIN indexes · Full-text search</text>
+    <text x="96" y="1008" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">Identities · Connectors · Roles · Audit · Outbox · Policies</text>
+    <text x="96" y="1022" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Docker: observeid-postgres · :5432</text>
   </g>
 
   <!-- Neo4j -->
   <g filter="url(#boxShadow)">
-    <rect x="386" y="757" width="290" height="70" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="400" y="777" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#22C55E">Neo4j 5 Enterprise</text>
-    <text x="400" y="795" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">8 labels · 7 relationships · Full-text indexes</text>
-    <text x="400" y="811" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Blast radius · SoD · Access paths</text>
+    <rect x="420" y="942" width="320" height="90" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="420" y="942" width="4" height="90" rx="2" fill="#22C55E"/>
+    <rect x="436" y="952" width="24" height="24" rx="4" fill="#22C55E" fill-opacity="0.15"/>
+    <text x="440" y="968" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="11" fill="#22C55E">N</text>
+    <text x="468" y="969" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Neo4j 5 Enterprise</text>
+    <text x="436" y="992" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">8 labels · 7 relationships · Full-text indexes</text>
+    <text x="436" y="1008" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">Blast radius · SoD analysis · Access paths</text>
+    <text x="436" y="1022" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Bolt :7687 · neo4j:observeid123</text>
   </g>
 
   <!-- Redis -->
   <g filter="url(#boxShadow)">
-    <rect x="696" y="757" width="170" height="70" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="710" y="777" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#22C55E">Redis 7</text>
-    <text x="710" y="795" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Distributed locks</text>
-    <text x="710" y="811" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Sticky revocations</text>
+    <rect x="760" y="942" width="240" height="90" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="760" y="942" width="4" height="90" rx="2" fill="#22C55E"/>
+    <text x="776" y="969" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Redis 7</text>
+    <text x="776" y="992" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Session caching</text>
+    <text x="776" y="1008" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">Distributed locks</text>
+    <text x="776" y="1022" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Sticky revocations</text>
   </g>
 
   <!-- Qdrant -->
   <g filter="url(#boxShadow)">
-    <rect x="886" y="757" width="160" height="70" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="900" y="777" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#22C55E">Qdrant 1.10</text>
-    <text x="900" y="795" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Vector embeddings</text>
-    <text x="900" y="811" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">AI Copilot (GraphRAG)</text>
+    <rect x="1020" y="942" width="240" height="90" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="1020" y="942" width="4" height="90" rx="2" fill="#22C55E"/>
+    <text x="1036" y="969" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Qdrant 1.10</text>
+    <text x="1036" y="992" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Vector embeddings store</text>
+    <text x="1036" y="1008" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">AI Copilot (GraphRAG)</text>
+    <text x="1036" y="1022" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">gRPC :6333</text>
   </g>
 
   <!-- Filesystem -->
   <g filter="url(#boxShadow)">
-    <rect x="1066" y="757" width="260" height="70" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="1080" y="777" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#22C55E">Filesystem</text>
-    <text x="1080" y="795" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Vault encrypted JSON store</text>
-    <text x="1080" y="811" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Frontend static export (out/)</text>
+    <rect x="1280" y="942" width="220" height="90" rx="6" fill="url(#serviceGrad)" stroke="#22C55E" stroke-opacity="0.3" stroke-width="1"/>
+    <rect x="1280" y="942" width="4" height="90" rx="2" fill="#22C55E"/>
+    <text x="1296" y="969" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Filesystem</text>
+    <text x="1296" y="992" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Vault encrypted JSON store</text>
+    <text x="1296" y="1008" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">Frontend static export</text>
+    <text x="1296" y="1022" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">frontend/out · vault/</text>
   </g>
 
-  <!-- Down arrow -->
-  <line x1="700" y1="838" x2="700" y2="862" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <!-- ══════════════════════════════════════════════════════════════════
+     DATA FLOW ARROWS (Compute → Data)
+     ══════════════════════════════════════════════════════════════════ -->
 
-  <!-- ═══════════════ LAYER 6: SECURITY & OBSERVABILITY ═══════════════ -->
-  <rect x="40" y="865" width="1320" height="115" rx="8" fill="url(#layerBg)" stroke="#27272A" stroke-width="1"/>
-  <rect x="40" y="865" width="8" height="115" rx="4" fill="#EAB308" fill-opacity="0.3"/>
+  <!-- Identity Service → PostgreSQL -->
+  <path d="M 210 584 L 210 940" stroke="#22C55E" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+  <text x="218" y="770" font-family="'JetBrains Mono', monospace" font-size="8" fill="#22C55E" transform="rotate(90, 218, 770)">SQL · pgx/v5</text>
 
-  <rect x="56" y="873" width="160" height="20" rx="4" fill="#EAB308" fill-opacity="0.15"/>
-  <text x="64" y="886" font-family="'JetBrains Mono', monospace" font-size="10" fill="#EAB308" font-weight="500">SECURITY & OBSERVABILITY</text>
+  <!-- Identity Service → Neo4j -->
+  <path d="M 210 584 L 210 880 L 580 880 L 580 940" stroke="#22C55E" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+  <text x="400" y="874" font-family="'JetBrains Mono', monospace" font-size="8" fill="#22C55E">Cypher · neo4j-go-driver</text>
 
-  <!-- Security -->
+  <!-- Access Service → PostgreSQL -->
+  <path d="M 490 584 L 490 940" stroke="#22C55E" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+  <text x="498" y="770" font-family="'JetBrains Mono', monospace" font-size="8" fill="#22C55E" transform="rotate(90, 498, 770)">SQL</text>
+
+  <!-- AI Copilot → Neo4j -->
+  <path d="M 1050 584 L 1050 880 L 580 880 L 580 940" stroke="#22C55E" stroke-opacity="0.4" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrowGreen)"/>
+
+  <!-- AI Copilot → Qdrant -->
+  <path d="M 1050 584 L 1050 940" stroke="#22C55E" stroke-opacity="0.4" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrowGreen)"/>
+  <text x="1058" y="770" font-family="'JetBrains Mono', monospace" font-size="8" fill="#22C55E" transform="rotate(90, 1058, 770)">gRPC embeddings</text>
+
+  <!-- All services → Redis -->
+  <path d="M 880 584 L 880 940" stroke="#22C55E" stroke-opacity="0.4" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrowGreen)"/>
+
+  <!-- Temporal Server → PostgreSQL -->
+  <path d="M 270 818 L 270 940" stroke="#22C55E" stroke-opacity="0.4" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+     MANAGEMENT &amp; OBSERVABILITY PLANE
+     ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- OpenTelemetry Collector -->
   <g filter="url(#boxShadow)">
-    <rect x="56" y="899" width="350" height="70" rx="6" fill="url(#serviceGrad)" stroke="#EAB308" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="70" y="919" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#EAB308">Security</text>
-    <text x="70" y="937" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">SPIFFE/SPIRE 1.9 (k8s: mTLS, workload identity)</text>
-    <text x="70" y="953" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Cedar Policies · AES-256-GCM · CAEP</text>
+    <rect x="80" y="1140" width="240" height="55" rx="6" fill="url(#serviceGrad)" stroke="#EAB308" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="80" y="1140" width="4" height="55" rx="2" fill="#EAB308"/>
+    <text x="96" y="1162" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FDE047">OpenTelemetry Collector</text>
+    <text x="96" y="1180" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Traces (gRPC) · Metrics (Prometheus)</text>
   </g>
 
-  <!-- Observability -->
+  <!-- Grafana -->
   <g filter="url(#boxShadow)">
-    <rect x="426" y="899" width="380" height="70" rx="6" fill="url(#serviceGrad)" stroke="#EAB308" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="440" y="919" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#EAB308">Observability</text>
-    <text x="440" y="937" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">OpenTelemetry Collector · Traces (gRPC) · Metrics (Prometheus)</text>
-    <text x="440" y="953" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Grafana 11.1 (provisioned dashboard, 10+ panels)</text>
+    <rect x="340" y="1140" width="240" height="55" rx="6" fill="url(#serviceGrad)" stroke="#EAB308" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="340" y="1140" width="4" height="55" rx="2" fill="#EAB308"/>
+    <text x="356" y="1162" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FDE047">Grafana 11.1</text>
+    <text x="356" y="1180" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Provisioned dashboard, 10+ panels</text>
   </g>
 
-  <!-- Monitoring -->
+  <!-- Prometheus Metrics -->
   <g filter="url(#boxShadow)">
-    <rect x="826" y="899" width="260" height="70" rx="6" fill="url(#serviceGrad)" stroke="#EAB308" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="840" y="919" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#EAB308">Health & Monitoring</text>
-    <text x="840" y="937" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">/health · /ready (PG + Neo4j + Redis)</text>
-    <text x="840" y="953" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Graceful shutdown · Audit middleware</text>
+    <rect x="600" y="1140" width="240" height="55" rx="6" fill="url(#serviceGrad)" stroke="#EAB308" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="600" y="1140" width="4" height="55" rx="2" fill="#EAB308"/>
+    <text x="616" y="1162" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FDE047">Prometheus /metrics</text>
+    <text x="616" y="1180" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">14 metric families · :2112</text>
+  </g>
+
+  <!-- Health Monitoring -->
+  <g filter="url(#boxShadow)">
+    <rect x="860" y="1140" width="240" height="55" rx="6" fill="url(#serviceGrad)" stroke="#EAB308" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="860" y="1140" width="4" height="55" rx="2" fill="#EAB308"/>
+    <text x="876" y="1162" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FDE047">Health Checks</text>
+    <text x="876" y="1180" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">/health · /ready (PG+Neo4j+Redis)</text>
   </g>
 
   <!-- Audit -->
   <g filter="url(#boxShadow)">
-    <rect x="1106" y="899" width="220" height="70" rx="6" fill="url(#serviceGrad)" stroke="#EAB308" stroke-opacity="0.3" stroke-width="1"/>
-    <text x="1120" y="919" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#EAB308">Audit</text>
-    <text x="1120" y="937" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">In-memory ring buffer (10k)</text>
-    <text x="1120" y="953" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">PG audit_log table</text>
+    <rect x="1120" y="1140" width="240" height="55" rx="6" fill="url(#serviceGrad)" stroke="#EAB308" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="1120" y="1140" width="4" height="55" rx="2" fill="#EAB308"/>
+    <text x="1136" y="1162" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="600" fill="#FDE047">Audit Subsystem</text>
+    <text x="1136" y="1180" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">In-memory ring buffer (10k) + PG</text>
   </g>
 
-  <!-- Bottom Bar: Deployment Context -->
-  <rect x="40" y="995" width="1320" height="90" rx="8" fill="url(#layerBg)" stroke="#27272A" stroke-width="1"/>
-  <rect x="40" y="995" width="8" height="90" rx="4" fill="#A1A1AA" fill-opacity="0.3"/>
+  <!-- Observability arrows from services -->
+  <path d="M 210 818 L 210 1100 L 200 1100 L 200 1138" stroke="#EAB308" stroke-opacity="0.3" stroke-width="1" fill="none" marker-end="url(#arrowBlue)"/>
+  <path d="M 490 818 L 490 1100 L 480 1100 L 480 1138" stroke="#EAB308" stroke-opacity="0.3" stroke-width="1" fill="none"/>
+  <path d="M 880 818 L 880 1100 L 720 1100 L 720 1138" stroke="#EAB308" stroke-opacity="0.3" stroke-width="1" fill="none" marker-end="url(#arrowBlue)"/>
 
-  <rect x="56" y="1003" width="100" height="20" rx="4" fill="#A1A1AA" fill-opacity="0.15"/>
-  <text x="64" y="1016" font-family="'JetBrains Mono', monospace" font-size="10" fill="#A1A1AA" font-weight="500">DEPLOYMENT</text>
+  <!-- ══════════════════════════════════════════════════════════════════
+     LEGEND
+     ══════════════════════════════════════════════════════════════════ -->
 
-  <g filter="url(#boxShadow)">
-    <rect x="56" y="1027" width="300" height="46" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="70" y="1047" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA">Docker Compose (Dev)</text>
-    <text x="70" y="1063" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">11 containers · bridge network · 5 named volumes</text>
-  </g>
+  <rect x="40" y="1268" width="1520" height="70" rx="8" fill="#16171E" stroke="#27272A" stroke-width="1"/>
+  <text x="60" y="1292" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="11" font-weight="600" fill="#717D96">LEGEND</text>
 
-  <g filter="url(#boxShadow)">
-    <rect x="376" y="1027" width="320" height="46" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="390" y="1047" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA">Kubernetes · EKS (Production)</text>
-    <text x="390" y="1063" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">3 replicas · HPA 3-20 · PDB · ALB Ingress · WAF</text>
-  </g>
+  <rect x="60" y="1306" width="14" height="14" rx="2" fill="#3B82F6"/>
+  <text x="82" y="1318" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Networking / Edge</text>
 
-  <g filter="url(#boxShadow)">
-    <rect x="716" y="1027" width="280" height="46" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="730" y="1047" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA">CI/CD · GitHub Actions</text>
-    <text x="730" y="1063" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">CI (Go + TS) · Deploy Frontend · Docker Publish</text>
-  </g>
+  <rect x="240" y="1306" width="14" height="14" rx="2" fill="#8B5CF6"/>
+  <text x="262" y="1318" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Compute / Application</text>
 
-  <g filter="url(#boxShadow)">
-    <rect x="1016" y="1027" width="310" height="46" rx="6" fill="url(#serviceGrad)" stroke="#27272A" stroke-width="1"/>
-    <text x="1030" y="1047" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#FAFAFA">Edge · Cloudflare</text>
-    <text x="1030" y="1063" font-family="'JetBrains Mono', monospace" font-size="9" fill="#A1A1AA">Pages · Tunnel · Worker · Wrangler deploy</text>
-  </g>
+  <rect x="460" y="1306" width="14" height="14" rx="2" fill="#22C55E"/>
+  <text x="482" y="1318" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Data Store</text>
+
+  <rect x="630" y="1306" width="14" height="14" rx="2" fill="#EC4899"/>
+  <text x="652" y="1318" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Workflow / Event Stream</text>
+
+  <rect x="860" y="1306" width="14" height="14" rx="2" fill="#EF4444"/>
+  <text x="882" y="1318" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Security / Vault</text>
+
+  <rect x="1040" y="1306" width="14" height="14" rx="2" fill="#EAB308"/>
+  <text x="1062" y="1318" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Observability</text>
+
+  <rect x="1240" y="1306" width="14" height="14" rx="2" fill="#F38020"/>
+  <text x="1262" y="1318" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Cloudflare Edge</text>
+
+  <!-- Arrow styles in legend -->
+  <line x1="60" y1="1342" x2="100" y2="1342" stroke="#3B82F6" stroke-width="2" marker-end="url(#arrowBlue)"/>
+  <text x="108" y="1346" font-family="'JetBrains Mono', monospace" font-size="8" fill="#717D96">Data flow direction</text>
+
+  <line x1="300" y1="1342" x2="340" y2="1342" stroke="#717D96" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="348" y="1346" font-family="'JetBrains Mono', monospace" font-size="8" fill="#717D96">Async / background</text>
 
   <!-- Bottom accent line -->
-  <rect x="40" y="1096" width="400" height="2" rx="1" fill="url(#accentLine)"/>
+  <rect x="40" y="1358" width="1520" height="1" fill="url(#accentLine)"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+     DEPLOYMENT / CI/CD BAR
+     ══════════════════════════════════════════════════════════════════ -->
+
+  <rect x="40" y="1378" width="1520" height="48" rx="6" fill="#16171E" stroke="#27272A" stroke-width="1"/>
+
+  <g filter="url(#boxShadow)">
+    <rect x="56" y="1388" width="220" height="28" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
+    <text x="66" y="1406" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">🐳 Docker Compose · 11 ctns</text>
+  </g>
+  <g filter="url(#boxShadow)">
+    <rect x="296" y="1388" width="240" height="28" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
+    <text x="306" y="1406" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">☸ EKS · 3 replicas · HPA 3-20</text>
+  </g>
+  <g filter="url(#boxShadow)">
+    <rect x="556" y="1388" width="260" height="28" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
+    <text x="566" y="1406" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">⚡ Cloudflare Pages + Tunnel</text>
+  </g>
+  <g filter="url(#boxShadow)">
+    <rect x="836" y="1388" width="240" height="28" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
+    <text x="846" y="1406" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">🔁 GitHub Actions CI/CD</text>
+  </g>
+  <g filter="url(#boxShadow)">
+    <rect x="1096" y="1388" width="200" height="28" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
+    <text x="1106" y="1406" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">📦 5 named volumes</text>
+  </g>
+  <g filter="url(#boxShadow)">
+    <rect x="1316" y="1388" width="220" height="28" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
+    <text x="1326" y="1406" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">🛡️ SPIFFE/SPIRE mTLS</text>
+  </g>
 </svg>

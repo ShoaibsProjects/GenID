@@ -255,6 +255,22 @@ services:
       - observeid-net
     logging: *default-logging
 
+  # ─── Temporal Web UI ───────────────────────────────────────
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: observeid-temporal-ui
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_GRPC_ENDPOINT: temporal:7233
+    ports:
+      - "8234:8080"
+    networks:
+      - observeid-net
+    logging: *default-logging
+
   # ─── Grafana ───────────────────────────────────────────────
   grafana:
     image: grafana/grafana:11.1.0
