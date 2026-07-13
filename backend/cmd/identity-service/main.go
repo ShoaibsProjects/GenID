@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -205,15 +206,38 @@ func main() {
 	}).Methods("GET")
 
 	r.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		// Check dependencies
+		checks := map[string]string{}
+
 		if err := rdb.Ping(r.Context()).Err(); err != nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			fmt.Fprint(w, `{"status":"unavailable","reason":"redis_down"}`)
-			return
+			checks["redis"] = "down"
+		} else {
+			checks["redis"] = "ok"
 		}
+
+		if err := pgPool.Ping(r.Context()); err != nil {
+			checks["postgres"] = "down"
+		} else {
+			checks["postgres"] = "ok"
+		}
+
+		if err := neo4jDriver.VerifyConnectivity(r.Context()); err != nil {
+			checks["neo4j"] = "down"
+		} else {
+			checks["neo4j"] = "ok"
+		}
+
+		for _, status := range checks {
+			if status == "down" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				json.NewEncoder(w).Encode(map[string]any{"status": "unavailable", "checks": checks})
+				return
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"status":"ready"}`)
+		json.NewEncoder(w).Encode(map[string]any{"status": "ready", "checks": checks})
 	}).Methods("GET")
 
 	// SCIM endpoints
