@@ -664,7 +664,7 @@ func (s *ActivityService) RevokeAPIKeys(ctx context.Context, params map[string]a
 		WHERE id = $1 OR owner_id = $1`, agentID)
 
 	// Invalidate in Redis
-	s.redis.Del(ctx, fmt.Sprintf("apikey:hash:%s:*"))
+	s.redis.Del(ctx, fmt.Sprintf("apikey:hash:%s:*", agentID))
 
 	_, _ = s.pgPool.Exec(ctx, `
 		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, ip_address, created_at)
