@@ -166,7 +166,10 @@ func (c *EntraConnector) graphPost(ctx context.Context, path string, payload any
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("entra: post %s read body: %w", path, err)
+	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("entra: post %s returned %d: %s", path, resp.StatusCode, string(body))
 	}
@@ -193,7 +196,10 @@ func (c *EntraConnector) graphPatch(ctx context.Context, path string, payload an
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("entra: patch %s returned %d (body unreadable: %v)", path, resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("entra: patch %s returned %d: %s", path, resp.StatusCode, string(body))
 	}
 	return nil
@@ -217,7 +223,10 @@ func (c *EntraConnector) graphDelete(ctx context.Context, path string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("entra: delete %s returned %d (body unreadable: %v)", path, resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("entra: delete %s returned %d: %s", path, resp.StatusCode, string(body))
 	}
 	return nil

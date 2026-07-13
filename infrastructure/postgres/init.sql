@@ -540,6 +540,14 @@ CREATE TRIGGER trg_connectors_updated   BEFORE UPDATE ON connectors           FO
 CREATE TRIGGER trg_cg_updated          BEFORE UPDATE ON connector_groups      FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 CREATE TRIGGER trg_ce_updated          BEFORE UPDATE ON connector_entitlements FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 CREATE TRIGGER trg_cr_updated          BEFORE UPDATE ON connector_resources    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER trg_tenants_updated     BEFORE UPDATE ON tenants                FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER trg_cedar_updated       BEFORE UPDATE ON cedar_policies         FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+-- Ensure ON DELETE CASCADE on connector tenant references
+ALTER TABLE connector_identities     DROP CONSTRAINT IF EXISTS connector_identities_tenant_id_fkey,     ADD FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+ALTER TABLE connector_groups         DROP CONSTRAINT IF EXISTS connector_groups_tenant_id_fkey,         ADD FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+ALTER TABLE connector_entitlements   DROP CONSTRAINT IF EXISTS connector_entitlements_tenant_id_fkey,   ADD FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+ALTER TABLE connector_resources      DROP CONSTRAINT IF EXISTS connector_resources_tenant_id_fkey,      ADD FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
 
 -- ─── Seed Data: Default Tenant ─────────────────────────────
 INSERT INTO tenants (id, name, slug, tier) VALUES

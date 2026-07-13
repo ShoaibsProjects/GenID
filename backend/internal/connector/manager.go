@@ -152,7 +152,10 @@ func (m *Manager) Register(ctx context.Context, config ConnectorConfig) (string,
 	}
 
 	// Persist to PostgreSQL
-	cfgJSON, _ := json.Marshal(config)
+	cfgJSON, err := json.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("manager: marshal config: %w", err)
+	}
 	_, err = m.pgPool.Exec(ctx, `
 		INSERT INTO connectors (id, tenant_id, name, connector_type, status, config)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -613,18 +616,23 @@ func (m *Manager) GetConnectorUsers(ctx context.Context, id string) ([]Connector
 // ─── Internal Helpers ─────────────────────────────────────────
 
 func (m *Manager) updateConfig(ctx context.Context, config ConnectorConfig) {
-	m.mu.Lock()
 	config.UpdatedAt = time.Now()
-	m.configs[config.ID] = config
-	m.mu.Unlock()
 
-	cfgJSON, _ := json.Marshal(config)
+	cfgJSON, err := json.Marshal(config)
+	if err != nil {
+		log.Printf("[MANAGER] updateConfig marshal: %v", err)
+		return
+	}
 	if _, err := m.pgPool.Exec(ctx, `
 		UPDATE connectors SET status = $1, config = $2, last_sync_at = $3, last_error = $4, updated_at = NOW()
 		WHERE id = $5
 	`, string(config.Status), cfgJSON, config.LastSyncAt, config.LastError, config.ID); err != nil {
 		log.Printf("[MANAGER] updateConfig: %v", err)
+		return
 	}
+	m.mu.Lock()
+	m.configs[config.ID] = config
+	m.mu.Unlock()
 }
 
 func (m *Manager) updateHealth(id string, status ConnectorStatus, lastError string) {

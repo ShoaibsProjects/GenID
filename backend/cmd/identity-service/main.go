@@ -330,8 +330,18 @@ func main() {
 	}()
 
 	log.Info().Str("addr", srv.Addr).Msg("HTTP server listening")
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal().Err(err).Msg("Server failed")
+
+	certFile := getEnv("TLS_CERT_FILE", "")
+	keyFile := getEnv("TLS_KEY_FILE", "")
+	var srvErr error
+	if certFile != "" && keyFile != "" {
+		log.Info().Msg("TLS enabled")
+		srvErr = srv.ListenAndServeTLS(certFile, keyFile)
+	} else {
+		srvErr = srv.ListenAndServe()
+	}
+	if srvErr != nil && srvErr != http.ErrServerClosed {
+		log.Fatal().Err(srvErr).Msg("Server failed")
 	}
 	log.Info().Msg("Server stopped")
 }
