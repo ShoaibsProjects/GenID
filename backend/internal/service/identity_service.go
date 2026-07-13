@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -162,8 +163,8 @@ func (s *IdentityService) ListIdentities(w http.ResponseWriter, r *http.Request)
 	for result.Next(r.Context()) {
 		rec := result.Record()
 		identities = append(identities, map[string]any{
-			"uuid":       getRecordVal(rec, "uuid"),
-			"name":       getRecordVal(rec, "display_name"),
+			"id":         getRecordVal(rec, "uuid"),
+			"name":       getRecordVal(rec, "name"),
 			"email":      getRecordVal(rec, "email"),
 			"status":     getRecordVal(rec, "status"),
 			"type":       getRecordVal(rec, "type"),
@@ -627,6 +628,35 @@ func (s *IdentityService) GrantAccess(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusAccepted, map[string]any{
 		"status":      "provisioning",
+		"workflow_id": workflowID,
+	})
+}
+
+func (s *IdentityService) StartJustInTimeWorkflow(ctx context.Context, input workflow.JustInTimeInput) (string, error) {
+	workflowID := fmt.Sprintf("jit-access-%s-%s", input.IdentityID, uuid.New().String()[:8])
+	_, err := s.temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "critical_offboarding",
+	}, workflow.JustInTimeAccessWorkflow, input)
+	if err != nil {
+		return "", fmt.Errorf("start jit workflow: %w", err)
+	}
+	return workflowID, nil
+}
+
+func (s *IdentityService) JustInTimeAccess(w http.ResponseWriter, r *http.Request) {
+	var req workflow.JustInTimeInput
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	workflowID, err := s.StartJustInTimeWorkflow(r.Context(), req)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusAccepted, map[string]any{
+		"status":      "jit_access_provisioning",
 		"workflow_id": workflowID,
 	})
 }
@@ -1318,6 +1348,99 @@ func (s *IdentityService) SyncConnectorResources(w http.ResponseWriter, r *http.
 		"status":          "resources_sync_completed",
 		"resources_total": len(resources),
 		"connector_id":    id,
+	})
+}
+
+// ─── CSV Upload ────────────────────────────────────────────────
+
+func (s *IdentityService) CSVUpload(w http.ResponseWriter, r *http.Request) {
+	const maxCSVSize = 20 << 20
+
+	var req struct {
+		Name     string `json:"name"`
+		CSVData  string `json:"csv_data"`
+		TenantID string `json:"tenant_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+	if req.CSVData == "" {
+		respondError(w, http.StatusBadRequest, "csv_data field is required")
+		return
+	}
+	if len(req.CSVData) > maxCSVSize {
+		respondError(w, http.StatusBadRequest, "CSV data exceeds maximum size")
+		return
+	}
+
+	connectorName := req.Name
+	if connectorName == "" {
+		connectorName = "CSV Import"
+	}
+
+	uploadDir := os.Getenv("CSV_UPLOAD_DIR")
+	if uploadDir == "" {
+		uploadDir = "/tmp/observeid-csv-uploads"
+	}
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to create upload directory")
+		return
+	}
+
+	savePath := filepath.Join(uploadDir, uuid.New().String()+".csv")
+	if err := os.WriteFile(savePath, []byte(req.CSVData), 0600); err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to save file")
+		return
+	}
+
+	// Validate the CSV can be parsed
+	cfg := connector.ConnectorConfig{
+		Name:     connectorName,
+		Type:     connector.ConnectorTypeCSV,
+		Endpoint: savePath,
+		Status:   connector.ConnectorStatusConnected,
+	}
+	if req.TenantID != "" {
+		cfg.TenantID = req.TenantID
+	}
+
+	// Quick test parse before registering
+	tmpConn := connector.NewCSVConnector()
+	if err := tmpConn.Configure(cfg); err != nil {
+		os.Remove(savePath)
+		respondError(w, http.StatusBadRequest, "Invalid connector config: "+err.Error())
+		return
+	}
+	if users, err := tmpConn.ListUsers(r.Context()); err != nil {
+		os.Remove(savePath)
+		respondError(w, http.StatusBadRequest, "CSV parse error: "+err.Error())
+		return
+	} else if len(users) == 0 {
+		os.Remove(savePath)
+		respondError(w, http.StatusBadRequest, "CSV file has no valid user rows")
+		return
+	}
+
+	id, err := s.connMgr.Register(r.Context(), cfg)
+	if err != nil {
+		os.Remove(savePath)
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	s.auditLog.Append(audit.Entry{
+		Level:   audit.LevelInfo,
+		Service: "connector",
+		Path:    r.URL.Path,
+		Message: fmt.Sprintf("CSV connector created: %s", connectorName),
+		Tags:    []string{"connector", "csv", "upload"},
+	})
+
+	respondJSON(w, http.StatusCreated, map[string]any{
+		"connector_id":   id,
+		"connector_name": connectorName,
+		"status":         "registered",
 	})
 }
 

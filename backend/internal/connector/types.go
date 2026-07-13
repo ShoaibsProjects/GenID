@@ -15,6 +15,7 @@ const (
 	ConnectorTypeAWS     ConnectorType = "aws_iam"
 	ConnectorTypeGCP     ConnectorType = "gcp_iam"
 	ConnectorTypeGeneric ConnectorType = "generic"
+	ConnectorTypeCSV     ConnectorType = "csv"
 )
 
 type ConnectorStatus string

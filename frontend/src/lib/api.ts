@@ -262,6 +262,17 @@ export function revokeAccess(data: any): Promise<any> {
   return apiRequest<any>("/api/v1/access/revoke", { method: "POST", body: data })
 }
 
+export function requestJITAccess(data: {
+  identity_id: string;
+  resource_id: string;
+  resource_type?: string;
+  action?: string;
+  duration_mins: number;
+  reason: string;
+}): Promise<any> {
+  return apiRequest<any>("/api/v1/access/jit", { method: "POST", body: data })
+}
+
 // ─── CAEP ────────────────────────────────────────────────
 
 export function fetchCAEPEvents(): Promise<any> {

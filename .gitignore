@@ -18,6 +18,7 @@
 **/*.exe
 **/*.exe~
 **/*.dll
+**/identity-service
 **/*.so
 **/*.dylib
 **/*.test

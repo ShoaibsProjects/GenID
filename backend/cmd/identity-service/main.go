@@ -308,6 +308,7 @@ func main() {
 	api.HandleFunc("/access/check", svc.CheckAccess).Methods("POST")
 	api.HandleFunc("/access/grant", svc.GrantAccess).Methods("POST")
 	api.HandleFunc("/access/revoke", svc.RevokeAccess).Methods("POST")
+	api.HandleFunc("/access/jit", svc.JustInTimeAccess).Methods("POST")
 
 	// AI Copilot API
 	api.HandleFunc("/copilot/query", svc.CopilotQuery).Methods("POST")
@@ -338,6 +339,7 @@ func main() {
 	api.HandleFunc("/connectors/{id}/sync-groups", svc.SyncConnectorGroups).Methods("POST")
 	api.HandleFunc("/connectors/{id}/sync-entitlements", svc.SyncConnectorEntitlements).Methods("POST")
 	api.HandleFunc("/connectors/{id}/sync-resources", svc.SyncConnectorResources).Methods("POST")
+	api.HandleFunc("/connectors/csv/upload", svc.CSVUpload).Methods("POST")
 
 	// ─── IAM Lifecycle Management (LCM) ────────────
 	api.HandleFunc("/lcm", svc.ExecuteLCM).Methods("POST")

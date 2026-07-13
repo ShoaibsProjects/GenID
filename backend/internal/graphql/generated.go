@@ -123,15 +123,16 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		ConnectConnector    func(childComplexity int, id string) int
-		CreateConnector     func(childComplexity int, input CreateConnectorInput) int
-		CreateIdentity      func(childComplexity int, input CreateIdentityInput) int
-		DeleteConnector     func(childComplexity int, id string) int
-		DeleteIdentity      func(childComplexity int, id string) int
-		DisconnectConnector func(childComplexity int, id string) int
-		SyncConnector       func(childComplexity int, id string) int
-		SyncConnectorDelta  func(childComplexity int, id string) int
-		UpdateIdentity      func(childComplexity int, id string, input UpdateIdentityInput) int
+		ConnectConnector        func(childComplexity int, id string) int
+		CreateConnector         func(childComplexity int, input CreateConnectorInput) int
+		CreateIdentity          func(childComplexity int, input CreateIdentityInput) int
+		DeleteConnector         func(childComplexity int, id string) int
+		DeleteIdentity          func(childComplexity int, id string) int
+		DisconnectConnector     func(childComplexity int, id string) int
+		RequestJustInTimeAccess func(childComplexity int, input JITAccessInput) int
+		SyncConnector           func(childComplexity int, id string) int
+		SyncConnectorDelta      func(childComplexity int, id string) int
+		UpdateIdentity          func(childComplexity int, id string, input UpdateIdentityInput) int
 	}
 
 	NonHumanIdentity struct {
@@ -176,6 +177,12 @@ type ComplexityRoot struct {
 		Checks func(childComplexity int) int
 		Status func(childComplexity int) int
 	}
+
+	WorkflowResult struct {
+		Message    func(childComplexity int) int
+		Status     func(childComplexity int) int
+		WorkflowID func(childComplexity int) int
+	}
 }
 
 type MutationResolver interface {
@@ -188,6 +195,7 @@ type MutationResolver interface {
 	DisconnectConnector(ctx context.Context, id string) (*Connector, error)
 	SyncConnector(ctx context.Context, id string) (*Connector, error)
 	SyncConnectorDelta(ctx context.Context, id string) (*Connector, error)
+	RequestJustInTimeAccess(ctx context.Context, input JITAccessInput) (*WorkflowResult, error)
 }
 type QueryResolver interface {
 	Identities(ctx context.Context, limit *int, offset *int) ([]*Identity, error)
@@ -673,6 +681,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Mutation.DisconnectConnector(childComplexity, args["id"].(string)), true
 
+	case "Mutation.requestJustInTimeAccess":
+		if e.complexity.Mutation.RequestJustInTimeAccess == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_requestJustInTimeAccess_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Mutation.RequestJustInTimeAccess(childComplexity, args["input"].(JITAccessInput)), true
+
 	case "Mutation.syncConnector":
 		if e.complexity.Mutation.SyncConnector == nil {
 			break
@@ -971,6 +991,27 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.ReadinessResult.Status(childComplexity), true
 
+	case "WorkflowResult.message":
+		if e.complexity.WorkflowResult.Message == nil {
+			break
+		}
+
+		return e.complexity.WorkflowResult.Message(childComplexity), true
+
+	case "WorkflowResult.status":
+		if e.complexity.WorkflowResult.Status == nil {
+			break
+		}
+
+		return e.complexity.WorkflowResult.Status(childComplexity), true
+
+	case "WorkflowResult.workflowId":
+		if e.complexity.WorkflowResult.WorkflowID == nil {
+			break
+		}
+
+		return e.complexity.WorkflowResult.WorkflowID(childComplexity), true
+
 	}
 	return 0, false
 }
@@ -981,6 +1022,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputCreateConnectorInput,
 		ec.unmarshalInputCreateIdentityInput,
+		ec.unmarshalInputJITAccessInput,
 		ec.unmarshalInputSyncConnectorInput,
 		ec.unmarshalInputUpdateIdentityInput,
 	)
@@ -1288,6 +1330,38 @@ func (ec *executionContext) field_Mutation_disconnectConnector_argsID(
 	}
 
 	var zeroVal string
+	return zeroVal, nil
+}
+
+func (ec *executionContext) field_Mutation_requestJustInTimeAccess_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	arg0, err := ec.field_Mutation_requestJustInTimeAccess_argsInput(ctx, rawArgs)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+func (ec *executionContext) field_Mutation_requestJustInTimeAccess_argsInput(
+	ctx context.Context,
+	rawArgs map[string]interface{},
+) (JITAccessInput, error) {
+	// We won't call the directive if the argument is null.
+	// Set call_argument_directives_with_null to true to call directives
+	// even if the argument is null.
+	_, ok := rawArgs["input"]
+	if !ok {
+		var zeroVal JITAccessInput
+		return zeroVal, nil
+	}
+
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
+	if tmp, ok := rawArgs["input"]; ok {
+		return ec.unmarshalNJITAccessInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐJITAccessInput(ctx, tmp)
+	}
+
+	var zeroVal JITAccessInput
 	return zeroVal, nil
 }
 
@@ -4983,6 +5057,69 @@ func (ec *executionContext) fieldContext_Mutation_syncConnectorDelta(ctx context
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_requestJustInTimeAccess(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_Mutation_requestJustInTimeAccess(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Mutation().RequestJustInTimeAccess(rctx, fc.Args["input"].(JITAccessInput))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(*WorkflowResult)
+	fc.Result = res
+	return ec.marshalNWorkflowResult2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐWorkflowResult(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_Mutation_requestJustInTimeAccess(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "workflowId":
+				return ec.fieldContext_WorkflowResult_workflowId(ctx, field)
+			case "status":
+				return ec.fieldContext_WorkflowResult_status(ctx, field)
+			case "message":
+				return ec.fieldContext_WorkflowResult_message(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WorkflowResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_requestJustInTimeAccess_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _NonHumanIdentity_id(ctx context.Context, field graphql.CollectedField, obj *NonHumanIdentity) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_NonHumanIdentity_id(ctx, field)
 	if err != nil {
@@ -6796,6 +6933,135 @@ func (ec *executionContext) fieldContext_ReadinessResult_checks(_ context.Contex
 				return ec.fieldContext_ReadinessChecks_neo4j(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ReadinessChecks", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkflowResult_workflowId(ctx context.Context, field graphql.CollectedField, obj *WorkflowResult) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_WorkflowResult_workflowId(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.WorkflowID, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNID2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_WorkflowResult_workflowId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkflowResult_status(ctx context.Context, field graphql.CollectedField, obj *WorkflowResult) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_WorkflowResult_status(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Status, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		if !graphql.HasFieldError(ctx, fc) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.(string)
+	fc.Result = res
+	return ec.marshalNString2string(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_WorkflowResult_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkflowResult_message(ctx context.Context, field graphql.CollectedField, obj *WorkflowResult) (ret graphql.Marshaler) {
+	fc, err := ec.fieldContext_WorkflowResult_message(ctx, field)
+	if err != nil {
+		return graphql.Null
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return obj.Message, nil
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*string)
+	fc.Result = res
+	return ec.marshalOString2ᚖstring(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) fieldContext_WorkflowResult_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -8684,6 +8950,68 @@ func (ec *executionContext) unmarshalInputCreateIdentityInput(ctx context.Contex
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputJITAccessInput(ctx context.Context, obj interface{}) (JITAccessInput, error) {
+	var it JITAccessInput
+	asMap := map[string]interface{}{}
+	for k, v := range obj.(map[string]interface{}) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"identityId", "resourceId", "resourceType", "action", "durationMins", "reason"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "identityId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("identityId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IdentityID = data
+		case "resourceId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("resourceId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ResourceID = data
+		case "resourceType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("resourceType"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ResourceType = data
+		case "action":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("action"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Action = data
+		case "durationMins":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("durationMins"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DurationMins = data
+		case "reason":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("reason"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Reason = data
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputSyncConnectorInput(ctx context.Context, obj interface{}) (SyncConnectorInput, error) {
 	var it SyncConnectorInput
 	asMap := map[string]interface{}{}
@@ -9313,6 +9641,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "requestJustInTimeAccess":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_requestJustInTimeAccess(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -9800,6 +10135,52 @@ func (ec *executionContext) _ReadinessResult(ctx context.Context, sel ast.Select
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.processDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var workflowResultImplementors = []string{"WorkflowResult"}
+
+func (ec *executionContext) _WorkflowResult(ctx context.Context, sel ast.SelectionSet, obj *WorkflowResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, workflowResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WorkflowResult")
+		case "workflowId":
+			out.Values[i] = ec._WorkflowResult_workflowId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._WorkflowResult_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._WorkflowResult_message(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -10551,6 +10932,26 @@ func (ec *executionContext) marshalNIdentityType2githubᚗcomᚋobserveidᚋiden
 	return v
 }
 
+func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v interface{}) (int, error) {
+	res, err := graphql.UnmarshalInt(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.SelectionSet, v int) graphql.Marshaler {
+	res := graphql.MarshalInt(v)
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
+func (ec *executionContext) unmarshalNJITAccessInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐJITAccessInput(ctx context.Context, v interface{}) (JITAccessInput, error) {
+	res, err := ec.unmarshalInputJITAccessInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNJSON2interface(ctx context.Context, v interface{}) (any, error) {
 	res, err := graphql.UnmarshalAny(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -10700,6 +11101,20 @@ func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel
 func (ec *executionContext) unmarshalNUpdateIdentityInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐUpdateIdentityInput(ctx context.Context, v interface{}) (UpdateIdentityInput, error) {
 	res, err := ec.unmarshalInputUpdateIdentityInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNWorkflowResult2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐWorkflowResult(ctx context.Context, sel ast.SelectionSet, v WorkflowResult) graphql.Marshaler {
+	return ec._WorkflowResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNWorkflowResult2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐWorkflowResult(ctx context.Context, sel ast.SelectionSet, v *WorkflowResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WorkflowResult(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {

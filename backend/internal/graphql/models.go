@@ -100,6 +100,15 @@ type Identity struct {
 	UpdatedAt      time.Time      `json:"updatedAt"`
 }
 
+type JITAccessInput struct {
+	IdentityID   string  `json:"identityId"`
+	ResourceID   string  `json:"resourceId"`
+	ResourceType *string `json:"resourceType,omitempty"`
+	Action       *string `json:"action,omitempty"`
+	DurationMins int     `json:"durationMins"`
+	Reason       string  `json:"reason"`
+}
+
 type Mutation struct {
 }
 
@@ -144,6 +153,12 @@ type UpdateIdentityInput struct {
 	Email       *string         `json:"email,omitempty"`
 	Status      *IdentityStatus `json:"status,omitempty"`
 	Attributes  any             `json:"attributes,omitempty"`
+}
+
+type WorkflowResult struct {
+	WorkflowID string  `json:"workflowId"`
+	Status     string  `json:"status"`
+	Message    *string `json:"message,omitempty"`
 }
 
 type ConnectorStatus string

@@ -682,6 +682,8 @@ func NewConnector(connType ConnectorType) (Connector, error) {
 		return NewLDAPConnector(), nil
 	case ConnectorTypeSCIM, ConnectorTypeOkta, ConnectorTypeGeneric:
 		return NewSCIMConnector(), nil
+	case ConnectorTypeCSV:
+		return NewCSVConnector(), nil
 	default:
 		return nil, fmt.Errorf("unknown connector type: %s", connType)
 	}

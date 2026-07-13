@@ -37,6 +37,7 @@ enum ConnectorType {
     aws_iam
     gcp_iam
     generic
+    csv
 }
 
 type Identity {
@@ -185,6 +186,21 @@ type Query {
     ready: ReadinessResult!
 }
 
+input JITAccessInput {
+    identityId: ID!
+    resourceId: ID!
+    resourceType: String
+    action: String
+    durationMins: Int!
+    reason: String!
+}
+
+type WorkflowResult {
+    workflowId: ID!
+    status: String!
+    message: String
+}
+
 type Mutation {
     createIdentity(input: CreateIdentityInput!): Identity!
     updateIdentity(id: ID!, input: UpdateIdentityInput!): Identity!
@@ -195,4 +211,5 @@ type Mutation {
     disconnectConnector(id: ID!): Connector!
     syncConnector(id: ID!): Connector!
     syncConnectorDelta(id: ID!): Connector!
+    requestJustInTimeAccess(input: JITAccessInput!): WorkflowResult!
 }
