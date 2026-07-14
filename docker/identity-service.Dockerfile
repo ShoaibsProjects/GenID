@@ -22,7 +22,6 @@ RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
 # Build
 COPY backend/ .
 RUN CGO_ENABLED=0 go build -o /app/identity-service ./cmd/identity-service
-RUN CGO_ENABLED=0 go build -o /app/worker ./cmd/worker
 
 # Runtime
 FROM alpine:3.20
@@ -34,7 +33,6 @@ USER observeid
 WORKDIR /app
 
 COPY --from=builder /app/identity-service .
-COPY --from=builder /app/worker .
 
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
     CMD ["/app/identity-service", "health"]
