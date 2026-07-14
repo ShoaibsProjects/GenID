@@ -305,13 +305,13 @@ func main() {
 	api.HandleFunc("/agents/{id}/card", svc.GetAgentCard).Methods("GET")
 
 	// Access API
-	api.HandleFunc("/access/check", svc.CheckAccess).Methods("POST")
+	api.HandleFunc("/access/check", svc.CheckAccess).Methods("QUERY", "POST")
 	api.HandleFunc("/access/grant", svc.GrantAccess).Methods("POST")
 	api.HandleFunc("/access/revoke", svc.RevokeAccess).Methods("POST")
 	api.HandleFunc("/access/jit", svc.JustInTimeAccess).Methods("POST")
 
 	// AI Copilot API
-	api.HandleFunc("/copilot/query", svc.CopilotQuery).Methods("POST")
+	api.HandleFunc("/copilot/query", svc.CopilotQuery).Methods("QUERY", "POST")
 
 	// CAEP API
 	api.HandleFunc("/caep/events", svc.ListCAEPEvents).Methods("GET")
@@ -320,12 +320,12 @@ func main() {
 	// ─── Connector Management ───────────────────────
 	api.HandleFunc("/connectors", svc.ListConnectors).Methods("GET")
 	api.HandleFunc("/connectors", svc.CreateConnector).Methods("POST")
-	api.HandleFunc("/connectors/test", svc.TestConnectorConnection).Methods("POST")
+	api.HandleFunc("/connectors/test", svc.TestConnectorConnection).Methods("QUERY", "POST")
 	api.HandleFunc("/connectors/{id}", svc.GetConnector).Methods("GET")
 	api.HandleFunc("/connectors/{id}", svc.DeleteConnector).Methods("DELETE")
 	api.HandleFunc("/connectors/{id}/connect", svc.ConnectConnector).Methods("POST")
 	api.HandleFunc("/connectors/{id}/disconnect", svc.DisconnectConnector).Methods("POST")
-	api.HandleFunc("/connectors/{id}/test", svc.TestExistingConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/test", svc.TestExistingConnector).Methods("QUERY", "POST")
 	api.HandleFunc("/connectors/{id}/sync", svc.SyncConnector).Methods("POST")
 	api.HandleFunc("/connectors/{id}/sync-delta", svc.SyncConnectorDelta).Methods("POST")
 	api.HandleFunc("/connectors/{id}/users", svc.GetConnectorUsers).Methods("GET")
@@ -436,7 +436,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 		if allowedOrigin != "" {
 		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 	}
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, QUERY, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Requested-With")
 	w.Header().Set("Access-Control-Max-Age", "86400")
 	if allowedOrigin != "" && allowedOrigin != "*" {

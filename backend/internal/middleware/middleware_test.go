@@ -257,3 +257,42 @@ func TestRequestValidation_LimitsBodySize(t *testing.T) {
 	// Body exceeds MaxBytesReader limit, so the handler returns 500
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
+
+// ─── QUERY Method Validation (RFC 10008) ─────────────────
+
+func TestRequestValidation_AllowsQUERYWithJSON(t *testing.T) {
+	v := NewRequestValidation()
+	handler := v.Middleware(http.HandlerFunc(okHandler))
+
+	body := strings.NewReader(`{"question":"what access does user 1 have?"}`)
+	req := httptest.NewRequest("QUERY", "/api", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestRequestValidation_RejectsQUERYMissingContentType(t *testing.T) {
+	v := NewRequestValidation()
+	handler := v.Middleware(http.HandlerFunc(okHandler))
+
+	body := strings.NewReader(`{"question":"test"}`)
+	req := httptest.NewRequest("QUERY", "/api", body)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "missing_content_type")
+}
+
+func TestRequestValidation_RejectsQUERYWrongContentType(t *testing.T) {
+	v := NewRequestValidation()
+	handler := v.Middleware(http.HandlerFunc(okHandler))
+
+	body := strings.NewReader(`not json`)
+	req := httptest.NewRequest("QUERY", "/api", body)
+	req.Header.Set("Content-Type", "text/plain")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+	assert.Contains(t, rec.Body.String(), "unsupported_media_type")
+}

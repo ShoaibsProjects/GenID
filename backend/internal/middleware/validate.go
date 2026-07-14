@@ -22,7 +22,7 @@ func (v *RequestValidation) Middleware(next http.Handler) http.Handler {
 		if r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, v.MaxBodyBytes)
 		}
-		if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" {
+		if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" || r.Method == "QUERY" {
 			ct := r.Header.Get("Content-Type")
 			if ct == "" {
 				w.Header().Set("Content-Type", "application/json")

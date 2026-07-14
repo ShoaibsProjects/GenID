@@ -159,7 +159,7 @@ export function createConnector(config: ConnectorConfig): Promise<any> {
 }
 
 export function testConnectorConnection(config: ConnectorConfig): Promise<any> {
-  return apiRequest<any>("/api/v1/connectors/test", { method: "POST", body: config })
+  return apiRequest<any>("/api/v1/connectors/test", { method: "QUERY", body: config })
 }
 
 export function connectConnector(id: string): Promise<any> {
@@ -251,7 +251,7 @@ export function removeRole(data: { identity_id: string; role_id: string }): Prom
 // ─── Access ──────────────────────────────────────────────
 
 export function checkAccess(data: { identity_id: string; resource_id: string; action: string; tenant_id?: string }): Promise<any> {
-  return apiRequest<any>("/api/v1/access/check", { method: "POST", body: data })
+  return apiRequest<any>("/api/v1/access/check", { method: "QUERY", body: data })
 }
 
 export function grantAccess(data: any): Promise<any> {
@@ -286,7 +286,7 @@ export function broadcastCAEP(data: { event_type: string; identity_id: string; r
 // ─── Copilot ─────────────────────────────────────────────
 
 export function copilotQuery(data: { question: string; user_id?: string; tenant_id?: string }): Promise<any> {
-  return apiRequest<any>("/api/v1/copilot/query", { method: "POST", body: data })
+  return apiRequest<any>("/api/v1/copilot/query", { method: "QUERY", body: data })
 }
 
 // ─── Vault / Secrets ────────────────────────────────────
