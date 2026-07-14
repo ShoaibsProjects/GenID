@@ -1,4 +1,4 @@
-# ─── ObserveID Frontend (Next.js) ─────────────────────────
+# ─── ObserveID Frontend (Next.js static export) ──────────
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -9,22 +9,38 @@ RUN npm ci
 COPY frontend/ .
 RUN npm run build
 
-FROM node:20-alpine AS runner
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nextjs -u 1001
+# ─── Runtime: nginx ─────────────────────────────────────
+FROM nginx:alpine
 
-WORKDIR /app
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+RUN echo 'server { \
+    listen 3000; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    location /api/ { \
+        proxy_pass http://localhost:8080; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+    } \
+    location /scim/ { \
+        proxy_pass http://localhost:8080; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+    } \
+    location /graphql { \
+        proxy_pass http://localhost:8080; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+    } \
+    location / { \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
-USER nextjs
+COPY --from=builder /app/out /usr/share/nginx/html
+
 EXPOSE 3000
 
-ENV PORT=3000
-ENV NODE_ENV=production
-
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
-    CMD ["wget", "-q", "-O-", "http://localhost:3000/api/health"]
+    CMD wget -q -O /dev/null http://localhost:3000 || exit 1
 
-CMD ["node", "server.js"]
+CMD ["nginx", "-g", "daemon off;"]
