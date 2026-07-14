@@ -1,0 +1,11 @@
+# ─── Gitleaks Configuration ────────────────────────────────
+# Excludes known false positives and test fixtures.
+
+[allowlist]
+  description = "Global allowlist"
+  paths = [
+    '''backend/\.env\.example$''',
+    '''deploy/terraform/\.gitignore$''',
+    '''\.gitleaks\.toml$''',
+    '''infrastructure/docker-compose\.yml$''',
+  ]

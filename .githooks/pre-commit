@@ -1,0 +1,18 @@
+#!/bin/sh
+# ─── Gitleaks pre-commit hook ──────────────────────────────
+# Prevents accidental secret commits.
+# Install: cp .githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --no-banner
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ Gitleaks detected a secret in staged files."
+    echo "   Fix the issue and re-stage. To bypass (not recommended):"
+    echo "   git commit --no-verify"
+    exit 1
+  fi
+else
+  echo "⚠  gitleaks not installed — skipping secret scan."
+  echo "   Install: brew install gitleaks"
+fi
