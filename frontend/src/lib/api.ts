@@ -1,4 +1,4 @@
-// ─── ObserveID API Client ──────────────────────────────────
+// ─── ObserveID Reimagined API Client ───────────────────────
 // Auto-detects deployment: relative URLs for same-origin (Go-served),
 // or tunnel URL for Cloudflare Pages. Configurable via settings.
 

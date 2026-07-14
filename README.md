@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="media/banner.svg">
-  <img alt="ObserveID — Identity Fabric" src="media/banner.svg" width="100%">
+  <img alt="ObserveID Reimagined — Identity Fabric" src="media/banner.svg" width="100%">
 </picture>
 
 <br/>
@@ -35,7 +35,7 @@
 
 ## ⎯ Overview
 
-ObserveID is a next-generation IAM/IGA platform architected for the 2026 security landscape. It treats every workload, agent, API key, and human as a first-class identity — governed by Cedar policies, tracked in Neo4j, secured with CAEP, and orchestrated via Temporal workflows.
+ObserveID Reimagined is a next-generation IAM/IGA platform architected for the 2026 security landscape. It treats every workload, agent, API key, and human as a first-class identity — governed by Cedar policies, tracked in Neo4j, secured with CAEP, and orchestrated via Temporal workflows.
 
 <pre align="center">
   ⚡ SCIM Provisioning  ·  🔐 RBAC/ABAC/ReBAC  ·  🤖 AI Agent Security
@@ -46,7 +46,7 @@ ObserveID is a next-generation IAM/IGA platform architected for the 2026 securit
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="media/architecture.svg">
-  <img alt="ObserveID Architecture Diagram" src="media/architecture.svg" width="100%">
+  <img alt="ObserveID Reimagined Architecture Diagram" src="media/architecture.svg" width="100%">
 </picture>
 
 *Six-layer architecture: Presentation (Cloudflare + Next.js) → API Gateway (Go) → Application Services (Identity, Access, Policy, Connectors, Copilot, CAEP, Vault) → Workflow & Events (Temporal + Kafka) → Data Layer (PostgreSQL, Neo4j, Redis, Qdrant) → Security & Observability (SPIFFE, Cedar, OTel, Grafana, Prometheus). Deployment: Docker Compose (dev) / Kubernetes EKS (prod) / Cloudflare Edge.*
@@ -232,6 +232,6 @@ forbid(
 ## ⎯ License
 
 ```
-MIT License — ObserveID, Inc.
-Copyright © 2026 ObserveID
+MIT License — ObserveID Reimagined, Inc.
+Copyright © 2026 ObserveID Reimagined
 ```

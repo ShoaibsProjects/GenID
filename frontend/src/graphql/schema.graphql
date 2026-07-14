@@ -1,5 +1,5 @@
 // ─── GraphQL Schema ─────────────────────────────────────────
-// ObserveID Identity Fabric API
+// ObserveID Reimagined Identity Fabric API
 
 schema {
   query: Query

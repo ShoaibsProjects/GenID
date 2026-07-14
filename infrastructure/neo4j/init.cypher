@@ -1,4 +1,4 @@
-// ─── ObserveID Neo4j Graph Schema ────────────────────────────
+// ─── ObserveID Reimagined Neo4j Graph Schema ──────────────
 // Identity Fabric graph initialization
 
 // ─── Constraints (Uniqueness) ────────────────────────────────

@@ -1,9 +1,9 @@
 #!/bin/bash
-# ─── ObserveID Development Setup Script ─────────────────────
+# ─── ObserveID Reimagined Development Setup Script ────────
 set -e
 
 echo "═══════════════════════════════════════════"
-echo "  ObserveID Development Environment Setup"
+echo "  ObserveID Reimagined Development Environment Setup"
 echo "═══════════════════════════════════════════"
 
 # Check prerequisites

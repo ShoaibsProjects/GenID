@@ -68,7 +68,7 @@
   
   <!-- AWS-style service icon dots -->
   <circle cx="28" cy="26" r="6" fill="#3B82F6"/>
-  <text x="42" y="31" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="16" font-weight="700" fill="#F0F0F0" letter-spacing="-0.2">ObserveID</text>
+  <text x="42" y="31" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="16" font-weight="700" fill="#F0F0F0" letter-spacing="-0.2">ObserveID Reimagined</text>
   <text x="145" y="31" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="500" fill="#717D96">IAM/IGA Platform Architecture</text>
   
   <text x="1540" y="31" font-family="'JetBrains Mono', monospace" font-size="10" fill="#52525B" text-anchor="end">v1.0.0</text>

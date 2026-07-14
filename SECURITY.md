@@ -8,7 +8,7 @@
 
 ## Reporting a Vulnerability
 
-**ObserveID is an identity and access governance platform. Security is our top priority.**
+**ObserveID Reimagined is an identity and access governance platform. Security is our top priority.**
 
 If you discover a security vulnerability, please **DO NOT** file a public issue. Instead:
 
@@ -29,8 +29,8 @@ We will:
 ## Scope
 
 In-scope:
-- The ObserveID Identity Service (Go backend)
-- The ObserveID Frontend (Next.js)
+- The ObserveID Reimagined Identity Service (Go backend)
+- The ObserveID Reimagined Frontend (Next.js)
 - Authentication and authorization flows
 - API endpoints and SCIM interfaces
 - Temporal workflow execution

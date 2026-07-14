@@ -142,7 +142,7 @@ clean: down
 
 # ─── Help ──────────────────────────────────────────────────
 help:
-	@echo "$(CYAN)ObserveID Build System$(NC)"
+	@echo "$(CYAN)ObserveID Reimagined Build System$(NC)"
 	@echo ""
 	@echo "  $(YELLOW)make all$(NC)        - Build everything (proto + backend + frontend)"
 	@echo "  $(YELLOW)make proto$(NC)      - Generate protobuf code"

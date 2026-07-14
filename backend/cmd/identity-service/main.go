@@ -66,7 +66,7 @@ func main() {
 		Logger()
 
 	log.Info().Msg("═══════════════════════════════════════════")
-	log.Info().Msg("  ObserveID Identity Service Starting")
+	log.Info().Msg("  ObserveID Reimagined Identity Service Starting")
 	log.Info().Msg("  The Identity Fabric Engine")
 	log.Info().Msg("═══════════════════════════════════════════")
 
@@ -209,7 +209,7 @@ func main() {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprint(w, `{
-  "service": "ObserveID Identity Fabric Engine",
+  "service": "ObserveID Reimagined Identity Fabric Engine",
   "version": "1.0.0",
   "status": "running",
   "docs": {

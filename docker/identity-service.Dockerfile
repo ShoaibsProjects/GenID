@@ -1,4 +1,4 @@
-# ─── ObserveID Identity Service (Go) ──────────────────────
+# ─── ObserveID Reimagined Identity Service (Go) ───────────
 FROM golang:1.26-alpine AS builder
 
 RUN apk add --no-cache gcc musl-dev protoc

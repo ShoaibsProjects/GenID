@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import "@/styles/globals.css"
 
 export const metadata: Metadata = {
-  title: "ObserveID — Identity Fabric",
+  title: "ObserveID Reimagined — Identity Fabric",
   description: "Event-Driven, AI-Native Identity and Access Governance Platform",
   viewport: "width=device-width, initial-scale=1",
 }
@@ -78,7 +78,7 @@ function Sidebar() {
             </svg>
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight leading-none">ObserveID</h1>
+            <h1 className="text-base font-bold tracking-tight leading-none">ObserveID Reimagined</h1>
             <p className="text-[0.6rem] font-semibold text-muted uppercase tracking-widest leading-none mt-0.5">Fabric v1</p>
           </div>
         </div>

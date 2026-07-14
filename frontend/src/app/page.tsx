@@ -12,7 +12,7 @@ export default function HomePage() {
         </div>
 
         <h1 className="text-4xl font-bold text-white mb-4">
-          ObserveID Identity Fabric
+          ObserveID Reimagined Identity Fabric
         </h1>
         <p className="text-lg text-gray-400 mb-8 leading-relaxed">
           Event-Driven, AI-Native Identity Governance Platform.

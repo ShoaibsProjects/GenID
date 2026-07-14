@@ -1,4 +1,4 @@
-// ─── ObserveID Cedar Policy Schema ────────────────────────────
+// ─── ObserveID Reimagined Cedar Policy Schema ──────────────
 // Strongly-typed schema for the Identity Fabric ABAC/RBAC system
 // All policies are validated against this schema at CI time
 

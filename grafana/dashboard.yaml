@@ -1,18 +1,18 @@
-# ─── Grafana Dashboard: ObserveID Identity Fabric ──────────
+# ─── Grafana Dashboard: ObserveID Reimagined Identity Fabric ──
 # Key metrics for the Identity Control Plane
 
 apiVersion: 1
 
 providers:
-  - name: "ObserveID"
+  - name: "ObserveID Reimagined"
     orgId: 1
-    folder: "ObserveID"
+    folder: "ObserveID Reimagined"
     type: file
     options:
       path: /etc/grafana/provisioning/dashboards
 
 dashboards:
-  - name: "ObserveID Identity Fabric Overview"
+  - name: "ObserveID Reimagined Identity Fabric Overview"
     uid: "observeid-overview"
     schemaVersion: 39
     tags: ["observeid", "identity"]

@@ -1,5 +1,5 @@
 # ─── SPIRE Configuration ────────────────────────────────────
-# Workload identity for every ObserveID service
+# Workload identity for every ObserveID Reimagined service
 
 apiVersion: spire.spiffe.io/v1alpha1
 kind: ClusterSPIFFEID

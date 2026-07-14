@@ -1,4 +1,4 @@
--- ─── ObserveID PostgreSQL Schema ─────────────────────────────
+-- ─── ObserveID Reimagined PostgreSQL Schema ──────────────
 -- Core tables for the Identity Fabric
 
 -- Extensions
@@ -551,7 +551,7 @@ ALTER TABLE connector_resources      DROP CONSTRAINT IF EXISTS connector_resourc
 
 -- ─── Seed Data: Default Tenant ─────────────────────────────
 INSERT INTO tenants (id, name, slug, tier) VALUES
-    ('00000000-0000-0000-0000-000000000001', 'ObserveID Internal', 'observeid', 'enterprise');
+    ('00000000-0000-0000-0000-000000000001', 'ObserveID Reimagined Internal', 'observeid', 'enterprise');
 
 -- ─── Seed Data: Admin Identity ─────────────────────────────
 INSERT INTO identities (id, tenant_id, type, status, email, display_name, employee_id, source, assurance_level)

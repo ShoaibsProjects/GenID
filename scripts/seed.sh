@@ -1,5 +1,5 @@
 #!/bin/bash
-# ─── ObserveID Seed Data Loader ─────────────────────────────
+# ─── ObserveID Reimagined Seed Data Loader ───────────────
 set -e
 
 echo "🌱 Loading seed data..."
