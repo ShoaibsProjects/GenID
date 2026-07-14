@@ -7,18 +7,16 @@
 
 <div align="center">
 
-[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go&logoColor=white&labelColor=1C1C24)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?style=flat&logo=go&logoColor=white&labelColor=1C1C24)](https://go.dev)
 [![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=flat&logo=next.js&logoColor=white&labelColor=1C1C24)](https://nextjs.org)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat&logo=postgresql&logoColor=white&labelColor=1C1C24)](https://postgresql.org)
+[![PostgreSQL](https://img.shields.io/badge/Neon/PG-16-4169E1?style=flat&logo=postgresql&logoColor=white&labelColor=1C1C24)](https://neon.tech)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5-4581C3?style=flat&logo=neo4j&logoColor=white&labelColor=1C1C24)](https://neo4j.com)
-[![Temporal](https://img.shields.io/badge/Temporal-1.22-101010?style=flat&logo=temporal&logoColor=white&labelColor=1C1C24)](https://temporal.io)
-[![Kafka](https://img.shields.io/badge/Kafka-3.6-231F20?style=flat&logo=apachekafka&logoColor=white&labelColor=1C1C24)](https://kafka.apache.org)
-[![Cedar](https://img.shields.io/badge/Cedar-Policy-FF9900?style=flat&logo=amazoniam&logoColor=white&labelColor=1C1C24)](https://cedarpolicy.com)
+[![Temporal](https://img.shields.io/badge/Temporal-1.28-101010?style=flat&logo=temporal&logoColor=white&labelColor=1C1C24)](https://temporal.io)
+[![Redis](https://img.shields.io/badge/Upstash-Redis-DC382D?style=flat&logo=redis&logoColor=white&labelColor=1C1C24)](https://upstash.com)
 
 [![CI](https://github.com/ShoaibsProjects/observeid/actions/workflows/ci.yml/badge.svg)](https://github.com/ShoaibsProjects/observeid/actions/workflows/ci.yml)
 [![Deploy](https://github.com/ShoaibsProjects/observeid/actions/workflows/deploy.yml/badge.svg)](https://github.com/ShoaibsProjects/observeid/actions/workflows/deploy.yml)
 [![License](https://img.shields.io/badge/License-MIT-8B5CF6?style=flat&labelColor=1C1C24)]()
-[![Built for](https://img.shields.io/badge/Built%20for-2026-3B82F6?style=flat&labelColor=1C1C24)]()
 
 <br/>
 
@@ -33,205 +31,274 @@
 <br/>
 </div>
 
-## ⎯ Overview
+## Overview
 
-ObserveID Reimagined is a next-generation IAM/IGA platform architected for the 2026 security landscape. It treats every workload, agent, API key, and human as a first-class identity — governed by Cedar policies, tracked in Neo4j, secured with CAEP, and orchestrated via Temporal workflows.
+ObserveID is an identity governance and administration (IGA) platform built for the 2026 security landscape. It treats every workload, agent, API key, and human as a first-class identity — tracked in Neo4j, orchestrated via Temporal, and governed by policy-as-code.
 
 <pre align="center">
-  ⚡ SCIM Provisioning  ·  🔐 RBAC/ABAC/ReBAC  ·  🤖 AI Agent Security
-  📊 Real-Time Audit    ·  🔄 Event-Driven Sync ·  🧠 GraphRAG Copilot
+  SCIM Provisioning  ·  RBAC/ABAC/ReBAC  ·  AI Agent Security
+  Real-Time Audit    ·  Event-Driven Sync  ·  GraphRAG Copilot
 </pre>
 
-## ⎯ Architecture
+## Architecture
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="media/architecture.svg">
-  <img alt="ObserveID Reimagined Architecture Diagram" src="media/architecture.svg" width="100%">
-</picture>
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     CLOUDFLARE EDGE                              │
+│  ┌─────────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+│  │  Pages (Next.js) │  │  DNS / WAF   │  │  Workers (proxy) │   │
+│  └────────┬────────┘  └──────────────┘  └────────┬─────────┘   │
+└───────────┼───────────────────────────────────────┼─────────────┘
+            │ HTTPS                                 │
+            ▼                                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     FLY.IO (Go Binary)                           │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  gorilla/mux  ·  pgx  ·  neo4j-driver  ·  go-redis       │   │
+│  │  Temporal SDK  ·  gqlgen  ·  zerolog  ·  OpenTelemetry   │   │
+│  └──────────────────────┬───────────────────────────────────┘   │
+└─────────────────────────┼───────────────────────────────────────┘
+                          │
+          ┌───────────────┼───────────────────┐
+          ▼               ▼                   ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────────┐
+│ Neon Postgres │ │ Neo4j AuraDB │ │ Upstash Redis    │
+│ (512MB free)  │ │ (50K nodes)  │ │ (10K cmds/day)   │
+└──────────────┘ └──────────────┘ └──────────────────┘
+          │
+          ▼
+┌──────────────────┐
+│ Temporal Cloud    │
+│ (10K execs/mo)   │
+└──────────────────┘
+```
 
-*Six-layer architecture: Presentation (Cloudflare + Next.js) → API Gateway (Go) → Application Services (Identity, Access, Policy, Connectors, Copilot, CAEP, Vault) → Workflow & Events (Temporal + Kafka) → Data Layer (PostgreSQL, Neo4j, Redis, Qdrant) → Security & Observability (SPIFFE, Cedar, OTel, Grafana, Prometheus). Deployment: Docker Compose (dev) / Kubernetes EKS (prod) / Cloudflare Edge.*
+**Local development** runs the full stack via Docker Compose (11 containers). **Production** uses managed free-tier services — zero infrastructure to maintain.
 
-## ⎯ Key Features
+## Key Features
 
 | Area | Capability | Status |
 |------|-----------|--------|
-| **Identity Engine** | SCIM 2.0 CRUD, bulk import, soft-delete, PG+Neo4j dual-write | ✅ |
-| **Connector Framework** | Entra ID (delta sync), LDAP/AD, SCIM — schema discovery, health monitoring | ✅ |
-| **Policy Engine** | Cedar ABAC/RBAC/ReBAC with CI validation | ✅ |
-| **Temporal Workflows** | Onboard · Offboard (fan-out) · Grant · Revoke · JIT · SoD · Anomaly | ✅ |
-| **AI Copilot** | GraphRAG over Neo4j — natural language identity queries | ✅ |
-| **CAEP Stream** | Real-time session revocation broadcast | ✅ |
-| **Credential Vault** | AES-256-GCM encrypted local vault with UI | ✅ |
-| **Audit Logs** | Immutable trail with detail viewer UI | ✅ |
-| **Connector UI** | Stats bar, expandable Accounts/Schema tabs, health indicators, delta sync | ✅ |
-| **Design System** | 11 shared UI components, dark industrial theme, electric blue accent | ✅ |
+| **Identity Engine** | SCIM 2.0 CRUD, bulk import, soft-delete, PG + Neo4j dual-write | Done |
+| **Connector Framework** | Entra ID (delta sync), LDAP/AD, CSV, SCIM — schema discovery, health monitoring | Done |
+| **Policy Engine** | Cedar ABAC/RBAC/ReBAC with CI validation | Done |
+| **Temporal Workflows** | Onboard, Offboard (fan-out), Grant, Revoke, JIT, SoD, Anomaly | Done |
+| **AI Copilot** | GraphRAG over Neo4j — natural language identity queries | Done |
+| **CAEP Stream** | Real-time session revocation broadcast | Done |
+| **Credential Vault** | AES-256-GCM encrypted vault with UI | Done |
+| **Audit Logs** | Immutable trail with detail viewer | Done |
+| **HTTP QUERY** | RFC 10008 read-only endpoints (access check, copilot, connectors) | Done |
+| **Design System** | 11 shared UI components, dark industrial theme | Done |
 
-## ⎯ Tech Stack
+## Tech Stack
 
 ```
-┌─ Languages ─────────────────────────────────────────────────────┐
-│  Go 1.23  ·  TypeScript  ·  Cedar Policy                       │
-├─ Backend ───────────────────────────────────────────────────────┤
-│  net/http (chi)  ·  Temporal SDK  ·  Neo4j Driver  ·  pgx      │
-│  Kafka (franz-go)  ·  Cedar Go Bindings  ·  OpenTelemetry      │
-├─ Frontend ──────────────────────────────────────────────────────┤
-│  Next.js 14 (static)  ·  TailwindCSS  ·  Plus Jakarta Sans     │
-│  JetBrains Mono  ·  Framer Motion-ready CSS tokens             │
-├─ Data ──────────────────────────────────────────────────────────┤
-│  PostgreSQL 16  ·  Neo4j 5  ·  Qdrant  ·  Redis 7             │
-├─ Orchestration ─────────────────────────────────────────────────┤
-│  Temporal 1.22  ·  Kafka + Schema Registry  ·  Zookeeper       │
-├─ Security ──────────────────────────────────────────────────────┤
-│  Cedar Policies  ·  AES-256-GCM Vault  ·  SPIFFE/SPIRE         │
-│  mTLS  ·  CAEP  ·  FIDO2  ·  Post-Quantum Crypto               │
-├─ Observability ─────────────────────────────────────────────────┤
-│  OpenTelemetry  ·  Grafana  ·  Prometheus  ·  Structured Audit │
-└─────────────────────────────────────────────────────────────────┘
+Go 1.26 · TypeScript · Next.js 14 · TailwindCSS
+
+Backend:   gorilla/mux · pgx/v5 · neo4j-go-driver · go-redis/v9
+           Temporal SDK · gqlgen · zerolog · OpenTelemetry
+
+Frontend:  Next.js 14 (static export) · Plus Jakarta Sans · JetBrains Mono
+
+Data:      PostgreSQL (Neon) · Neo4j 5 (AuraDB) · Redis (Upstash)
+
+Cloud:     Fly.io (backend) · Cloudflare Pages (frontend)
+           Temporal Cloud · Neon · AuraDB · Upstash
+
+Dev:       Docker Compose (11 containers) · GitHub Actions CI/CD
 ```
 
-## ⎯ Quick Start
+## Quick Start
 
 ```bash
-# Start infrastructure (11 containers: PG, Neo4j, Kafka, Temporal, etc.)
+# 1. Start infrastructure (PG, Neo4j, Kafka, Temporal, Redis, etc.)
 make up
 
-# Run DB migrations and seed data
+# 2. Run DB migrations and seed data
 make dev-db
 
-# Build and run backend (serves API + frontend on :8080)
-make dev-backend
+# 3. Build and run backend (serves API on :8080)
+cd backend && go run ./cmd/identity-service/
 
-# Or in separate terminals:
-make backend     # Go backend
-make frontend    # Next.js static export
+# 4. In a separate terminal — frontend dev server
+cd frontend && npm install && npm run dev
 ```
 
-> **Demo URL:** [http://localhost:8080](http://localhost:8080)
+The backend serves the API at `http://localhost:8080`. The frontend dev server runs at `http://localhost:3001` and proxies API calls to the backend.
 
-## ⎯ Workflows
+## Deployment
+
+Production is deployed via GitHub Actions on push to `main`:
+
+| Service | Platform | Trigger |
+|---------|----------|---------|
+| Go backend | Fly.io | Push to `main` (Docker build) |
+| Next.js frontend | Cloudflare Pages | Push to `main` (static export) |
+
+```bash
+# One-time setup
+fly launch --name observeid-api --region iad
+fly secrets set DATABASE_URL=... NEO4J_URI=... REDIS_ADDR=... TEMPORAL_HOST=...
+
+# Subsequent deploys happen automatically via CI/CD
+git push origin main
+```
+
+## Workflows
 
 | Workflow | Description | Priority |
 |----------|-------------|----------|
-| `OffboardIdentityWorkflow` | Complete offboarding with parallel fan-out, CAEP broadcast, cascade agent revocation | 🔴 Critical |
-| `OnboardIdentityWorkflow` | Identity creation with role assignment and optional approval gates | 🟠 High |
-| `GrantAccessWorkflow` | Access provisioning with approval workflow and JIT auto-expiry | 🟠 High |
-| `RevokeAccessWorkflow` | Emergency access revocation with cache invalidation | 🔴 Critical |
-| `JustInTimeAccessWorkflow` | Time-bounded access with automatic expiration | 🟡 Medium |
-| `AgentAnomalyDetectionWorkflow` | Cron-based AI agent behavioral analysis | 🟡 Medium |
-| `DetectSoDViolationsWorkflow` | Hourly SoD violation scanning via Neo4j graph traversal | 🟡 Medium |
+| `OffboardIdentityWorkflow` | Complete offboarding with parallel fan-out, CAEP broadcast, cascade agent revocation | Critical |
+| `OnboardIdentityWorkflow` | Identity creation with role assignment and optional approval gates | High |
+| `GrantAccessWorkflow` | Access provisioning with approval workflow and JIT auto-expiry | High |
+| `RevokeAccessWorkflow` | Emergency access revocation with cache invalidation | Critical |
+| `JustInTimeAccessWorkflow` | Time-bounded access with automatic expiration | Medium |
+| `AgentAnomalyDetectionWorkflow` | Cron-based AI agent behavioral analysis | Medium |
+| `DetectSoDViolationsWorkflow` | SoD violation scanning via Neo4j graph traversal | Medium |
+| `CascadeRevokeWorkflow` | Cascade revocation across dependent access | Medium |
 
-## ⎯ API Endpoints
+## API Endpoints
 
 ```
+Health & Observability
+  GET    /health                  Liveness probe
+  GET    /healthz                 Full dependency check (PG + Neo4j + Redis + Temporal)
+  GET    /ready                   Readiness probe
+  GET    /metrics                 Prometheus metrics
+
 SCIM 2.0
-  GET    /scim/v2/Users            List users
-  POST   /scim/v2/Users            Create user
-  GET    /scim/v2/Users/{id}       Get user
-  DELETE /scim/v2/Users/{id}       Delete user (triggers offboarding)
+  GET    /scim/v2/Users           List users
+  POST   /scim/v2/Users           Create user (triggers onboarding)
+  GET    /scim/v2/Users/{id}      Get user
+  PUT    /scim/v2/Users/{id}      Update user
+  PATCH  /scim/v2/Users/{id}      Patch user
+  DELETE /scim/v2/Users/{id}      Delete user (triggers offboarding)
 
 Identity API
-  GET    /api/v1/identities        List identities
-  POST   /api/v1/identities        Create identity (PG + Neo4j)
-  POST   /api/v1/identities/bulk   Bulk import with upsert
-  DELETE /api/v1/identities/{id}   Soft-delete termination
-  GET    /api/v1/identities/{id}/entitlements   Access paths
-  GET    /api/v1/identities/{id}/blast-radius   Blast radius
+  GET    /api/v1/identities              List identities (Neo4j)
+  POST   /api/v1/identities              Create identity (PG + Neo4j)
+  GET    /api/v1/identities/{id}         Get identity with relationships
+  PATCH  /api/v1/identities/{id}         Update identity
+  DELETE /api/v1/identities/{id}         Soft-delete
+  POST   /api/v1/identities/bulk         Bulk import with upsert
+  GET    /api/v1/identities/{id}/entitlements    Access paths
+  GET    /api/v1/identities/{id}/blast-radius    Blast radius analysis
 
-Connector API
-  GET    /api/v1/connectors        List connectors
-  POST   /api/v1/connectors        Register connector
-  POST   /api/v1/connectors/{id}/connect      Connect
-  POST   /api/v1/connectors/{id}/sync         Full sync
-  POST   /api/v1/connectors/{id}/sync-delta   Delta sync
-  GET    /api/v1/connectors/{id}/schema       Schema discovery
-  GET    /api/v1/connectors/{id}/health       Health monitoring
-  GET    /api/v1/connectors/{id}/identities   Synced identities
-
-Vault
-  GET    /api/v1/vault             List secrets
-  POST   /api/v1/vault             Store secret (AES-256-GCM)
-
-Audit
-  GET    /api/v1/audit             Recent audit events
-  GET    /api/v1/audit/{id}        Audit detail
+Access Control
+  QUERY  /api/v1/access/check            Real-time access evaluation
+  POST   /api/v1/access/grant            Grant access (Temporal workflow)
+  POST   /api/v1/access/revoke           Revoke access (Temporal workflow)
+  POST   /api/v1/access/jit              Just-in-time access
 
 Agent / NHI
-  GET    /api/v1/agents            List agents
-  POST   /api/v1/agents            Register agent
-  POST   /api/v1/agents/{id}/kill-switch   Emergency kill
+  GET    /api/v1/agents                  List agents
+  POST   /api/v1/agents                  Register agent
+  GET    /api/v1/agents/{id}             Get agent
+  POST   /api/v1/agents/{id}/kill-switch Emergency kill
+  POST   /api/v1/agents/{id}/delegate    Delegate agent
+  GET    /api/v1/agents/{id}/card        Agent card (A2A)
+
+Connector API
+  GET    /api/v1/connectors              List connectors
+  POST   /api/v1/connectors              Create connector
+  QUERY  /api/v1/connectors/test         Test connection
+  GET    /api/v1/connectors/{id}         Get connector
+  DELETE /api/v1/connectors/{id}         Delete connector
+  POST   /api/v1/connectors/{id}/connect     Connect
+  POST   /api/v1/connectors/{id}/disconnect  Disconnect
+  QUERY  /api/v1/connectors/{id}/test        Test existing connector
+  POST   /api/v1/connectors/{id}/sync        Full sync
+  POST   /api/v1/connectors/{id}/sync-delta  Delta sync
+  GET    /api/v1/connectors/{id}/schema      Schema discovery
+  GET    /api/v1/connectors/{id}/health      Health monitoring
+  POST   /api/v1/connectors/csv/upload       CSV upload
 
 AI Copilot
-  POST   /api/v1/copilot/query     Natural language identity query
+  QUERY  /api/v1/copilot/query           Natural language identity query (GraphRAG)
 
 CAEP
-  POST   /api/v1/caep/broadcast    Broadcast session-revoked event
+  GET    /api/v1/caep/events             List CAEP events
+  POST   /api/v1/caep/broadcast          Broadcast session-revoked event
+
+Vault
+  GET    /api/v1/vault/secrets           List secrets
+  POST   /api/v1/vault/secrets           Store secret (AES-256-GCM)
+  GET    /api/v1/vault/secrets/{id}      Retrieve secret
+  DELETE /api/v1/vault/secrets/{id}      Delete secret
+
+Groups & Roles
+  GET    /api/v1/groups                  List groups
+  POST   /api/v1/groups                  Create group
+  DELETE /api/v1/groups/{id}             Delete group
+  POST   /api/v1/roles/assign            Assign role
+  POST   /api/v1/roles/remove            Remove role
+
+Audit
+  GET    /api/v1/audit/logs              List audit logs
+  GET    /api/v1/audit/logs/{id}         Get audit log detail
+  GET    /api/v1/audit/stats             Audit statistics
+
+GraphQL
+  POST   /graphql                        GraphQL API (gqlgen)
 ```
 
-## ⎯ Project Structure
+## Project Structure
 
 ```
 observeid/
-├── proto/                    # Protobuf definitions
-│   ├── event/v1/             # Identity events
-│   └── model/v1/             # Data models
+├── proto/                        # Protobuf definitions
+│   ├── event/v1/                 # Identity events
+│   └── model/v1/                 # Data models
 ├── backend/
-│   ├── cmd/identity-service/ # Entry point
-│   └── internal/
-│       ├── domain/           # Core domain types
-│       ├── connector/        # IGA connector framework
-│       ├── workflow/         # Temporal workflows
-│       ├── activities/       # Temporal activities
-│       ├── service/          # HTTP service layer
-│       ├── vault/            # AES-256-GCM encrypted vault
-│       ├── audit/            # Immutable audit logging
-│       ├── graph/            # Neo4j query patterns
-│       └── ai/               # GraphRAG copilot
+│   ├── cmd/identity-service/     # Entry point (main.go)
+│   ├── internal/
+│   │   ├── service/              # HTTP handlers + business logic
+│   │   ├── connector/            # IGA connector framework
+│   │   ├── workflow/             # Temporal workflow definitions
+│   │   ├── activities/           # Temporal activity definitions
+│   │   ├── domain/               # Core domain types
+│   │   ├── vault/                # AES-256-GCM encrypted vault
+│   │   ├── audit/                # Immutable audit logging
+│   │   ├── graph/                # Neo4j query patterns
+│   │   ├── ai/                   # GraphRAG copilot
+│   │   ├── graphql/              # gqlgen resolvers
+│   │   └── middleware/           # Auth, CORS, rate limit, validation
+│   └── pkg/proto/                # Generated protobuf code
 ├── frontend/
-│   ├── src/app/              # Dashboard, Identities, Connectors, etc.
-│   └── src/components/ui/    # 11-shared design system
-├── policies/                 # Cedar policies
-│   ├── identity.cedarschema  # Policy schema
-│   ├── rbac.cedar            # Role-based access control
-│   ├── abac.cedar            # Attribute-based access control
-│   ├── agent.cedar           # AI agent policies
-│   └── sod_emergency.cedar   # SoD & emergency access
-├── infrastructure/           # Docker Compose + DB init
-├── deploy/k8s/               # Kubernetes manifests
-└── docker/                   # Dockerfiles
+│   ├── src/app/                  # Next.js App Router pages
+│   ├── src/components/ui/        # Shared design system (11 components)
+│   └── src/lib/                  # API client, utilities
+├── infrastructure/               # Docker Compose + DB init scripts
+├── deploy/
+│   ├── terraform/                # Neon + Upstash provisioning
+│   └── k8s/                      # Kubernetes manifests
+├── docker/                       # Dockerfiles (backend + frontend)
+├── .github/workflows/            # CI/CD (test, deploy, docker-publish)
+├── fly.toml                      # Fly.io deployment config
+└── Makefile                      # Build system
 ```
 
-## ⎯ Cedar Policies
+## Environment Variables
 
-```cedar
-// RBAC: Administrators have full access
-permit(
-    principal in Role::"Administrator",
-    action,
-    resource
-);
+All configuration is via environment variables with local docker-compose fallbacks. See [`backend/.env.example`](backend/.env.example) for the full template.
 
-// ABAC: Contractors cannot access PII
-forbid(
-    principal in Role::"Contractor",
-    action,
-    resource
-) when {
-    resource.data_classification in ["pii", "phi", "pci"]
-};
+| Variable | Description | Local Default | Cloud |
+|----------|-------------|---------------|-------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://observeid:observeid@localhost:5432/observeid?sslmode=disable` | Neon (`sslmode=require`) |
+| `NEO4J_URI` | Neo4j Bolt URI | `bolt://localhost:7687` | `neo4j+s://xxx.databases.neo4j.io` |
+| `NEO4J_USER` | Neo4j username | `neo4j` | `neo4j` |
+| `NEO4J_PASSWORD` | Neo4j password | (local) | AuraDB password |
+| `REDIS_ADDR` | Redis endpoint | `localhost:6379` | Upstash endpoint |
+| `REDIS_PASSWORD` | Redis password | (empty) | Upstash token |
+| `REDIS_TLS` | Enable TLS for Redis | `false` | `true` |
+| `TEMPORAL_HOST` | Temporal frontend | `localhost:7233` | Temporal Cloud |
+| `TEMPORAL_NAMESPACE` | Temporal namespace | `critical-offboarding` | Your namespace |
+| `CORS_ORIGIN` | Allowed CORS origin | (empty) | `https://observeid.pages.dev` |
+| `VAULT_MASTER_KEY` | AES-256 key (hex) | (generate with `openssl rand -hex 32`) | Fly.io secret |
 
-// Agent: Kill switch — deny all for revoked agents
-forbid(
-    principal is Agent,
-    action,
-    resource
-) when {
-    principal.is_revoked == true
-};
-```
-
-## ⎯ License
+## License
 
 ```
 MIT License — ObserveID Reimagined, Inc.
-Copyright © 2026 ObserveID Reimagined
+Copyright 2026 ObserveID Reimagined
 ```
