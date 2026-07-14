@@ -28,8 +28,10 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Build for Cloudflare (static export)
+        run: |
+          sed -i 's/output: "standalone"/output: "export"/' next.config.js
+          npm run build
         env:
           NEXT_PUBLIC_API_URL: ${{ vars.API_URL || 'https://api.observeid.io' }}
           CI: false
