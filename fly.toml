@@ -1,0 +1,53 @@
+# ─── ObserveID Identity Service — Fly.io Configuration ─────
+# Deploy: fly deploy
+# Secrets: fly secrets set DATABASE_URL=... NEO4J_URI=... etc.
+# Status:  fly status
+
+app = "observeid-api"
+primary_region = "iad"
+
+# ─── Build ───────────────────────────────────────────────
+[build]
+  dockerfile = "docker/identity-service.Dockerfile"
+
+# ─── Environment (non-secret defaults) ───────────────────
+[env]
+  PORT = "8080"
+  REDIS_TLS = "true"
+  TEMPORAL_NAMESPACE = "critical-offboarding"
+  CORS_ORIGIN = "https://observeid.pages.dev"
+
+# ─── HTTP Service ────────────────────────────────────────
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+  [[http_service.checks]]
+    grace_period = "5s"
+    interval = "10s"
+    method = "GET"
+    timeout = "5s"
+    path = "/healthz"
+
+# ─── Compute ─────────────────────────────────────────────
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# ─── Standalone checks (alternative to inline) ───────────
+# [checks]
+#   [checks.health]
+#     port = 8080
+#     type = "http"
+#     interval = "10s"
+#     timeout = "5s"
+#     path = "/healthz"

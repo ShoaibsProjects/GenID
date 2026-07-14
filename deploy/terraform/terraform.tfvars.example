@@ -1,0 +1,4 @@
+# ─── Terraform Variables — Example ────────────────────────
+# Copy to terraform.tfvars and fill in values.
+
+neon_api_key = "neon_api_key_here"

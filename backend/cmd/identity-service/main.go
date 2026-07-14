@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -97,11 +98,15 @@ func main() {
 	log.Info().Msg("Neo4j connected")
 
 	// ─── Initialize Redis ─────────────────────────────────
-	rdb := redis.NewClient(&redis.Options{
+	redisOpts := &redis.Options{
 		Addr:     cfg.RedisAddr,
-		Password: "",
+		Password: cfg.RedisPassword,
 		DB:       0,
-	})
+	}
+	if cfg.RedisTLS {
+		redisOpts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	rdb := redis.NewClient(redisOpts)
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to Redis")
 	}
@@ -111,7 +116,7 @@ func main() {
 	// ─── Initialize Temporal Client ───────────────────────
 	temporalClient, err := client.Dial(client.Options{
 		HostPort:  cfg.TemporalHost,
-		Namespace: "critical-offboarding",
+		Namespace: cfg.TemporalNamespace,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to Temporal")
@@ -129,7 +134,7 @@ func main() {
 	}
 
 	// ─── Start Temporal Worker ────────────────────────────
-	w := worker.New(temporalClient, "critical-offboarding", worker.Options{
+	w := worker.New(temporalClient, cfg.TemporalNamespace, worker.Options{
 		MaxConcurrentActivityExecutionSize: 500,
 		MaxConcurrentWorkflowTaskExecutionSize: 500,
 		// StickyCacheSize: deprecated in newer SDK
@@ -156,13 +161,13 @@ func main() {
 
 	// ─── Initialize Security Middleware ────────────────────
 	rateLimiter := middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200
-	apiKeyAuth := middleware.NewAPIKeyAuth(loadAPIKeys(), "/health", "/ready", "/")
+	apiKeyAuth := middleware.NewAPIKeyAuth(loadAPIKeys(), "/health", "/ready", "/healthz", "/")
 	requestValidation := middleware.NewRequestValidation()
 
 	// ─── Start HTTP/gRPC Server ───────────────────────────
 	r := mux.NewRouter()
 	r.Use(securityHeadersMiddleware)
-	r.Use(corsMiddleware)
+	r.Use(corsMiddleware(cfg.CORSOrigin))
 	r.Use(otelhttp.NewMiddleware("observeid-api"))
 	r.Use(rateLimiter.Middleware)
 	r.Use(requestValidation.Middleware)
@@ -214,6 +219,7 @@ func main() {
   "status": "running",
   "docs": {
     "health":   "/health",
+    "healthz":  "/healthz",
     "ready":    "/ready",
     "metrics":  "/metrics",
     "scim":     "/scim/v2/Users",
@@ -270,6 +276,50 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]any{"status": "ready", "checks": checks})
+	}).Methods("GET")
+
+	// Healthz — full dependency check (Fly.io / cloud load balancer probe)
+	r.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		checks := map[string]string{}
+
+		if err := pgPool.Ping(r.Context()); err != nil {
+			checks["postgres"] = "down"
+		} else {
+			checks["postgres"] = "ok"
+		}
+
+		if err := neo4jDriver.VerifyConnectivity(r.Context()); err != nil {
+			checks["neo4j"] = "down"
+		} else {
+			checks["neo4j"] = "ok"
+		}
+
+		if err := rdb.Ping(r.Context()).Err(); err != nil {
+			checks["redis"] = "down"
+		} else {
+			checks["redis"] = "ok"
+		}
+
+		temporalCtx, temporalCancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer temporalCancel()
+		if _, err := temporalClient.CheckHealth(temporalCtx, &client.CheckHealthRequest{}); err != nil {
+			checks["temporal"] = "down"
+		} else {
+			checks["temporal"] = "ok"
+		}
+
+		for _, status := range checks {
+			if status == "down" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				json.NewEncoder(w).Encode(map[string]any{"status": "unavailable", "checks": checks})
+				return
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"status": "healthy", "checks": checks})
 	}).Methods("GET")
 
 	// GraphQL API
@@ -430,47 +480,56 @@ func securityHeadersMiddleware(next http.Handler) http.Handler {
 }
 
 // ─── CORS Middleware ───────────────────────────────────────
-func corsMiddleware(next http.Handler) http.Handler {
-	allowedOrigin := getEnv("CORS_ORIGIN", "")
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if allowedOrigin != "" {
-		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-	}
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, QUERY, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Requested-With")
-	w.Header().Set("Access-Control-Max-Age", "86400")
-	if allowedOrigin != "" && allowedOrigin != "*" {
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-	}
+func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if allowedOrigin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, QUERY, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Requested-With")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+			if allowedOrigin != "" && allowedOrigin != "*" {
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
 
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 
-		next.ServeHTTP(w, r)
-	})
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 type Config struct {
-	DatabaseURL  string
-	Neo4jURI     string
-	Neo4jUser    string
-	Neo4jPassword string
-	RedisAddr    string
-	TemporalHost string
-	QdrantAddr   string
+	DatabaseURL      string
+	Neo4jURI         string
+	Neo4jUser        string
+	Neo4jPassword    string
+	RedisAddr        string
+	RedisPassword    string
+	RedisTLS         bool
+	TemporalHost     string
+	TemporalNamespace string
+	CORSOrigin       string
+	QdrantAddr       string
 }
 
 func loadConfig() *Config {
 	return &Config{
-		DatabaseURL:   getEnv("DATABASE_URL", "postgresql://observeid:observeid@localhost:5432/observeid?sslmode=disable"),
-		Neo4jURI:      getEnv("NEO4J_URI", "bolt://localhost:7687"),
-		Neo4jUser:     getEnv("NEO4J_USER", "neo4j"),
-		Neo4jPassword: getEnv("NEO4J_PASSWORD", ""),
-		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
-		TemporalHost:  getEnv("TEMPORAL_HOST", "localhost:7233"),
-		QdrantAddr:    getEnv("QDRANT_ADDR", "localhost:6333"),
+		DatabaseURL:      getEnv("DATABASE_URL", "postgresql://observeid:observeid@localhost:5432/observeid?sslmode=disable"),
+		Neo4jURI:         getEnv("NEO4J_URI", "bolt://localhost:7687"),
+		Neo4jUser:        getEnv("NEO4J_USER", "neo4j"),
+		Neo4jPassword:    getEnv("NEO4J_PASSWORD", ""),
+		RedisAddr:        getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:    getEnv("REDIS_PASSWORD", ""),
+		RedisTLS:         getEnv("REDIS_TLS", "false") == "true",
+		TemporalHost:     getEnv("TEMPORAL_HOST", "localhost:7233"),
+		TemporalNamespace: getEnv("TEMPORAL_NAMESPACE", "critical-offboarding"),
+		CORSOrigin:       getEnv("CORS_ORIGIN", ""),
+		QdrantAddr:       getEnv("QDRANT_ADDR", "localhost:6333"),
 	}
 }
 

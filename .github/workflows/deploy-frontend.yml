@@ -31,7 +31,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: ${{ vars.API_URL || 'https://api.observeid.io' }}
+          NEXT_PUBLIC_API_URL: ${{ vars.API_URL || 'https://observeid-api.fly.dev' }}
           CI: false
 
       - name: Publish to Cloudflare Pages

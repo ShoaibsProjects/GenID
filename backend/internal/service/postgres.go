@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -16,10 +17,24 @@ func NewPostgresPool(databaseURL string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
-	config.MaxConns = 50
-	config.MinConns = 5
-	config.MaxConnLifetime = 30 * time.Minute
-	config.MaxConnIdleTime = 5 * time.Minute
+	// Adaptive pool sizing: cloud managed Postgres has lower connection limits
+	isCloud := strings.Contains(databaseURL, "neon.tech") ||
+		strings.Contains(databaseURL, "railway.app") ||
+		strings.Contains(databaseURL, "supabase") ||
+		strings.Contains(databaseURL, "render.com") ||
+		strings.Contains(databaseURL, "fly.dev")
+
+	if isCloud {
+		config.MaxConns = 5
+		config.MinConns = 1
+		config.MaxConnLifetime = 10 * time.Minute
+		config.MaxConnIdleTime = 2 * time.Minute
+	} else {
+		config.MaxConns = 50
+		config.MinConns = 5
+		config.MaxConnLifetime = 30 * time.Minute
+		config.MaxConnIdleTime = 5 * time.Minute
+	}
 	config.HealthCheckPeriod = 30 * time.Second
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
