@@ -87,15 +87,15 @@ dev-db: up
 	@sleep 10
 	@echo "$(CYAN)▶ Running database migrations...$(NC)"
 	@cat $(INFRA_DIR)/postgres/init.sql | docker exec -i observeid-postgres psql -U observeid -d observeid
-	@docker exec -i observeid-neo4j cypher-shell -u neo4j -p observeid123 -f /init.cypher
+	@docker exec -i observeid-neo4j cypher-shell -u neo4j -p $${NEO4J_PASSWORD:-observeid123} -f /init.cypher
 	@echo "$(GREEN)✓ Database migrations complete$(NC)"
 
 dev-full: dev-db
 	@echo "$(CYAN)▶ Starting all services in dev mode...$(NC)"
 	@echo "$(GREEN)✓ Dev environment ready!$(NC)"
 	@echo ""
-	@echo "  $(YELLOW)PostgreSQL:$(NC)  postgresql://observeid:observeid@localhost:5432/observeid"
-	@echo "  $(YELLOW)Neo4j:$(NC)       bolt://localhost:7687 (neo4j/observeid123)"
+	@echo "  $(YELLOW)PostgreSQL:$(NC)  localhost:5432"
+	@echo "  $(YELLOW)Neo4j:$(NC)       localhost:7687"
 	@echo "  $(YELLOW)Kafka:$(NC)       localhost:9092"
 	@echo "  $(YELLOW)Temporal:$(NC)    localhost:7233"
 	@echo "  $(YELLOW)Redis:$(NC)       localhost:6379"

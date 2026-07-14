@@ -209,30 +209,252 @@ func main() {
 		log.Info().Msg("Frontend static files serving from " + frontendDir)
 	} else {
 		log.Warn().Msg("Frontend static directory not found (checked: frontend/out, ../frontend/out), serving API-only")
-		// Root — API landing page
+		// Root — API documentation landing page
 		r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, `{
-  "service": "ObserveID Reimagined Identity Fabric Engine",
-  "version": "1.0.0",
-  "status": "running",
-  "docs": {
-    "health":   "/health",
-    "healthz":  "/healthz",
-    "ready":    "/ready",
-    "metrics":  "/metrics",
-    "scim":     "/scim/v2/Users",
-    "identities": "/api/v1/identities",
-    "agents":    "/api/v1/agents",
-    "access":    "/api/v1/access/check",
-    "copilot":   "/api/v1/copilot/query",
-    "caep":      "/api/v1/caep/events",
-    "connectors": "/api/v1/connectors",
-    "lcm":       "/api/v1/lcm",
-    "groups":    "/api/v1/groups"
+			fmt.Fprint(w, `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ObserveID — Identity Fabric Engine</title>
+<style>
+  :root {
+    --bg: #09090B; --surface: #111116; --border: #1E1E24;
+    --text: #FAFAFA; --muted: #A1A1AA; --dim: #52525B;
+    --accent: #3B82F6; --accent-dim: rgba(59,130,246,0.12);
+    --green: #22C55E; --green-dim: rgba(34,197,94,0.12);
+    --amber: #F59E0B; --amber-dim: rgba(245,158,11,0.12);
+    --red: #EF4444;
   }
-}`)
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+    min-height: 100vh;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: -1;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 3rem 1.5rem; }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 3rem; }
+  .logo {
+    width: 56px; height: 56px; border-radius: 14px;
+    background: linear-gradient(135deg, var(--accent), #2563EB);
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 1.25rem; box-shadow: 0 0 40px rgba(59,130,246,0.15);
+  }
+  .logo svg { width: 28px; height: 28px; color: white; }
+  h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; max-width: 520px; margin: 0 auto; }
+
+  /* Status pill */
+  .status-row { display: flex; justify-content: center; gap: 1.5rem; margin: 1.5rem 0 2.5rem; flex-wrap: wrap; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.4rem 1rem; border-radius: 100px; font-size: 0.8rem; font-weight: 500;
+    border: 1px solid var(--border); background: var(--surface);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .dot-green { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .dot-amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+
+  /* Grid */
+  .section-title {
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--dim); margin-bottom: 0.75rem;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.75rem; margin-bottom: 2.5rem; }
+
+  /* Cards */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1rem 1.15rem; transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+  .card-icon {
+    width: 32px; height: 32px; border-radius: 8px; display: flex;
+    align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .card-icon svg { width: 16px; height: 16px; }
+  .card-title { font-size: 0.85rem; font-weight: 600; }
+  .card-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+
+  /* Endpoint list */
+  .ep-list { list-style: none; }
+  .ep-item {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.6rem 0; border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+  .ep-item:last-child { border-bottom: none; }
+  .method {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.5rem;
+    border-radius: 4px; min-width: 48px; text-align: center;
+    text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .method-get { background: var(--green-dim); color: var(--green); }
+  .method-post { background: var(--accent-dim); color: var(--accent); }
+  .method-put { background: var(--amber-dim); color: var(--amber); }
+  .method-delete { background: rgba(239,68,68,0.12); color: var(--red); }
+  .method-query { background: rgba(168,85,247,0.12); color: #A855F7; }
+  .ep-path { font-family: 'JetBrains Mono', 'Fira Code', monospace; color: var(--text); font-size: 0.78rem; }
+  .ep-desc { color: var(--dim); margin-left: auto; font-size: 0.72rem; white-space: nowrap; }
+
+  /* Footer */
+  .footer {
+    margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.72rem; color: var(--dim); flex-wrap: wrap; gap: 1rem;
+  }
+  .footer a { color: var(--accent); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+
+  /* Animations */
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+  .dot-green { animation: pulse 2s ease-in-out infinite; }
+
+  @media (max-width: 640px) {
+    .container { padding: 2rem 1rem; }
+    h1 { font-size: 1.4rem; }
+    .grid { grid-template-columns: 1fr; }
+    .ep-desc { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="logo">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+      </svg>
+    </div>
+    <h1>ObserveID Identity Fabric Engine</h1>
+    <p class="subtitle">Event-Driven, AI-Native Identity Governance Platform. Real-time access control for humans, AI agents, and machines.</p>
+  </div>
+
+  <div class="status-row">
+    <span class="status-pill"><span class="dot dot-green"></span> API Operational</span>
+    <span class="status-pill" style="color:var(--muted)">v1.0.0</span>
+    <span class="status-pill" style="color:var(--muted)">SCIM 2.0</span>
+    <span class="status-pill" style="color:var(--muted)">RFC 10008</span>
+  </div>
+
+  <!-- Core Capabilities -->
+  <p class="section-title">Core Capabilities</p>
+  <div class="grid">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:var(--accent-dim)">
+          <svg fill="none" viewBox="0 0 24 24" stroke="var(--accent)" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        </div>
+        <span class="card-title">Identity Fabric</span>
+      </div>
+      <p class="card-desc">Unified identity graph across humans, service accounts, and AI agents with real-time relationship mapping.</p>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:var(--green-dim)">
+          <svg fill="none" viewBox="0 0 24 24" stroke="var(--green)" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        </div>
+        <span class="card-title">Access Governance</span>
+      </div>
+      <p class="card-desc">Policy-as-code with Cedar evaluation, SoD enforcement, and blast radius analysis for least-privilege.</p>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:rgba(168,85,247,0.12)">
+          <svg fill="none" viewBox="0 0 24 24" stroke="#A855F7" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <span class="card-title">Durable Execution</span>
+      </div>
+      <p class="card-desc">Temporal-powered workflows for automated onboarding, offboarding, and just-in-time access with full audit trails.</p>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:var(--amber-dim)">
+          <svg fill="none" viewBox="0 0 24 24" stroke="var(--amber)" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        </div>
+        <span class="card-title">Agent Identity</span>
+      </div>
+      <p class="card-desc">First-class NHI (Non-Human Identity) management with kill-switch delegation and agent card attestation.</p>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:rgba(239,68,68,0.12)">
+          <svg fill="none" viewBox="0 0 24 24" stroke="var(--red)" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+        </div>
+        <span class="card-title">Secrets Vault</span>
+      </div>
+      <p class="card-desc">Encrypted credential storage with AES-256-GCM, connector-aware secret rotation, and audit logging.</p>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-icon" style="background:var(--accent-dim)">
+          <svg fill="none" viewBox="0 0 24 24" stroke="var(--accent)" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>
+        </div>
+        <span class="card-title">Graph-Powered Analytics</span>
+      </div>
+      <p class="card-desc">Neo4j identity graph with Cypher queries, real-time SoD detection, and cascade impact analysis.</p>
+    </div>
+  </div>
+
+  <!-- API Endpoints -->
+  <p class="section-title">API Reference</p>
+  <div class="card" style="margin-bottom: 2.5rem">
+    <ul class="ep-list">
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/health</span><span class="ep-desc">Liveness probe</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/healthz</span><span class="ep-desc">Full dependency check</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/ready</span><span class="ep-desc">Readiness probe</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/metrics</span><span class="ep-desc">Prometheus metrics</span></li>
+      <li class="ep-item"><span class="method method-post">POST</span><span class="ep-path">/graphql</span><span class="ep-desc">GraphQL API</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/scim/v2/Users</span><span class="ep-desc">SCIM 2.0 user listing</span></li>
+      <li class="ep-item"><span class="method method-post">POST</span><span class="ep-path">/scim/v2/Users</span><span class="ep-desc">SCIM 2.0 provisioning</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/api/v1/identities</span><span class="ep-desc">List identities</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/api/v1/identities/{id}</span><span class="ep-desc">Get identity details</span></li>
+      <li class="ep-item"><span class="method method-query">QUERY</span><span class="ep-path">/api/v1/access/check</span><span class="ep-desc">Real-time access evaluation</span></li>
+      <li class="ep-item"><span class="method method-post">POST</span><span class="ep-path">/api/v1/access/grant</span><span class="ep-desc">Grant access (Temporal)</span></li>
+      <li class="ep-item"><span class="method method-post">POST</span><span class="ep-path">/api/v1/access/revoke</span><span class="ep-desc">Revoke access (Temporal)</span></li>
+      <li class="ep-item"><span class="method method-post">POST</span><span class="ep-path">/api/v1/access/jit</span><span class="ep-desc">Just-in-time access</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/api/v1/agents</span><span class="ep-desc">List AI agents / NHIs</span></li>
+      <li class="ep-item"><span class="method method-post">POST</span><span class="ep-path">/api/v1/agents</span><span class="ep-desc">Register agent</span></li>
+      <li class="ep-item"><span class="method method-query">QUERY</span><span class="ep-path">/api/v1/copilot/query</span><span class="ep-desc">AI copilot (GraphRAG)</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/api/v1/connectors</span><span class="ep-desc">List connectors</span></li>
+      <li class="ep-item"><span class="method method-post">POST</span><span class="ep-path">/api/v1/connectors</span><span class="ep-desc">Create connector</span></li>
+      <li class="ep-item"><span class="method method-query">QUERY</span><span class="ep-path">/api/v1/connectors/test</span><span class="ep-desc">Test connection</span></li>
+      <li class="ep-item"><span class="method method-post">POST</span><span class="ep-path">/api/v1/connectors/{id}/sync</span><span class="ep-desc">Sync connector data</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/api/v1/groups</span><span class="ep-desc">List groups / roles</span></li>
+      <li class="ep-item"><span class="method method-post">POST</span><span class="ep-path">/api/v1/lcm</span><span class="ep-desc">Lifecycle management</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/api/v1/vault/secrets</span><span class="ep-desc">List encrypted secrets</span></li>
+      <li class="ep-item"><span class="method method-get">GET</span><span class="ep-path">/api/v1/audit/logs</span><span class="ep-desc">Audit trail</span></li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    <span>ObserveID Reimagined &mdash; Identity Fabric Engine</span>
+    <span>
+      <a href="/health">Health</a> &middot;
+      <a href="/ready">Ready</a> &middot;
+      <a href="/metrics">Metrics</a> &middot;
+      <a href="/graphql">GraphQL</a>
+    </span>
+  </div>
+
+</div>
+</body>
+</html>`)
 		}).Methods("GET")
 	}
 
