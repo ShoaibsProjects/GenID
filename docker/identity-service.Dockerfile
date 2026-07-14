@@ -11,11 +11,13 @@ RUN go mod download
 
 # Generate protobuf code
 COPY proto ./proto
-RUN protoc \
-    --proto_path=proto \
-    --go_out=. --go_opt=paths=source_relative \
-    --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-    proto/event/v1/*.proto proto/model/v1/*.proto
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && \
+    protoc \
+        --proto_path=proto \
+        --go_out=. --go_opt=paths=source_relative \
+        --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+        proto/event/v1/*.proto proto/model/v1/*.proto
 
 # Build
 COPY backend/ .
