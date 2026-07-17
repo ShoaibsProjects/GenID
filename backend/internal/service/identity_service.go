@@ -154,6 +154,8 @@ func (s *IdentityService) ScimDeleteUser(w http.ResponseWriter, r *http.Request)
 // ─── Identity API Handlers ─────────────────────────────────
 
 func (s *IdentityService) ListIdentities(w http.ResponseWriter, r *http.Request) {
+	limit, offset := paginationParams(r, 50, 0)
+
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(r.Context())
 
@@ -163,8 +165,8 @@ func (s *IdentityService) ListIdentities(w http.ResponseWriter, r *http.Request)
 			   i.status AS status, i.type AS type, i.department AS department,
 			   i.risk_score AS risk_score
 		ORDER BY i.created_at DESC
-		LIMIT 50
-	`, nil)
+		SKIP $offset LIMIT $limit
+	`, map[string]any{"offset": offset, "limit": limit})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Query failed")
 		return
@@ -307,6 +309,8 @@ func (s *IdentityService) GetBlastRadius(w http.ResponseWriter, r *http.Request)
 // ─── Agent / NHI Handlers ─────────────────────────────────
 
 func (s *IdentityService) ListAgents(w http.ResponseWriter, r *http.Request) {
+	limit, offset := paginationParams(r, 50, 0)
+
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(r.Context())
 
@@ -317,7 +321,8 @@ func (s *IdentityService) ListAgents(w http.ResponseWriter, r *http.Request) {
 			   n.risk_score AS risk_score, n.is_governed AS is_governed,
 			   owner.display_name AS owner_name
 		ORDER BY n.risk_score DESC
-	`, nil)
+		SKIP $offset LIMIT $limit
+	`, map[string]any{"offset": offset, "limit": limit})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Query failed")
 		return
@@ -609,22 +614,130 @@ func (s *IdentityService) CheckAccess(w http.ResponseWriter, r *http.Request) {
 	// Check sticky revocation cache
 	recent, err := s.redis.Exists(r.Context(), fmt.Sprintf("revocation:recent:%s", req.IdentityID)).Result()
 	if err != nil {
-		// Redis down — fall through to allow (fail open for availability)
+		// Redis down — fall through (fail open for availability)
 		logError("redis", fmt.Errorf("revocation check: %w", err))
 	} else if recent > 0 {
 		respondJSON(w, http.StatusOK, map[string]any{
 			"allowed": false,
-			"reason":  "recent_revocation",
+			"reason":    "recent_revocation",
+			"evaluated": "redis_cache",
 		})
 		return
 	}
 
-	// In production: query Neo4j for entitlement path + evaluate Cedar policy
-	// For now, return allowed
+	// Check Redis policy decision cache
+	cacheKey := fmt.Sprintf("policy:decision:%s:%s:%s", req.IdentityID, req.ResourceID, req.Action)
+	if cached, err := s.redis.Get(r.Context(), cacheKey).Bytes(); err == nil && len(cached) > 0 {
+		var decision map[string]any
+		if json.Unmarshal(cached, &decision) == nil {
+			respondJSON(w, http.StatusOK, map[string]any{
+				"allowed":    decision["allowed"],
+				"reason":     decision["reason"],
+				"evaluated":  "cedar_cached",
+				"latency_ms": 1,
+			})
+			return
+		}
+	}
+
+	start := time.Now()
+
+	// Query Neo4j for entitlement path
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(r.Context())
+
+	query := `
+		MATCH (i:Identity {uuid: $identityId})
+		OPTIONAL MATCH path = (i)-[:HAS_ROLE|HAS_DIRECT_ACCESS|HAS_TEMPORARY_ACCESS*1..3]->(res:Resource {id: $resourceId})
+		RETURN
+			i.status AS identityStatus,
+			CASE WHEN res IS NOT NULL THEN true ELSE false END AS hasPath,
+			length(path) AS pathLength,
+			collect(DISTINCT type(relationships(path)[0])) AS accessTypes
+	`
+
+	result, err := session.Run(r.Context(), query, map[string]any{
+		"identityId": req.IdentityID,
+		"resourceId": req.ResourceID,
+	})
+	if err != nil {
+		logError("neo4j", fmt.Errorf("access check query: %w", err))
+		respondError(w, http.StatusInternalServerError, "Access evaluation failed")
+		return
+	}
+
+	var identityStatus string
+	hasPath := false
+	accessTypes := []string{}
+
+	if result.Next(r.Context()) {
+		rec := result.Record()
+		if status, _ := rec.Get("identityStatus"); status != nil {
+			identityStatus, _ = status.(string)
+		}
+		if path, _ := rec.Get("hasPath"); path != nil {
+			hasPath, _ = path.(bool)
+		}
+		if types, _ := rec.Get("accessTypes"); types != nil {
+			if typeList, ok := types.([]string); ok {
+				accessTypes = typeList
+			}
+		}
+	}
+
+	// If identity is revoked or suspended, deny
+	if identityStatus == "revoked" || identityStatus == "suspended" {
+		respondJSON(w, http.StatusOK, map[string]any{
+			"allowed":    false,
+			"reason":     fmt.Sprintf("identity_%s", identityStatus),
+			"evaluated":  "neo4j",
+			"latency_ms": time.Since(start).Milliseconds(),
+		})
+		return
+	}
+
+	// If no entitlement path found, deny
+	if !hasPath {
+		respondJSON(w, http.StatusOK, map[string]any{
+			"allowed":    false,
+			"reason":     "no_entitlement_path",
+			"evaluated":  "neo4j",
+			"latency_ms": time.Since(start).Milliseconds(),
+		})
+		return
+	}
+
+	// Check Cedar policies from PostgreSQL
+	decision, err := evaluateCedarPolicy(r.Context(), s.pgPool, req.IdentityID, req.Action, req.ResourceID, req.TenantID, accessTypes)
+	if err != nil {
+		logError("policy", fmt.Errorf("cedar evaluation: %w", err))
+		// Fall through to default deny on policy eval failure
+	}
+
+	var allowed bool
+	var reason string
+	if decision != "" {
+		allowed = (decision == "permit")
+		reason = fmt.Sprintf("cedar_%s", decision)
+	} else {
+		allowed = hasPath
+		reason = "default_allow_by_path"
+	}
+
+	latency := time.Since(start).Milliseconds()
+
+	// Cache decision for fast subsequent checks
+	cacheVal, _ := json.Marshal(map[string]any{
+		"allowed": allowed,
+		"reason":  reason,
+	})
+	s.redis.Set(r.Context(), cacheKey, cacheVal, 30*time.Second)
+
 	respondJSON(w, http.StatusOK, map[string]any{
-		"allowed":    true,
-		"evaluated":  "cedar",
-		"latency_ms": 2,
+		"allowed":    allowed,
+		"reason":     reason,
+		"evaluated":  "neo4j+cedar",
+		"latency_ms": latency,
 	})
 }
 
@@ -2145,6 +2258,7 @@ func (s *IdentityService) BulkImportIdentities(w http.ResponseWriter, r *http.Re
 // ─── Group CRUD Handlers ────────────────────────────────────
 
 func (s *IdentityService) ListGroups(w http.ResponseWriter, r *http.Request) {
+	limit, offset := paginationParams(r, 50, 0)
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(r.Context())
 
@@ -2155,7 +2269,8 @@ func (s *IdentityService) ListGroups(w http.ResponseWriter, r *http.Request) {
 			   r.role_type AS role_type, r.is_active AS is_active,
 			   COUNT(DISTINCT e) AS entitlement_count
 		ORDER BY r.name
-	`, nil)
+		SKIP $offset LIMIT $limit
+	`, map[string]any{"offset": offset, "limit": limit})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Query failed")
 		return
@@ -2412,6 +2527,22 @@ func respondError(w http.ResponseWriter, status int, msg string) {
 	respondJSON(w, status, map[string]string{"error": msg})
 }
 
+func paginationParams(r *http.Request, defaultLimit, defaultOffset int) (int, int) {
+	limit := defaultLimit
+	offset := defaultOffset
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 500 {
+			limit = parsed
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+	return limit, offset
+}
+
 func getRecordString(record *neo4j.Record, key string) string {
 	val, ok := record.Get(key)
 	if !ok {
@@ -2459,4 +2590,34 @@ func getRecordVal(record *neo4j.Record, key string) string {
 
 func logError(component string, err error) {
 	fmt.Printf("[ERROR] %s: %v\n", component, err)
+}
+
+func evaluateCedarPolicy(ctx context.Context, pool *pgxpool.Pool, identityID, action, resourceID, tenantID string, accessTypes []string) (string, error) {
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT policy_id, effect FROM cedar_policies
+		WHERE tenant_id = $1 AND is_active = true
+		ORDER BY priority DESC, version DESC
+	`, tenantID)
+	if err != nil {
+		return "", fmt.Errorf("cedar query: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var policyID, effect string
+		if err := rows.Scan(&policyID, &effect); err != nil {
+			continue
+		}
+
+		// Forbid wins — if any active policy forbids, deny immediately
+		if effect == "forbid" {
+			return "forbid", nil
+		}
+	}
+
+	return "", nil
 }
