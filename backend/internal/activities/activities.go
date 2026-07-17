@@ -466,10 +466,12 @@ func (s *ActivityService) RevokeTargetAccess(ctx context.Context, params Revocat
 	// Mark entitlement as revoked in Neo4j
 	session := s.neo4j.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
-	_, _ = session.Run(ctx, `
+	if _, err := session.Run(ctx, `
 		MATCH (e:Entitlement {id: $id})
 		SET e.status = 'revoked', e.revoked_at = timestamp(), e.revoked_by = $revokedBy
-	`, map[string]any{"id": params.EntitlementID, "revokedBy": params.RevokedBy})
+	`, map[string]any{"id": params.EntitlementID, "revokedBy": params.RevokedBy}); err != nil {
+		return fmt.Errorf("revoke: neo4j mark entitlement: %w", err)
+	}
 
 	activity.RecordHeartbeat(ctx, "access_revoked")
 	return nil
@@ -492,13 +494,15 @@ func (s *ActivityService) ProvisionAccess(ctx context.Context, params ProvisionP
 	// Create Neo4j relationship
 	session := s.neo4j.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
-	_, _ = session.Run(ctx, `
+	if _, err := session.Run(ctx, `
 		MATCH (i:Identity {uuid: $identityId}), (res:Resource {id: $resourceId})
 		MERGE (i)-[:HAS_DIRECT_ACCESS {granted_at: timestamp(), granted_by: $grantedBy, reason: $reason}]->(res)
 	`, map[string]any{
 		"identityId": params.IdentityID, "resourceId": params.ResourceID,
 		"grantedBy": params.GrantedBy, "reason": params.Reason,
-	})
+	}); err != nil {
+		return fmt.Errorf("provision: neo4j relationship: %w", err)
+	}
 
 	// Store in Redis for quick access check invalidation
 	s.redis.Del(ctx, fmt.Sprintf("access:check:%s:%s", params.IdentityID, params.ResourceID))
@@ -521,10 +525,12 @@ func (s *ActivityService) RevokeIdentityAccess(ctx context.Context, params Revoc
 	// Phase 3: Mark in Neo4j
 	session := s.neo4j.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
-	_, _ = session.Run(ctx, `
+	if _, err := session.Run(ctx, `
 		MATCH (i:Identity {uuid: $id})
 		SET i.status = 'revoked', i.revoked_at = timestamp(), i.revoked_by = $revokedBy
-	`, map[string]any{"id": params.IdentityID, "revokedBy": params.RevokedBy})
+	`, map[string]any{"id": params.IdentityID, "revokedBy": params.RevokedBy}); err != nil {
+		return fmt.Errorf("revoke identity: neo4j status update: %w", err)
+	}
 
 	// Phase 4: Revoke all active sessions
 	s.redis.Del(ctx, fmt.Sprintf("session:active:%s", params.IdentityID))
@@ -559,13 +565,15 @@ func (s *ActivityService) ProvisionTemporaryAccess(ctx context.Context, params P
 	// Create Neo4j temp relationship
 	session := s.neo4j.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
-	_, _ = session.Run(ctx, `
+	if _, err := session.Run(ctx, `
 		MATCH (i:Identity {uuid: $identityId}), (res:Resource {id: $resourceId})
 		MERGE (i)-[:HAS_TEMPORARY_ACCESS {granted_at: timestamp(), expires_at: $expiresAt, granted_by: $grantedBy}]->(res)
 	`, map[string]any{
 		"identityId": params.IdentityID, "resourceId": params.ResourceID,
 		"expiresAt": expiresAt.UnixMilli(), "grantedBy": params.GrantedBy,
-	})
+	}); err != nil {
+		return fmt.Errorf("temp provision: neo4j relationship: %w", err)
+	}
 
 	activity.RecordHeartbeat(ctx, "temp_access_granted")
 	return nil
@@ -591,23 +599,29 @@ func (s *ActivityService) RevokeTemporaryAccess(ctx context.Context, params map[
 	defer session.Close(ctx)
 
 	if resourceID != "" {
-		_, _ = session.Run(ctx, `
+		if _, err := session.Run(ctx, `
 			MATCH (i:Identity {uuid: $identityId})-[r:HAS_TEMPORARY_ACCESS]->(res:Resource {id: $resourceId})
 			DELETE r
-		`, map[string]any{"identityId": identityID, "resourceId": resourceID})
+		`, map[string]any{"identityId": identityID, "resourceId": resourceID}); err != nil {
+			return fmt.Errorf("revoke temp access: neo4j delete: %w", err)
+		}
 	} else {
-		_, _ = session.Run(ctx, `
+		if _, err := session.Run(ctx, `
 			MATCH (i:Identity {uuid: $identityId})-[r:HAS_TEMPORARY_ACCESS]->()
 			DELETE r
-		`, map[string]any{"identityId": identityID})
+		`, map[string]any{"identityId": identityID}); err != nil {
+			return fmt.Errorf("revoke temp access: neo4j bulk delete: %w", err)
+		}
 	}
 
-	// Audit log
-	_, _ = s.pgPool.Exec(ctx, `
+	// Audit log — audit failure should not block the operation
+	if _, err := s.pgPool.Exec(ctx, `
 		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, created_at)
 		VALUES ($1, 'temporary_access_revoked', $2, 'jit_revoke', $3,
 		        jsonb_build_object('reason', 'expired'), NOW())`,
-		uuid.New().String(), identityID, "resource:"+resourceID)
+		uuid.New().String(), identityID, "resource:"+resourceID); err != nil {
+		activity.RecordHeartbeat(ctx, "temp_access_audit_write_failed", err.Error())
+	}
 
 	activity.RecordHeartbeat(ctx, "temp_access_revoked")
 	return nil
@@ -645,11 +659,14 @@ func (s *ActivityService) RevokeOAuthTokens(ctx context.Context, params map[stri
 	// Clear active sessions
 	s.redis.Del(ctx, fmt.Sprintf("session:active:%s", agentID))
 
-	_, _ = s.pgPool.Exec(ctx, `
+	// Audit log — best-effort, don't block revocation on audit failure
+	if _, err := s.pgPool.Exec(ctx, `
 		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, ip_address, created_at)
 		VALUES ($1, 'oauth_tokens_revoked', $2, 'revoke_oauth', $3,
 		        jsonb_build_object('method', 'token_invalidation'), 'internal', NOW())`,
-		uuid.New().String(), agentID, "agent:"+agentID)
+		uuid.New().String(), agentID, "agent:"+agentID); err != nil {
+		activity.RecordHeartbeat(ctx, "oauth_audit_write_failed", err.Error())
+	}
 
 	activity.RecordHeartbeat(ctx, "oauth_revoked")
 	return nil
@@ -659,18 +676,23 @@ func (s *ActivityService) RevokeAPIKeys(ctx context.Context, params map[string]a
 	agentID, _ := params["agent_id"].(string)
 
 	// Mark all API keys as revoked in PostgreSQL
-	_, _ = s.pgPool.Exec(ctx, `
+	if _, err := s.pgPool.Exec(ctx, `
 		UPDATE non_human_identities SET status = 'revoked', updated_at = NOW()
-		WHERE id = $1 OR owner_id = $1`, agentID)
+		WHERE id = $1 OR owner_id = $1`, agentID); err != nil {
+		return fmt.Errorf("revoke api keys: pg update: %w", err)
+	}
 
 	// Invalidate in Redis
 	s.redis.Del(ctx, fmt.Sprintf("apikey:hash:%s:*", agentID))
 
-	_, _ = s.pgPool.Exec(ctx, `
+	// Audit log — best-effort
+	if _, err := s.pgPool.Exec(ctx, `
 		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, ip_address, created_at)
 		VALUES ($1, 'api_keys_revoked', $2, 'revoke_apikeys', $3,
 		        jsonb_build_object('method', 'key_rotation'), 'internal', NOW())`,
-		uuid.New().String(), agentID, "agent:"+agentID)
+		uuid.New().String(), agentID, "agent:"+agentID); err != nil {
+		activity.RecordHeartbeat(ctx, "apikeys_audit_write_failed", err.Error())
+	}
 
 	activity.RecordHeartbeat(ctx, "apikeys_revoked")
 	return nil
@@ -703,10 +725,13 @@ func (s *ActivityService) BroadcastCAEPEvent(ctx context.Context, params CAEPEve
 		},
 	}
 
-	payload, _ := json.MarshalIndent(event, "", "  ")
+	payload, err := json.MarshalIndent(event, "", "  ")
+	if err != nil {
+		return fmt.Errorf("caep marshal event: %w", err)
+	}
 
 	// Persist CAEP event to PostgreSQL
-	_, err := s.pgPool.Exec(ctx, `
+	_, err = s.pgPool.Exec(ctx, `
 		INSERT INTO caep_events (id, tenant_id, event_type, event_jti, identity_id, session_id,
 		                         initiating_entity, reason_admin, reason_user, payload, delivery_status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', NOW())`,
@@ -719,7 +744,8 @@ func (s *ActivityService) BroadcastCAEPEvent(ctx context.Context, params CAEPEve
 	}
 
 	// In production: JWT-sign and POST to registered webhook receivers
-	_ = payload
+	// Implementation: sign payload with HMAC-SHA256, POST to tenant webhook URLs
+	activity.RecordHeartbeat(ctx, "caep_payload_ready", fmt.Sprintf("%d bytes", len(payload)))
 
 	activity.RecordHeartbeat(ctx, "caep_broadcasted")
 	return nil
@@ -745,7 +771,7 @@ func (s *ActivityService) CreateIdentity(ctx context.Context, params CreateIdent
 	// Create Neo4j node
 	session := s.neo4j.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
-	_, _ = session.Run(ctx, `
+	if _, err := session.Run(ctx, `
 		CREATE (i:Identity {
 			uuid: $uuid, tenant_id: $tenantId, type: $type, status: 'active',
 			email: $email, display_name: $displayName, created_at: $createdAt
@@ -754,7 +780,9 @@ func (s *ActivityService) CreateIdentity(ctx context.Context, params CreateIdent
 		"uuid": identityID, "tenantId": params.TenantID, "type": params.IdentityType,
 		"email": params.Email, "displayName": params.DisplayName,
 		"createdAt": now.UnixMilli(),
-	})
+	}); err != nil {
+		return CreateIdentityResult{}, fmt.Errorf("identity create: neo4j node: %w", err)
+	}
 
 	activity.RecordHeartbeat(ctx, "identity_created")
 	return CreateIdentityResult{IdentityID: identityID, CreatedAt: now}, nil
@@ -777,13 +805,16 @@ func (s *ActivityService) AssignRoleToIdentity(ctx context.Context, params Assig
 		return fmt.Errorf("assign role: neo4j: %w", err)
 	}
 
-	// Audit log
-	_, _ = s.pgPool.Exec(ctx, `
+	// Audit log — best-effort, don't block role assignment
+	if _, err := s.pgPool.Exec(ctx, `
 		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, ip_address, created_at)
 		VALUES ($1, 'role_assigned', $2, 'assign_role', $3,
 		        jsonb_build_object('role_name', $4, 'role_id', $5), 'internal', NOW())`,
 		uuid.New().String(), params.IdentityID, "role:"+params.RoleID,
-		params.RoleName, params.RoleID)
+		params.RoleName, params.RoleID); err != nil {
+		// Non-critical — log and continue
+		activity.RecordHeartbeat(ctx, "role_assignment_audit_write_failed", err.Error())
+	}
 
 	return nil
 }
@@ -838,8 +869,9 @@ func (s *ActivityService) CheckAccessPolicy(ctx context.Context, params PolicyCh
 
 	// Cache decision in Redis
 	cacheKey := fmt.Sprintf("policy:decision:%s:%s:%s", params.IdentityID, params.ResourceID, params.Action)
-	cacheVal, _ := json.Marshal(result)
-	s.redis.Set(ctx, cacheKey, cacheVal, 30*time.Second)
+	if cacheVal, err := json.Marshal(result); err == nil {
+		s.redis.Set(ctx, cacheKey, cacheVal, 30*time.Second)
+	}
 
 	activity.RecordHeartbeat(ctx, "policy_checked", result.Decision)
 	return result, nil

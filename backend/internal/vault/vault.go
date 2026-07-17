@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,7 +41,14 @@ type SecretEntry struct {
 
 // NewVault creates a vault with a key derived from VAULT_MASTER_KEY env var.
 // vaultPath is an optional file path for persistent storage. Set to "" for in-memory only.
-func NewVault(masterKey string, vaultPath string) *Vault {
+func NewVault(masterKey string, vaultPath string) (*Vault, error) {
+	if masterKey == "" {
+		return nil, fmt.Errorf("vault: VAULT_MASTER_KEY is not set")
+	}
+	if len(masterKey) < 32 {
+		return nil, fmt.Errorf("vault: VAULT_MASTER_KEY too short (%d chars, minimum 32)", len(masterKey))
+	}
+
 	key := deriveKey(masterKey)
 	v := &Vault{
 		masterKey: key,
@@ -57,7 +65,7 @@ func NewVault(masterKey string, vaultPath string) *Vault {
 			}
 		}
 	}
-	return v
+	return v, nil
 }
 
 // Save persists the vault to disk. Returns an error if no vaultPath was configured.
@@ -77,7 +85,7 @@ func (v *Vault) Store(ctx context.Context, name, secretType, reference, plaintex
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
-	id := fmt.Sprintf("sec-%d", time.Now().UnixNano())
+	id := generateSecretID()
 	ciphertext, err := v.encrypt([]byte(plaintext))
 	if err != nil {
 		return "", fmt.Errorf("vault: encrypt failed: %w", err)
@@ -190,12 +198,6 @@ func (v *Vault) decrypt(ciphertext []byte) ([]byte, error) {
 }
 
 func deriveKey(masterKey string) []byte {
-	if masterKey == "" {
-		log.Fatal("[VAULT] VAULT_MASTER_KEY is not set. Set a 64-char hex key in .env or environment. Exiting.")
-	}
-	if len(masterKey) < 32 {
-		log.Fatalf("[VAULT] VAULT_MASTER_KEY is too short (%d chars). Minimum 32 characters required. Exiting.", len(masterKey))
-	}
 	h := sha256.Sum256([]byte(masterKey))
 	return h[:]
 }
@@ -212,4 +214,13 @@ func (v *Vault) Import(data []byte) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	return json.Unmarshal(data, &v.secrets)
+}
+
+func generateSecretID() string {
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp if crypto/rand fails (should never happen)
+		return fmt.Sprintf("sec-%d", time.Now().UnixNano())
+	}
+	return "sec-" + hex.EncodeToString(b)
 }

@@ -10,13 +10,13 @@ import (
 )
 
 func TestNewVault_CustomKey(t *testing.T) {
-	v := NewVault("this-is-a-32-char-custom-key-!!!", "")
+	v, _ := NewVault("this-is-a-32-char-custom-key-!!!", "")
 	require.NotNil(t, v)
 	assert.Len(t, v.masterKey, 32)
 }
 
 func TestStoreAndRetrieve(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 	ctx := context.Background()
 
 	id, err := v.Store(ctx, "my-secret", "api_key", "connector-1", "supersecretvalue")
@@ -29,7 +29,7 @@ func TestStoreAndRetrieve(t *testing.T) {
 }
 
 func TestStoreAndRetrieveMultiple(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 	ctx := context.Background()
 
 	id1, _ := v.Store(ctx, "secret-1", "api_key", "", "value1")
@@ -42,7 +42,7 @@ func TestStoreAndRetrieveMultiple(t *testing.T) {
 }
 
 func TestRetrieveNotFound(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 	ctx := context.Background()
 
 	_, err := v.Retrieve(ctx, "nonexistent")
@@ -50,7 +50,7 @@ func TestRetrieveNotFound(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 	ctx := context.Background()
 
 	id, _ := v.Store(ctx, "to-delete", "api_key", "", "value")
@@ -62,7 +62,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestDeleteNotFound(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 	ctx := context.Background()
 
 	err := v.Delete(ctx, "nonexistent")
@@ -70,7 +70,7 @@ func TestDeleteNotFound(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 	ctx := context.Background()
 
 	v.Store(ctx, "secret-1", "api_key", "", "value1")
@@ -85,7 +85,7 @@ func TestList(t *testing.T) {
 }
 
 func TestEncryptDecryptRoundtrip(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 
 	plaintext := []byte("sensitive-data-123")
 	ciphertext, err := v.encrypt(plaintext)
@@ -98,14 +98,14 @@ func TestEncryptDecryptRoundtrip(t *testing.T) {
 }
 
 func TestDecryptInvalid(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 
 	_, err := v.decrypt([]byte("too-short"))
 	assert.Error(t, err)
 }
 
 func TestExportImport(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 	ctx := context.Background()
 
 	v.Store(ctx, "secret-1", "api_key", "", "value1")
@@ -114,7 +114,7 @@ func TestExportImport(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "secret-1")
 
-	v2 := NewVault("test-master-key-32-bytes-long!!!", "")
+	v2, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 	err = v2.Import(data)
 	require.NoError(t, err)
 	assert.Len(t, v2.secrets, 1)
@@ -127,7 +127,7 @@ func TestExportImport(t *testing.T) {
 }
 
 func TestSave_NoPath(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 	err := v.Save()
 	assert.ErrorContains(t, err, "no vault path configured")
 }
@@ -137,7 +137,7 @@ func TestSaveAndLoadFromFile(t *testing.T) {
 	tmpFile.Close()
 	defer os.Remove(tmpFile.Name())
 
-	v := NewVault("test-master-key-32-bytes-long!!!", tmpFile.Name())
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", tmpFile.Name())
 	ctx := context.Background()
 	v.Store(ctx, "persisted-secret", "api_key", "", "persisted-value")
 
@@ -150,7 +150,7 @@ func TestSaveAndLoadFromFile(t *testing.T) {
 }
 
 func TestConcurrency(t *testing.T) {
-	v := NewVault("test-master-key-32-bytes-long!!!", "")
+	v, _ := NewVault("test-master-key-32-bytes-long!!!", "")
 	ctx := context.Background()
 
 	done := make(chan struct{})

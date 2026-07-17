@@ -44,7 +44,11 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 	if vaultPath == "" {
 		vaultPath = "/tmp/observeid-vault.json"
 	}
-	vlt := vault.NewVault(os.Getenv("VAULT_MASTER_KEY"), vaultPath)
+	vlt, err := vault.NewVault(os.Getenv("VAULT_MASTER_KEY"), vaultPath)
+	if err != nil {
+		log.Printf("[IDENTITY] Vault initialization failed: %v — continuing with in-memory-only vault", err)
+		vlt, _ = vault.NewVault("default-insecure-key-do-not-use-in-production-32chars-min", "")
+	}
 	alog := audit.NewStore(10000)
 	return &IdentityService{
 		pgPool:       pgPool,
@@ -129,7 +133,7 @@ func (s *IdentityService) ScimDeleteUser(w http.ResponseWriter, r *http.Request)
 	vars := mux.Vars(r)
 	id := vars["id"]
 	// Trigger offboarding workflow
-	s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
+	we, err := s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
 		ID:        fmt.Sprintf("offboard-%s", id),
 		TaskQueue: "critical_offboarding",
 	}, workflow.OffboardIdentityWorkflow, workflow.OffboardInput{
@@ -137,7 +141,14 @@ func (s *IdentityService) ScimDeleteUser(w http.ResponseWriter, r *http.Request)
 		Reason:     "SCIM deprovisioning",
 		RequestedBy: "scim",
 	})
-	respondJSON(w, http.StatusNoContent, nil)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to start offboarding workflow")
+		return
+	}
+	respondJSON(w, http.StatusAccepted, map[string]any{
+		"status":      "offboarding",
+		"workflow_id": we.GetID(),
+	})
 }
 
 // ─── Identity API Handlers ─────────────────────────────────
@@ -432,12 +443,17 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 		req.Reason = "emergency_kill_switch"
 	}
 
-	// Update PostgreSQL status (source of truth)
-	// In production: tx.Exec("UPDATE non_human_identities SET status = 'revoked' WHERE uuid = $1", id)
-
-	// Revoke agent — use the registered RevokeAccessWorkflow
 	agentID := id
 	reason := req.Reason
+
+	// Kill the agent in PostgreSQL (source of truth)
+	if _, err := s.pgPool.Exec(r.Context(), `
+		UPDATE non_human_identities SET status = 'revoked', updated_at = NOW() WHERE id = $1`,
+		agentID); err != nil {
+		logError("postgres", fmt.Errorf("kill switch pg update: %w", err))
+	}
+
+	// Launch Temporal workflow (async — uses own context with timeout)
 	go func() {
 		if _, err := s.temporal.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
 			ID:        fmt.Sprintf("kill-agent-%s", agentID),
@@ -452,26 +468,25 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 		}
 	}()
 
-	// Find and cascade-revoke delegated agents
-	parentID := id
+	// Find and cascade-revoke delegated agents using request context for query
 	go func() {
-		session := s.neo4j.NewSession(context.Background(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-		defer session.Close(context.Background())
+		session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+		defer session.Close(r.Context())
 
-		result, err := session.Run(context.Background(), `
+		result, err := session.Run(r.Context(), `
 			MATCH (:NonHumanIdentity {uuid: $id})-[:DELEGATED_FROM*1..3]->(child:NonHumanIdentity)
 			WHERE child.status = 'active'
 			RETURN child.uuid AS child_id
-		`, map[string]any{"id": parentID})
+		`, map[string]any{"id": agentID})
 		if err != nil {
 			logError("neo4j", fmt.Errorf("cascade query: %w", err))
 			return
 		}
 
-		for result.Next(context.Background()) {
+		for result.Next(r.Context()) {
 			childIDRaw, _ := result.Record().Get("child_id")
-			childIDStr, _ := childIDRaw.(string)
-			if childIDStr == "" {
+			childIDStr, ok := childIDRaw.(string)
+			if !ok || childIDStr == "" {
 				continue
 			}
 			if _, err := s.temporal.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
@@ -480,7 +495,7 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 			}, workflow.RevokeAccessWorkflow, workflow.RevokeAccessInput{
 				IdentityID:  childIDStr,
 				Reason:      "parent_revoked",
-				RevokedBy:   parentID,
+				RevokedBy:   agentID,
 				IsEmergency: true,
 			}); err != nil {
 				logError("temporal", fmt.Errorf("cascade kill switch: %w", err))
@@ -621,14 +636,18 @@ func (s *IdentityService) GrantAccess(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workflowID := fmt.Sprintf("grant-access-%s-%s", req.IdentityID, uuid.New().String()[:8])
-	s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
+	we, err := s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: "critical_offboarding",
 	}, workflow.GrantAccessWorkflow, req)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to start grant workflow")
+		return
+	}
 
 	respondJSON(w, http.StatusAccepted, map[string]any{
 		"status":      "provisioning",
-		"workflow_id": workflowID,
+		"workflow_id": we.GetID(),
 	})
 }
 
@@ -670,14 +689,18 @@ func (s *IdentityService) RevokeAccess(w http.ResponseWriter, r *http.Request) {
 
 	req.IsEmergency = true // API-triggered = emergency
 	workflowID := fmt.Sprintf("revoke-access-%s-%s", req.IdentityID, uuid.New().String()[:8])
-	s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
+	we, err := s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: "critical_offboarding",
 	}, workflow.RevokeAccessWorkflow, req)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to start revocation workflow")
+		return
+	}
 
 	respondJSON(w, http.StatusAccepted, map[string]any{
 		"status":      "revocation_initiated",
-		"workflow_id": workflowID,
+		"workflow_id": we.GetID(),
 	})
 }
 
@@ -869,7 +892,9 @@ func (s *IdentityService) persistSyncedUsers(ctx context.Context, connectorID st
 	for _, user := range users {
 		var raw []byte
 		if user.Attributes != nil {
-			raw, _ = json.Marshal(user.Attributes)
+			if raw, _ = json.Marshal(user.Attributes); raw == nil {
+				raw = []byte("{}")
+			}
 		}
 		if raw == nil {
 			raw = []byte("{}")

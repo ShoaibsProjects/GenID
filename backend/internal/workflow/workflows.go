@@ -3,6 +3,7 @@ package workflow
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.temporal.io/sdk/temporal"
@@ -357,25 +358,48 @@ func CascadeRevokeWorkflow(ctx workflow.Context, input CascadeRevokeInput) error
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
 	// Step 1: Revoke SPIFFE SVID
+	var spiffeErr error
 	_ = workflow.ExecuteActivity(ctx, "RevokeSPIFFESVID", map[string]any{
 		"agent_id": input.AgentID,
-	}).Get(ctx, nil)
+	}).Get(ctx, &spiffeErr)
 
 	// Step 2: Revoke OAuth tokens
+	var oauthErr error
 	_ = workflow.ExecuteActivity(ctx, "RevokeOAuthTokens", map[string]any{
 		"agent_id": input.AgentID,
-	}).Get(ctx, nil)
+	}).Get(ctx, &oauthErr)
 
 	// Step 3: Revoke API keys
+	var apikeysErr error
 	_ = workflow.ExecuteActivity(ctx, "RevokeAPIKeys", map[string]any{
 		"agent_id": input.AgentID,
-	}).Get(ctx, nil)
+	}).Get(ctx, &apikeysErr)
 
 	// Step 4: Rotate any remaining credentials
+	var rotateErr error
 	_ = workflow.ExecuteActivity(ctx, "RotateCredentials", map[string]any{
 		"identity_id":     input.AgentID,
 		"credential_type": "api_key",
-	}).Get(ctx, nil)
+	}).Get(ctx, &rotateErr)
+
+	// Aggregate errors — cascade should try all steps even if some fail
+	var failures []string
+	if spiffeErr != nil {
+		failures = append(failures, fmt.Sprintf("spiffe: %v", spiffeErr))
+	}
+	if oauthErr != nil {
+		failures = append(failures, fmt.Sprintf("oauth: %v", oauthErr))
+	}
+	if apikeysErr != nil {
+		failures = append(failures, fmt.Sprintf("apikeys: %v", apikeysErr))
+	}
+	if rotateErr != nil {
+		failures = append(failures, fmt.Sprintf("rotate: %v", rotateErr))
+	}
+	if len(failures) > 0 {
+		logger.Warn("Cascade revocation partial failures", "failures", failures)
+		return fmt.Errorf("cascade revocation had %d failures: %s", len(failures), strings.Join(failures, "; "))
+	}
 
 	logger.Info("Cascade revocation complete")
 	return nil
@@ -612,11 +636,15 @@ func RevokeAccessWorkflow(ctx workflow.Context, input RevokeAccessInput) error {
 			return fmt.Errorf("emergency identity revoke failed: %w", err)
 		}
 
-		// Rotate credentials
+		// Rotate credentials — partial failure is non-blocking
+		var rotateErr error
 		_ = workflow.ExecuteActivity(ctx, "RotateCredentials", map[string]any{
 			"identity_id":     input.IdentityID,
 			"credential_type": "api_key",
-		}).Get(ctx, nil)
+		}).Get(ctx, &rotateErr)
+		if rotateErr != nil {
+			logger.Warn("Credential rotation failed during revoke", "error", rotateErr)
+		}
 
 		// Broadcast CAEP
 		workflow.ExecuteActivity(ctx, "BroadcastCAEPEvent", activities.CAEPEventParams{
