@@ -1,0 +1,16 @@
+employee_id,email,display_name,first_name,last_name,department,title,manager,division,cost_center,company,phone,enabled,groups
+EMP-001,jane.chen@observeid.com,Jane Chen,Jane,Chen,Engineering,Senior Director of Engineering,ENG-01,R&D,CC-1001,ObserveID Inc,+1-415-555-0101,true,Engineering Leadership;R&D
+EMP-002,marcus.rodriguez@observeid.com,Marcus Rodriguez,Marcus,Rodriguez,Engineering,Principal Architect,jane.chen@observeid.com,R&D,CC-1001,ObserveID Inc,+1-415-555-0102,true,Architecture;Security Champions
+EMP-003,sarah.johnson@observeid.com,Sarah Johnson,Sarah,Johnson,Engineering,Staff Engineer,marcus.rodriguez@observeid.com,R&D,CC-1001,ObserveID Inc,+1-415-555-0103,true,Platform Engineering
+EMP-004,tommy.williams@observeid.com,Tommy Williams,Tommy,Williams,Engineering,Senior Engineer,sarah.johnson@observeid.com,R&D,CC-1001,ObserveID Inc,+1-415-555-0104,true,Identity Engineering
+EMP-005,alex.nguyen@observeid.com,Alex Nguyen,Alex,Nguyen,Engineering,Senior Engineer,sarah.johnson@observeid.com,R&D,CC-1001,ObserveID Inc,+1-415-555-0105,true,Identity Engineering
+EMP-006,priya.patel@observeid.com,Priya Patel,Priya,Patel,Product Management,VP of Product,ENG-01,Product,CC-2001,ObserveID Inc,+1-415-555-0201,true,Product Leadership;IAM Product
+EMP-007,ryan.lee@observeid.com,Ryan Lee,Ryan,Lee,Product Management,Senior Product Manager,priya.patel@observeid.com,Product,CC-2001,ObserveID Inc,+1-415-555-0202,true,Identity Platform
+EMP-008,emma.thompson@observeid.com,Emma Thompson,Emma,Thompson,Security,CISO,,Security,CC-3001,ObserveID Inc,+1-415-555-0301,true,Security Leadership;Incident Response
+EMP-009,michael.davis@observeid.com,Michael Davis,Michael,Davis,Security,Staff Security Engineer,emma.thompson@observeid.com,Security,CC-3001,ObserveID Inc,+1-415-555-0302,true,Application Security
+EMP-010,isabella.martinez@observeid.com,Isabella Martinez,Isabella,Martinez,Security,Security Analyst,emma.thompson@observeid.com,Security,CC-3001,ObserveID Inc,+1-415-555-0303,true,SOC Operations
+EMP-011,david.kim@observeid.com,David Kim,David,Kim,Finance,CFO,,Finance,CC-4001,ObserveID Inc,+1-415-555-0401,true,Finance Leadership
+EMP-012,olivia.brown@observeid.com,Olivia Brown,Olivia,Brown,Finance,Financial Analyst,david.kim@observeid.com,Finance,CC-4001,ObserveID Inc,+1-415-555-0402,true,Accounts Payable
+EMP-013,ethan.garcia@observeid.com,Ethan Garcia,Ethan,Garcia,Human Resources,HR Director,,HR,CC-5001,ObserveID Inc,+1-415-555-0501,true,HR Leadership;Talent Acquisition
+EMP-014,sophia.wilson@observeid.com,Sophia Wilson,Sophia,Wilson,Human Resources,HR Business Partner,ethan.garcia@observeid.com,HR,CC-5001,ObserveID Inc,+1-415-555-0502,true,Employee Relations
+EMP-015,james.anderson@observeid.com,James Anderson,James,Anderson,Engineering,Software Engineer II,tommy.williams@observeid.com,R&D,CC-1001,ObserveID Inc,+1-415-555-0106,true,Identity Engineering

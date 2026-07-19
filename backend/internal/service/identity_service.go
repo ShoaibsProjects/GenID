@@ -23,6 +23,7 @@ import (
 	"github.com/observeid/identity-platform/internal/connector"
 	"github.com/observeid/identity-platform/internal/vault"
 	"github.com/observeid/identity-platform/internal/workflow"
+	"github.com/observeid/identity-platform/pkg/telemetry"
 )
 
 // ─── Identity Service ──────────────────────────────────────
@@ -600,6 +601,9 @@ func (s *IdentityService) GetAgentCard(w http.ResponseWriter, r *http.Request) {
 // ─── Access API Handlers ──────────────────────────────────
 
 func (s *IdentityService) CheckAccess(w http.ResponseWriter, r *http.Request) {
+	tenantID := "default"
+	start := time.Now()
+
 	var req struct {
 		IdentityID string `json:"identity_id"`
 		ResourceID string `json:"resource_id"`
@@ -733,6 +737,17 @@ func (s *IdentityService) CheckAccess(w http.ResponseWriter, r *http.Request) {
 	})
 	s.redis.Set(r.Context(), cacheKey, cacheVal, 30*time.Second)
 
+	// Record metrics
+	decision := "deny"
+	if allowed {
+		decision = "permit"
+	}
+	telemetry.AccessCheckTotal.WithLabelValues(decision, tenantID).Inc()
+	telemetry.AccessCheckLatency.WithLabelValues(tenantID).Observe(float64(latency))
+	if !allowed {
+		telemetry.CedarDenyRate.Inc()
+	}
+
 	respondJSON(w, http.StatusOK, map[string]any{
 		"allowed":    allowed,
 		"reason":     reason,
@@ -757,6 +772,8 @@ func (s *IdentityService) GrantAccess(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "Failed to start grant workflow")
 		return
 	}
+
+	telemetry.WorkflowExecutions.WithLabelValues("grant_access", "started", "default").Inc()
 
 	respondJSON(w, http.StatusAccepted, map[string]any{
 		"status":      "provisioning",
@@ -1499,9 +1516,14 @@ func (s *IdentityService) CSVUpload(w http.ResponseWriter, r *http.Request) {
 		CSVData  string `json:"csv_data"`
 		TenantID string `json:"tenant_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "Invalid JSON body")
+if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request")
 		return
+	}
+
+	tenantID := req.TenantID
+	if tenantID == "" {
+		tenantID = "default"
 	}
 	if req.CSVData == "" {
 		respondError(w, http.StatusBadRequest, "csv_data field is required")
