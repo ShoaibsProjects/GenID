@@ -20,6 +20,7 @@ type Manager struct {
 	mu         sync.RWMutex
 	pgPool     *pgxpool.Pool
 	connectors map[string]Connector
+	v2conns    map[string]ConnectorV2 // V2 view (native or adapted from V1)
 	configs    map[string]ConnectorConfig
 	results    map[string]*SyncResult
 	health     map[string]*HealthReport
@@ -29,10 +30,45 @@ func NewManager(pgPool *pgxpool.Pool) *Manager {
 	return &Manager{
 		pgPool:     pgPool,
 		connectors: make(map[string]Connector),
+		v2conns:    make(map[string]ConnectorV2),
 		configs:    make(map[string]ConnectorConfig),
 		results:    make(map[string]*SyncResult),
 		health:     make(map[string]*HealthReport),
 	}
+}
+
+// asV2 returns the ConnectorV2 for a connector ID, caching the
+// V2 view so subsequent calls are a map lookup.
+// - If the connector natively implements ConnectorV2, it's returned directly.
+// - Otherwise, it's wrapped by the V1ToV2Adapter (no code changes needed).
+func (m *Manager) asV2(id string) ConnectorV2 {
+	m.mu.RLock()
+	if v2, ok := m.v2conns[id]; ok {
+		m.mu.RUnlock()
+		return v2
+	}
+	conn, ok := m.connectors[id]
+	cfg, hasCfg := m.configs[id]
+	m.mu.RUnlock()
+
+	if !ok || !hasCfg {
+		return nil
+	}
+
+	// Check for native V2
+	if v2, ok := conn.(ConnectorV2); ok {
+		m.mu.Lock()
+		m.v2conns[id] = v2
+		m.mu.Unlock()
+		return v2
+	}
+
+	// Wrap V1 → V2 via adapter
+	v2 := AdaptConnectorV1(conn, cfg)
+	m.mu.Lock()
+	m.v2conns[id] = v2
+	m.mu.Unlock()
+	return v2
 }
 
 // LoadAll loads all persisted connectors from PostgreSQL into memory.
@@ -192,6 +228,7 @@ func (m *Manager) Unregister(ctx context.Context, id string) error {
 		conn.Disconnect(ctx)
 	}
 	delete(m.connectors, id)
+	delete(m.v2conns, id)
 	delete(m.configs, id)
 	delete(m.results, id)
 	delete(m.health, id)

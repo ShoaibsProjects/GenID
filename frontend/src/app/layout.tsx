@@ -55,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="flex h-screen overflow-hidden">
           <Sidebar />
           <main className="flex-1 overflow-y-auto">
-            <div className="px-8 py-6 max-w-[1600px] mx-auto">
+            <div className="px-8 py-6 max-w-[1600px] mx-auto animate-page-in">
               {children}
             </div>
           </main>
@@ -69,16 +69,16 @@ function Sidebar() {
   return (
     <aside className="w-60 bg-surface-raised border-r border-border flex flex-col shrink-0">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-border">
+      <div className="px-5 py-5 border-b border-accent/10">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded bg-accent/15 flex items-center justify-center border border-accent/30">
-            <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500/20 to-yellow-600/20 flex items-center justify-center border border-amber-500/30 animate-glow">
+            <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight leading-none">ObserveID Reimagined</h1>
+            <h1 className="text-base font-bold tracking-tight leading-none text-gradient-gold">ObserveID</h1>
             <p className="text-[0.6rem] font-semibold text-muted uppercase tracking-widest leading-none mt-0.5">Fabric v1</p>
           </div>
         </div>
@@ -102,10 +102,10 @@ function Sidebar() {
       </nav>
 
       {/* Footer status */}
-      <div className="px-4 py-3 border-t border-border">
+      <div className="px-4 py-3 border-t border-border/50">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse-ring" />
-          <span className="text-xs text-muted">All systems operational</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-status" style={{ boxShadow: '0 0 6px rgba(52, 211, 153, 0.4)' }} />
+          <span className="text-xs text-muted">Identity Fabric | <span className="text-emerald-400">Live</span></span>
         </div>
       </div>
     </aside>
