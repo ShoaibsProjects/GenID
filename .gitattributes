@@ -1,0 +1,21 @@
+# Tell GitHub this is a Go + TypeScript project, not an HTML project
+# The frontend/out/ is a Next.js static export — not source code
+
+# Classify Go as the primary language
+*.go linguist-language=Go
+
+# Classify frontend source code as TypeScript, not HTML
+*.tsx linguist-language=TypeScript
+*.ts linguist-language=TypeScript
+
+# Exclude compiled/generated artifacts from language stats
+frontend/out/** linguist-generated=true linguist-vendored=true
+frontend/.next/** linguist-generated=true linguist-vendored=true
+
+# Generated GraphQL and Protobuf code
+backend/internal/graphql/generated.go linguist-generated=true
+pkg/proto/**/*.pb.go linguist-generated=true
+
+# Lockfiles and configs are not code
+*.lock linguist-generated=true linguist-detectable=false
+go.sum linguist-generated=true
