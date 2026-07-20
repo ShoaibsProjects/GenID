@@ -594,6 +594,7 @@ func main() {
 	api.HandleFunc("/connectors", svc.ListConnectors).Methods("GET")
 	api.HandleFunc("/connectors", svc.CreateConnector).Methods("POST")
 	api.HandleFunc("/connectors/test", svc.TestConnectorConnection).Methods("QUERY", "POST")
+	api.HandleFunc("/connectors/stats", svc.GetConnectorStats).Methods("GET")
 	api.HandleFunc("/connectors/{id}", svc.GetConnector).Methods("GET")
 	api.HandleFunc("/connectors/{id}", svc.DeleteConnector).Methods("DELETE")
 	api.HandleFunc("/connectors/{id}/connect", svc.ConnectConnector).Methods("POST")

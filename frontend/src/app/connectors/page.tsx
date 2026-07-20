@@ -2,74 +2,201 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import {
-  fetchConnectors, createConnector, testConnectorConnection,
-  connectConnector, syncConnector, deleteConnector, fetchConnectorIdentities,
-  fetchConnectorGroups, fetchConnectorEntitlements, fetchConnectorResources,
-  fullSyncConnector
+  fetchConnectors, createConnector, connectConnector, deleteConnector,
+  fetchConnectorIdentities, fetchConnectorGroups, fetchConnectorEntitlements,
+  fetchConnectorResources, fullSyncConnector,
 } from "@/lib/api"
-import { PageHeader } from "@/components/ui/PageHeader"
-import { Badge } from "@/components/ui/Badge"
-import { Button } from "@/components/ui/Button"
-import { Card, CardHeader, CardBody, CardFooter } from "@/components/ui/Card"
-import { Input, Select } from "@/components/ui/Input"
-import { Modal } from "@/components/ui/Modal"
-import { EmptyState } from "@/components/ui/EmptyState"
 
-const statusVariant: Record<string, "success"|"warning"|"danger"|"info"|"neutral"> = {
-  connected: "success", disconnected: "neutral", error: "danger",
-  syncing: "info", degraded: "warning",
+// ─── Types ──────────────────────────────────────────────────
+
+interface SyncStats {
+  users: number; groups: number; entitlements: number; resources: number
+}
+
+interface HealthReport {
+  connector_id?: string; connector_name?: string; status: string
+  delta_supported?: boolean; supports_schema?: boolean
+  last_sync_duration?: string; consecutive_success?: number
+  consecutive_errors?: number; last_error?: string
+}
+
+interface Connector {
+  id: string; tenant_id: string; name: string; type: string
+  status: string; last_sync_at?: string; last_error?: string
+  created_at: string; updated_at: string
+  health?: HealthReport; sync_stats?: SyncStats
+}
+
+interface ConnectorStats {
+  total_connectors: number; connected_count: number
+  disconnected_count: number; error_count: number; syncing_count: number
+  total_identities: number; total_groups: number
+  total_entitlements: number; total_resources: number
+}
+
+const CONNECTOR_TYPES: Record<string, string> = {
+  entra_id: "Microsoft Entra ID", ldap: "LDAP", active_directory: "Active Directory",
+  scim: "SCIM 2.0", okta: "Okta", aws_iam: "AWS IAM",
+  gcp_iam: "GCP IAM", generic: "Generic", csv: "CSV Import",
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  connected: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+  disconnected: "text-gray-400 bg-gray-500/10 border-gray-500/30",
+  error: "text-red-400 bg-red-500/10 border-red-500/30",
+  syncing: "text-amber-400 bg-amber-500/10 border-amber-500/30",
+  degraded: "text-yellow-400 bg-yellow-500/10 border-yellow-500/30",
+}
+
+const CONNECTOR_TYPE_FIELDS: Record<string, {label: string; key: string; placeholder: string}[]> = {
+  entra_id: [
+    {label:"Tenant Name", key:"tenant_name", placeholder:"contoso.onmicrosoft.com"},
+    {label:"Client ID", key:"client_id", placeholder:"Application client ID"},
+    {label:"Client Secret", key:"client_secret", placeholder:"Application client secret"},
+  ],
+  active_directory: [
+    {label:"Host:Port", key:"endpoint", placeholder:"dc01.contoso.com:389"},
+    {label:"Base DN", key:"base_dn", placeholder:"DC=contoso,DC=com"},
+    {label:"Username", key:"username", placeholder:"CN=Admin,..."},
+    {label:"Password", key:"password", placeholder:"Password"},
+    {label:"Domain", key:"domain", placeholder:"CONTOSO"},
+  ],
+  ldap: [
+    {label:"Host:Port", key:"endpoint", placeholder:"ldap.example.com:389"},
+    {label:"Base DN", key:"base_dn", placeholder:"dc=example,dc=com"},
+    {label:"Username", key:"username", placeholder:"cn=admin,..."},
+    {label:"Password", key:"password", placeholder:"Password"},
+  ],
+  scim: [
+    {label:"Endpoint URL", key:"endpoint", placeholder:"https://api.example.com/scim/v2"},
+    {label:"Bearer Token", key:"password", placeholder:"sk-..."},
+  ],
+  okta: [
+    {label:"Okta Domain", key:"endpoint", placeholder:"https://your-domain.okta.com"},
+    {label:"API Token", key:"password", placeholder:"SSWS token..."},
+  ],
+  aws_iam: [
+    {label:"Access Key ID", key:"client_id", placeholder:"AKIA..."},
+    {label:"Secret Access Key", key:"client_secret", placeholder:"Secret..."},
+  ],
+  gcp_iam: [
+    {label:"Service Account Key (JSON)", key:"properties", placeholder:"Paste JSON key..."},
+  ],
+  csv: [
+    {label:"CSV Data", key:"properties", placeholder:"Upload CSV file..."},
+  ],
+  generic: [
+    {label:"Endpoint", key:"endpoint", placeholder:"https://api.example.com"},
+    {label:"Auth Type", key:"auth_type", placeholder:"oauth2"},
+    {label:"Username", key:"username", placeholder:"admin"},
+    {label:"Password", key:"password", placeholder:"Password"},
+    {label:"Client ID", key:"client_id", placeholder:"Client ID"},
+    {label:"Client Secret", key:"client_secret", placeholder:"Client Secret"},
+  ],
 }
 
 type TabKey = "accounts" | "groups" | "entitlements" | "resources" | "schema"
 
+// ─── Main Page ──────────────────────────────────────────────
+
 export default function ConnectorsPage() {
-  const [connectors, setConnectors] = useState<any[]>([])
+  const [connectors, setConnectors] = useState<Connector[]>([])
+  const [stats, setStats] = useState<ConnectorStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({
-    name: "", type: "entra_id", endpoint: "", client_id: "", client_secret: "",
-    tenant_name: "", auth_type: "oauth2", base_dn: "", username: "", password: "", domain: ""
-  })
+  const [error, setError] = useState("")
+
+  // Filters
+  const [search, setSearch] = useState("")
+  const [searchInput, setSearchInput] = useState("")
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [statusFilter, setStatusFilter] = useState("")
+  const [typeFilter, setTypeFilter] = useState("")
+
+  // UI state
+  const [showAdd, setShowAdd] = useState(false)
+  const [addType, setAddType] = useState("entra_id")
+  const [addForm, setAddForm] = useState<Record<string, string>>({ name: "", auth_type: "oauth2" })
   const [testResult, setTestResult] = useState<any>(null)
-  const [busySync, setBusySync] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const expandedRef = useRef<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabKey>("accounts")
   const [tabData, setTabData] = useState<Record<string, any>>({})
-  const [tabLoad, setTabLoad] = useState<Record<string, boolean>>({})
-  const [healthData, setHealthData] = useState<Record<string, any>>({})
+  const [tabLoading, setTabLoading] = useState<Record<string, boolean>>({})
+  const [busySync, setBusySync] = useState<string | null>(null)
+  const [testMsg, setTestMsg] = useState<Record<string, { ok: boolean; msg: string }>>({})
 
+  const hasFilters = !!(statusFilter || typeFilter || search)
+
+  // ── Debounced search ──
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => setSearch(searchInput), 300)
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
+  }, [searchInput])
+
+  // ── Fetch ──
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const d = await fetchConnectors()
-      setConnectors(d.connectors || [])
-      const h: Record<string, any> = {}
-      for (const c of (d.connectors || [])) {
-        try {
-          const hr = await fetch(`/api/v1/connectors/${c.id}/health`).then(r => r.json()).catch(() => null)
-          if (hr) h[c.id] = hr
-        } catch (_) {}
-      }
-      setHealthData(h)
-    } catch (_) {} finally { setLoading(false) }
-  }, [])
+      const params = new URLSearchParams()
+      if (search) params.set("search", search)
+      if (statusFilter) params.set("status", statusFilter)
+      if (typeFilter) params.set("type", typeFilter)
+
+      const [connData, statsData] = await Promise.all([
+        fetch("/api/v1/connectors?" + params.toString()).then(r => r.json()).catch(() => ({ connectors: [], total: 0 })),
+        fetch("/api/v1/connectors/stats").then(r => r.json()).catch(() => null),
+      ])
+      setConnectors(connData.connectors || [])
+      setStats(statsData)
+      setError("")
+    } catch (e: any) {
+      setError(e.message)
+    } finally { setLoading(false) }
+  }, [search, statusFilter, typeFilter])
 
   useEffect(() => { load() }, [load])
 
+  // ── Actions ──
   async function handleCreate() {
-    try { await createConnector(form as any); setShowForm(false); setTestResult(null); load() }
-    catch (e: any) { alert("Create failed: " + e.message) }
+    try {
+      const type = addType
+      await createConnector({ name: addForm.name || type + "-" + Date.now(), type: type as any, ...addForm } as any)
+      setShowAdd(false)
+      setAddForm({ name: "", auth_type: "oauth2" })
+      load()
+    } catch (e: any) { alert("Create failed: " + e.message) }
   }
 
   async function handleTest() {
-    try { const r = await testConnectorConnection(form as any); setTestResult(r) }
-    catch (e: any) { setTestResult({ success: false, error: e.message }) }
+    try {
+      const r = await fetch("/api/v1/connectors/test", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: addForm.name || "test", type: addType, ...addForm }),
+      }).then(r => r.json())
+      setTestResult(r)
+    } catch (e: any) { setTestResult({ success: false, error: e.message }) }
+  }
+
+  async function handleTestConnector(id: string) {
+    setTestMsg(t => ({ ...t, [id]: { ok: false, msg: "Testing..." } }))
+    try {
+      const r = await fetch(`/api/v1/connectors/${id}/test`, { method: "POST", headers: { "Content-Type": "application/json" } }).then(r => r.json())
+      setTestMsg(t => ({ ...t, [id]: { ok: r.success, msg: r.success ? "OK" : (r.error || "Failed") } }))
+      setTimeout(() => setTestMsg(t => { const n = { ...t }; delete n[id]; return n }), 3000)
+    } catch (e: any) {
+      setTestMsg(t => ({ ...t, [id]: { ok: false, msg: e.message } }))
+      setTimeout(() => setTestMsg(t => { const n = { ...t }; delete n[id]; return n }), 3000)
+    }
   }
 
   async function handleConnect(id: string) {
-    try { await connectConnector(id); load() }
-    catch (e: any) { alert("Connect failed: " + e.message) }
+    try { await connectConnector(id); load() } catch (e: any) { alert("Connect failed: " + e.message) }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this connector and all synced data?")) return
+    try { await deleteConnector(id); if (expanded === id) setExpanded(null); load() } catch (e: any) { alert("Delete failed: " + e.message) }
   }
 
   async function handleSync(id: string, delta?: boolean) {
@@ -79,23 +206,7 @@ export default function ConnectorsPage() {
       await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" } })
       load()
       if (expanded === id) loadTab(id, activeTab)
-    } catch (e: any) { alert("Sync failed: " + e.message) }
-    finally { setBusySync(null) }
-  }
-
-  const [testMsg, setTestMsg] = useState<Record<string, {ok: boolean; msg: string}>>({})
-
-  async function handleTestConnector(id: string) {
-    const prev = testMsg[id]
-    setTestMsg(t => ({...t, [id]: {ok: false, msg: "Testing..."}}))
-    try {
-      const r = await fetch(`/api/v1/connectors/${id}/test`, { method: "POST", headers: { "Content-Type": "application/json" } }).then(r => r.json())
-      setTestMsg(t => ({...t, [id]: {ok: r.success, msg: r.success ? "OK" : (r.error || "Failed")}}))
-      setTimeout(() => setTestMsg(t => { const n = {...t}; delete n[id]; return n }), 3000)
-    } catch (e: any) {
-      setTestMsg(t => ({...t, [id]: {ok: false, msg: e.message}}))
-      setTimeout(() => setTestMsg(t => { const n = {...t}; delete n[id]; return n }), 3000)
-    }
+    } catch (e: any) { alert("Sync failed: " + e.message) } finally { setBusySync(null) }
   }
 
   async function handleFullSync(id: string) {
@@ -103,24 +214,14 @@ export default function ConnectorsPage() {
     try {
       await fullSyncConnector(id)
       await load()
-      if (expanded === id) {
-        setTabData({})
-        loadTab(id, activeTab)
-      }
-    } catch (e: any) { alert("Full sync failed: " + e.message) }
-    finally { setBusySync(null) }
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this connector and all synced data?")) return
-    try { await deleteConnector(id); if (expanded === id) setExpanded(null); load() }
-    catch (e: any) { alert("Delete: " + e.message) }
+      if (expanded === id) { setTabData({}); loadTab(id, activeTab) }
+    } catch (e: any) { alert("Full sync failed: " + e.message) } finally { setBusySync(null) }
   }
 
   async function loadTab(id: string, tab: TabKey) {
     setActiveTab(tab)
     const key = `${id}:${tab}`
-    setTabLoad(t => ({...t, [key]: true}))
+    setTabLoading(t => ({ ...t, [key]: true }))
     try {
       let data: any = null
       switch (tab) {
@@ -142,17 +243,14 @@ export default function ConnectorsPage() {
           break
         }
       }
-      if (expandedRef.current !== id) return // stale — user switched connector
-      setTabData(t => ({...t, [key]: data}))
-    } catch (_) {
       if (expandedRef.current !== id) return
-      setTabData(t => ({...t, [key]: { error: "Failed to load" }}))
-    } finally {
-      if (expandedRef.current === id) setTabLoad(t => ({...t, [key]: false}))
+      setTabData(t => ({ ...t, [key]: data }))
+    } catch (_) { } finally {
+      if (expandedRef.current === id) setTabLoading(t => ({ ...t, [key]: false }))
     }
   }
 
-  async function toggle(id: string) {
+  function toggle(id: string) {
     if (expanded === id) { setExpanded(null); expandedRef.current = null; setActiveTab("accounts"); setTabData({}); return }
     expandedRef.current = id
     setExpanded(id)
@@ -161,415 +259,448 @@ export default function ConnectorsPage() {
     loadTab(id, "accounts")
   }
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Directories"
-        description={`${connectors.length} connector${connectors.length !== 1 ? "s" : ""} configured — connect to identity sources`}
-        actions={
-          <Button variant="primary" size="sm" onClick={() => setShowForm(!showForm)}>
-            {showForm ? "Cancel" : "Add Directory"}
-          </Button>
-        }
-      />
+  // ── Helpers ──
+  function safeFormatDate(d?: string) {
+    if (!d) return "Never"
+    return new Date(d).toLocaleDateString()
+  }
 
-      {/* Stats row */}
-      {connectors.length > 0 && (
-        <div className="grid grid-cols-6 gap-3">
-          <StatBox label="Total" value={connectors.length} />
-          <StatBox label="Connected" value={connectors.filter(c => c.status === "connected").length} variant="success" />
-          <StatBox label="Error" value={connectors.filter(c => c.status === "error").length} variant="danger" />
-          <StatBox label="Delta Ready" value={connectors.filter(c => healthData[c.id]?.delta_supported).length} variant="info" />
-          <StatBox label="Synced IDs" value={connectors.reduce((sum, c) => sum + (healthData[c.id]?.total_users_synced || 0), 0)} />
-          <StatBox label="Groups" value={connectors.reduce((sum, c) => sum + (healthData[c.id]?.total_groups_synced || 0), 0)} />
+  function syncCounts(c: Connector) {
+    return c.sync_stats || { users: 0, groups: 0, entitlements: 0, resources: 0 } as SyncStats
+  }
+
+  // ── Render helpers ──
+  const statusOpts = ["connected", "disconnected", "error", "syncing", "degraded"]
+  const typeOpts = Object.entries(CONNECTOR_TYPES).map(([k, v]) => k)
+
+  function onTypeSelect(t: string) {
+    setAddType(t)
+    setAddForm({ name: "", auth_type: "oauth2" })
+  }
+
+  // ── Render ────────────────────────────────────────────
+  return (
+    <div className="space-y-4">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Directory Connectors</h1>
+          <p className="text-sm text-gray-400 mt-1">
+            {stats ? `${stats.total_connectors} connectors · ${stats.connected_count} connected · ${stats.total_identities} identities synced` : "Loading..."}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="btn-secondary text-xs px-3 py-1.5" onClick={load}>Refresh</button>
+          <button className="btn-primary text-xs px-3 py-1.5" onClick={() => setShowAdd(true)}>+ Add Directory</button>
+        </div>
+      </div>
+
+      {/* ── Stats Bar ── */}
+      {stats && (
+        <div className="flex gap-3 flex-wrap">
+          {[
+            ["Connectors", stats.total_connectors, "text-white"],
+            ["Connected", stats.connected_count, "text-emerald-400"],
+            ["Error", stats.error_count, "text-red-400"],
+            ["Syncing", stats.syncing_count, "text-amber-400"],
+            ["Identities", stats.total_identities, "text-blue-400"],
+            ["Groups", stats.total_groups, "text-purple-400"],
+            ["Entitlements", stats.total_entitlements, "text-cyan-400"],
+            ["Resources", stats.total_resources, "text-teal-400"],
+          ].map(([label, count, color]) => (
+            <div key={label as string} className="glass-card px-4 py-2 flex items-center gap-2">
+              <span className="text-xs text-gray-500 uppercase tracking-wider">{label}</span>
+              <span className={`text-lg font-semibold ${color}`}>{String(count)}</span>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* New connector form */}
-      {showForm && (
-        <Card>
-          <CardHeader><h2 className="text-sm font-bold">New Directory Connection</h2></CardHeader>
-          <CardBody>
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="Name *" placeholder="e.g. Corporate Entra ID" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
-              <Select label="Type" value={form.type} onChange={e => setForm({...form, type: e.target.value})} options={[
-                { value: "entra_id", label: "Microsoft Entra ID" },
-                { value: "active_directory", label: "Active Directory" },
-                { value: "ldap", label: "LDAP" },
-                { value: "scim", label: "SCIM 2.0" },
-                { value: "okta", label: "Okta (SCIM)" },
-              ]} />
-              {form.type === "entra_id" && <>
-                <Input label="Tenant Name / ID" placeholder="tenant.onmicrosoft.com or GUID" value={form.tenant_name} onChange={e => setForm({...form, tenant_name: e.target.value})} />
-                <Input label="Client ID" placeholder="Application (client) ID" value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} />
-                <Input label="Client Secret" type="password" placeholder="Secret value" value={form.client_secret} onChange={e => setForm({...form, client_secret: e.target.value})} />
-              </>}
-              {(form.type === "active_directory" || form.type === "ldap") && <>
-                <Input label="Host:Port" placeholder="ldap.company.com:389" value={form.endpoint} onChange={e => setForm({...form, endpoint: e.target.value})} />
-                <Input label="Base DN" placeholder="DC=company,DC=com" value={form.base_dn} onChange={e => setForm({...form, base_dn: e.target.value})} />
-                <Input label="Username" placeholder="CN=admin,CN=Users,DC=..." value={form.username} onChange={e => setForm({...form, username: e.target.value})} />
-                <Input label="Password" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
-              </>}
-              {form.type === "scim" && <>
-                <Input label="SCIM Endpoint" placeholder="https://api.example.com/scim/v2" value={form.endpoint} onChange={e => setForm({...form, endpoint: e.target.value})} />
-                <Input label="Bearer Token" type="password" placeholder="OAuth token" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
-              </>}
-            </div>
-          </CardBody>
-          <CardFooter>
-            <div className="flex items-center gap-2 flex-1">
-              <Button variant="primary" size="sm" onClick={handleCreate}>Create</Button>
-              <Button variant="secondary" size="sm" onClick={handleTest}>Test Connection</Button>
-            </div>
-            {testResult && (
-              <span className={`text-xs font-medium ${testResult.success ? "text-green-400" : "text-red-400"}`}>
-                {testResult.success ? "Connection OK" : `Error: ${testResult.error || "Unknown"}`}
-              </span>
-            )}
-          </CardFooter>
-        </Card>
-      )}
+      {/* ── Search & Filter ── */}
+      <div className="glass-card p-3 space-y-3">
+        <div className="flex gap-3 items-center">
+          <div className="relative flex-1 max-w-md">
+            <input className="input text-sm py-1.5 pl-8 w-full" placeholder="Search connectors..." value={searchInput} onChange={e => setSearchInput(e.target.value)} />
+            <svg className="absolute left-2.5 top-2 w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            {searchInput && <button className="absolute right-2 top-1.5 text-gray-500 hover:text-gray-300" onClick={() => { setSearchInput(""); setSearch("") }}>&times;</button>}
+          </div>
+          <div className="flex items-center gap-1"><span className="text-xs text-gray-500 mr-1">Status:</span>
+            {statusOpts.map(s => (
+              <button key={s} onClick={() => setStatusFilter(statusFilter === s ? "" : s)} className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${statusFilter === s ? "bg-brand-500/20 text-brand-400 ring-1 ring-brand-500/50" : "bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700"}`}>{s}</button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1"><span className="text-xs text-gray-500 mr-1">Type:</span>
+            {typeOpts.slice(0, 4).map(t => (
+              <button key={t} onClick={() => setTypeFilter(typeFilter === t ? "" : t)} className={`px-2 py-0.5 rounded text-xs font-medium transition-all ${typeFilter === t ? "bg-brand-500/20 text-brand-400 ring-1 ring-brand-500/50" : "bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700"}`}>{t.replace("_", " ")}</button>
+            ))}
+          </div>
+          {hasFilters && <button className="text-xs text-brand-400 hover:text-brand-300 ml-auto" onClick={() => { setSearch(""); setSearchInput(""); setStatusFilter(""); setTypeFilter(""); }}>Clear All</button>}
+        </div>
+        {hasFilters && (
+          <div className="flex gap-1.5 flex-wrap pt-1 border-t border-gray-800/50">
+            {search && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-500/20 text-brand-400">"{search}"<button className="hover:text-white ml-0.5" onClick={() => { setSearch(""); setSearchInput("") }}>&times;</button></span>}
+            {statusFilter && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-500/20 text-brand-400">Status: {statusFilter}<button className="hover:text-white ml-0.5" onClick={() => setStatusFilter("")}>&times;</button></span>}
+            {typeFilter && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-brand-500/20 text-brand-400">Type: {typeFilter}<button className="hover:text-white ml-0.5" onClick={() => setTypeFilter("")}>&times;</button></span>}
+          </div>
+        )}
+      </div>
 
-      {/* Connector list */}
-      {loading ? (
-        <Card><CardBody><div className="p-8 animate-pulse space-y-3">{[1,2,3].map(i => <div key={i} className="h-12 bg-white/[0.03] rounded"/>)}</div></CardBody></Card>
-      ) : connectors.length === 0 ? (
-        <Card>
-          <CardBody>
-            <EmptyState
-              title="No directories connected"
-              description="Connect to Entra ID, Active Directory, LDAP, or any SCIM provider to import identities, groups, entitlements, and resources."
-              action={{ label: "Add Directory", onClick: () => setShowForm(true) }}
-              icon={<PlugIcon />}
-            />
-          </CardBody>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {connectors.map((c) => {
-            const h = healthData[c.id]
-            const isConnected = c.status === "connected"
-            const supportsDelta = h?.delta_supported
-
+      {/* ── Connector Cards ── */}
+      <div className="space-y-3">
+        {loading ? (
+          <div className="p-12 text-center text-gray-500">Loading connectors...</div>
+        ) : error ? (
+          <div className="p-12 text-center text-red-400">{error}</div>
+        ) : connectors.length === 0 ? (
+          <div className="p-12 text-center text-gray-500"><p className="mb-2">{hasFilters ? "No connectors match filters" : "No directories configured"}</p><p className="text-xs text-gray-600">{hasFilters ? "Try clearing filters" : "Click + Add Directory to configure your first connection"}</p></div>
+        ) : (
+          connectors.map(c => {
+            const counts = syncCounts(c)
+            const h = (c.health || {}) as HealthReport
+            const isTestOk = testMsg[c.id]
+            const isBusy = busySync === c.id
+            const isExpanded = expanded === c.id
             return (
-              <Card key={c.id} variant={c.status === "error" ? "error" : "default"}>
-                {/* Header row */}
-                <div className="flex items-center px-5 py-3 cursor-pointer hover:bg-white/[0.01] transition-colors" onClick={() => toggle(c.id)}>
-                  <div className="flex-1 flex items-center gap-4">
-                    <div className="w-2 h-2 rounded-full" style={{ background: isConnected ? "var(--green-accent)" : c.status === "error" ? "var(--red-accent)" : "var(--text-muted)" }} />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{c.name}</span>
-                        <Badge variant={statusVariant[c.status] || "neutral"}>{c.status}</Badge>
-                        {supportsDelta && <Badge variant="info">Delta</Badge>}
+              <div key={c.id} className="glass-card overflow-hidden">
+                {/* Card header */}
+                <div className="p-4 cursor-pointer hover:bg-surface-100/30 transition-colors" onClick={() => toggle(c.id)}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      {/* Icon */}
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 ${
+                        c.type === "entra_id" ? "bg-blue-500/15 text-blue-400" :
+                        c.type === "ldap" || c.type === "active_directory" ? "bg-purple-500/15 text-purple-400" :
+                        c.type === "scim" || c.type === "okta" ? "bg-cyan-500/15 text-cyan-400" :
+                        c.type === "csv" ? "bg-emerald-500/15 text-emerald-400" :
+                        "bg-gray-500/15 text-gray-400"
+                      }`}>
+                        {c.type === "entra_id" ? "\u2601" : c.type === "ldap" ? "\u{1F310}" : c.type === "csv" ? "\u{1F4C4}" : "\u{1F517}"}
                       </div>
-                      <p className="text-xs text-muted mt-0.5">
-                        {c.type?.replace("_", " ")}
-                        {h?.last_sync_at && ` · Synced ${new Date(h.last_sync_at).toLocaleDateString()}`}
-                        {h?.total_users_synced ? ` · ${h.total_users_synced} users` : ""}
-                      </p>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-base font-semibold text-white">{c.name}</h3>
+                          <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_COLORS[c.status] || ""}`}>{c.status}</span>
+                          <span className="px-2 py-0.5 rounded text-xs bg-gray-800 text-gray-400">{CONNECTOR_TYPES[c.type] || c.type}</span>
+                        </div>
+                        <div className="flex gap-4 mt-1.5 text-xs text-gray-400">
+                          <span>Synced: {safeFormatDate(c.last_sync_at)}</span>
+                          {counts.users > 0 && <span>{counts.users} users</span>}
+                          {counts.groups > 0 && <span>{counts.groups} groups</span>}
+                          {counts.entitlements > 0 && <span>{counts.entitlements} entitlements</span>}
+                          {counts.resources > 0 && <span>{counts.resources} resources</span>}
+                          {c.last_error && <span className="text-red-400 truncate max-w-[250px]" title={c.last_error}>{c.last_error}</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 ml-4 shrink-0" onClick={e => e.stopPropagation()}>
+                      <button className="btn-secondary text-xs px-2 py-1" onClick={() => handleTestConnector(c.id)} disabled={isBusy}>
+                        {isTestOk ? (isTestOk.ok ? "OK" : isTestOk.msg) : "Test"}
+                      </button>
+                      <button className="btn-primary text-xs px-2 py-1" onClick={() => handleSync(c.id)} disabled={isBusy}>
+                        {isBusy ? "..." : "Sync"}
+                      </button>
+                      {h.delta_supported && (
+                        <button className="btn-secondary text-xs px-2 py-1" onClick={() => handleSync(c.id, true)} disabled={isBusy}>Delta</button>
+                      )}
+                      <button className="btn-primary text-xs px-2 py-1" onClick={() => handleFullSync(c.id)} disabled={isBusy}>Full Sync</button>
+                      <button className="btn-danger text-xs px-2 py-1" onClick={() => handleDelete(c.id)} disabled={isBusy}>Del</button>
+                      <span className="text-gray-600 ml-1">{isExpanded ? "\u25B2" : "\u25BC"}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                    {!isConnected && <Button variant="ghost" size="sm" onClick={() => handleConnect(c.id)}>Connect</Button>}
-                    <Button variant="ghost" size="sm" onClick={() => handleTestConnector(c.id)}>Test</Button>
-                    {testMsg[c.id] && (
-                      <span className={`text-[10px] font-mono ${testMsg[c.id].ok ? "text-green-400" : "text-red-400"}`}>
-                        {testMsg[c.id].msg}
-                      </span>
-                    )}
-                    <Button variant="ghost" size="sm" onClick={() => handleFullSync(c.id)} disabled={busySync === c.id}>
-                      {busySync === c.id ? "Syncing..." : "Full Sync"}
-                    </Button>
-                    {supportsDelta && (
-                      <Button variant="ghost" size="sm" onClick={() => handleSync(c.id, true)} disabled={busySync === c.id}>
-                        Delta
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="sm" className="text-red-400" onClick={() => handleDelete(c.id)}>Delete</Button>
-                    <svg className={`w-4 h-4 text-muted transition-transform ${expanded === c.id ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path d="M6 9l6 6 6-6"/>
-                    </svg>
-                  </div>
+
+                  {/* Health bar */}
+                  {h.consecutive_success !== undefined && (
+                    <div className="flex gap-3 mt-2 pt-2 border-t border-gray-800/50 text-xs text-gray-500">
+                      <span>Success: <span className="text-emerald-400">{h.consecutive_success || 0}</span></span>
+                      <span>Errors: <span className={h.consecutive_errors ? "text-red-400" : "text-gray-500"}>{h.consecutive_errors || 0}</span></span>
+                      {h.last_sync_duration && <span>Duration: {h.last_sync_duration}</span>}
+                      {h.last_error && <span className="text-red-400">Last: {h.last_error}</span>}
+                    </div>
+                  )}
                 </div>
 
-                {/* Expanded detail */}
-                {expanded === c.id && (
-                  <div className="border-t border-border">
+                {/* Expandable detail */}
+                {isExpanded && (
+                  <div className="border-t border-gray-800">
                     {/* Tabs */}
-                    <div className="px-5 py-2 border-b border-border flex gap-4 overflow-x-auto">
-                      <TabButton active={activeTab === "accounts"} onClick={() => loadTab(c.id, "accounts")}>Accounts</TabButton>
-                      <TabButton active={activeTab === "groups"} onClick={() => loadTab(c.id, "groups")}>Groups</TabButton>
-                      <TabButton active={activeTab === "entitlements"} onClick={() => loadTab(c.id, "entitlements")}>Entitlements</TabButton>
-                      <TabButton active={activeTab === "resources"} onClick={() => loadTab(c.id, "resources")}>Resources</TabButton>
-                      <TabButton active={activeTab === "schema"} onClick={() => loadTab(c.id, "schema")}>Schema</TabButton>
+                    <div className="flex border-b border-gray-800 overflow-x-auto">
+                      {(["accounts", "groups", "entitlements", "resources", "schema"] as TabKey[]).map(t => (
+                        <button key={t} onClick={() => loadTab(c.id, t)} className={`px-4 py-2 text-xs font-medium whitespace-nowrap border-b-2 transition-colors ${activeTab === t ? "border-brand-500 text-brand-400" : "border-transparent text-gray-400 hover:text-gray-300"}`}>
+                          {t.charAt(0).toUpperCase() + t.slice(1)}
+                          {t === "accounts" && counts.users > 0 && <span className="ml-1.5 text-gray-600">({counts.users})</span>}
+                          {t === "groups" && counts.groups > 0 && <span className="ml-1.5 text-gray-600">({counts.groups})</span>}
+                          {t === "entitlements" && counts.entitlements > 0 && <span className="ml-1.5 text-gray-600">({counts.entitlements})</span>}
+                          {t === "resources" && counts.resources > 0 && <span className="ml-1.5 text-gray-600">({counts.resources})</span>}
+                        </button>
+                      ))}
                     </div>
 
-                    {activeTab === "accounts" && renderAccountsTab(tabData[`${c.id}:accounts`], tabLoad[`${c.id}:accounts`])}
-
-                    {activeTab === "groups" && renderGroupsTab(tabData[`${c.id}:groups`], tabLoad[`${c.id}:groups`], c.id)}
-
-                    {activeTab === "entitlements" && renderEntitlementsTab(tabData[`${c.id}:entitlements`], tabLoad[`${c.id}:entitlements`], c.id)}
-
-                    {activeTab === "resources" && renderResourcesTab(tabData[`${c.id}:resources`], tabLoad[`${c.id}:resources`], c.id)}
-
-                    {activeTab === "schema" && renderSchemaTab(tabData[`${c.id}:schema`], tabLoad[`${c.id}:schema`])}
+                    {/* Tab content */}
+                    <div className="p-4 max-h-[500px] overflow-y-auto">
+                      {tabLoading[`${c.id}:${activeTab}`] ? (
+                        <div className="text-center text-gray-500 py-8">Loading...</div>
+                      ) : !tabData[`${c.id}:${activeTab}`] ? (
+                        <div className="text-center text-gray-500 py-8">No data</div>
+                      ) : activeTab === "accounts" ? (
+                        <AccountsTab data={tabData[`${c.id}:${activeTab}`]} />
+                      ) : activeTab === "groups" ? (
+                        <GroupsTab data={tabData[`${c.id}:${activeTab}`]} />
+                      ) : activeTab === "entitlements" ? (
+                        <EntitlementsTab data={tabData[`${c.id}:${activeTab}`]} />
+                      ) : activeTab === "resources" ? (
+                        <ResourcesTab data={tabData[`${c.id}:${activeTab}`]} />
+                      ) : activeTab === "schema" ? (
+                        <SchemaTab data={tabData[`${c.id}:${activeTab}`]} />
+                      ) : null}
+                    </div>
                   </div>
                 )}
-              </Card>
+              </div>
             )
-          })}
+          })
+        )}
+      </div>
+
+      {/* ── Add Connector Modal ── */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowAdd(false)}>
+          <div className="w-full max-w-2xl glass-card p-6 space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-white">Add Directory Connector</h2>
+              <button className="text-gray-400 hover:text-white text-xl" onClick={() => setShowAdd(false)}>&times;</button>
+            </div>
+
+            {/* Connector type selector */}
+            <div className="flex gap-2 flex-wrap">
+              {Object.entries(CONNECTOR_TYPES).map(([k, label]) => (
+                <button key={k} onClick={() => onTypeSelect(k)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${addType === k ? "bg-brand-500/20 text-brand-400 ring-1 ring-brand-500/50" : "bg-gray-800 text-gray-400 hover:text-gray-200 hover:bg-gray-700"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Dynamic form fields */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <label className="text-xs text-gray-400 block mb-0.5">Connector Name</label>
+                <input className="input text-sm py-1.5" placeholder={`My ${CONNECTOR_TYPES[addType] || addType} Directory`} value={addForm.name || ""} onChange={e => setAddForm({ ...addForm, name: e.target.value })} />
+              </div>
+              {(CONNECTOR_TYPE_FIELDS[addType] || CONNECTOR_TYPE_FIELDS.generic).map(f => (
+                <div key={f.key} className={f.key === "endpoint" || f.key === "properties" ? "col-span-2" : ""}>
+                  <label className="text-xs text-gray-400 block mb-0.5">{f.label}</label>
+                  {f.key === "properties" && addType === "csv" ? (
+                    <textarea className="input text-sm py-1.5 h-24 font-mono" placeholder={f.placeholder}
+                      value={addForm[f.key] || ""}
+                      onChange={e => setAddForm({ ...addForm, [f.key]: e.target.value })} />
+                  ) : (
+                    <input className="input text-sm py-1.5" type={f.key.includes("password") || f.key.includes("secret") || f.key.includes("token") ? "password" : "text"}
+                      placeholder={f.placeholder}
+                      value={addForm[f.key] || ""}
+                      onChange={e => setAddForm({ ...addForm, [f.key]: e.target.value })} />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Test result */}
+            {testResult && (
+              <div className={`p-3 rounded text-sm ${testResult.success ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400" : "bg-red-500/10 border border-red-500/30 text-red-400"}`}>
+                {testResult.success ? "Connection successful" : `Connection failed: ${testResult.error || "Unknown error"}`}
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-end pt-2">
+              <button className="btn-secondary text-xs px-4 py-2" onClick={() => setShowAdd(false)}>Cancel</button>
+              <button className="btn-secondary text-xs px-4 py-2" onClick={handleTest}>Test Connection</button>
+              <button className="btn-primary text-xs px-4 py-2" onClick={handleCreate}>Add Connector</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-/* ─── Tab renderers ───────────────────────────────────────── */
+// ─── Tab Components ───────────────────────────────────────
 
-function renderAccountsTab(data: any, load: boolean) {
-  if (load) return <div className="p-8 text-center text-muted text-sm">Loading accounts...</div>
-  if (data?.error) return <div className="p-4 text-center text-sm text-red-400">{data.error}</div>
-  if (data?.identities?.length > 0) {
-    return (
-      <div className="overflow-x-auto">
+function AccountsTab({ data }: { data: any }) {
+  const identities = data?.identities || []
+  const total = data?.total || identities.length
+  return (
+    <div>
+      <div className="text-xs text-gray-500 mb-2">{total} accounts</div>
+      {identities.length === 0 ? <div className="text-gray-500 text-sm py-4">No synced accounts</div> : (
         <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/50">
-              <th className="table-header">User</th>
-              <th className="table-header">Email</th>
-              <th className="table-header">Department</th>
-              <th className="table-header">Title</th>
-              <th className="table-header">Groups</th>
-              <th className="table-header">Status</th>
-              <th className="table-header text-right">Synced</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.identities.slice(0, 100).map((u: any) => (
-              <tr key={u.id} className="table-row">
-                <td className="table-cell">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-accent/10 border border-accent/30 flex items-center justify-center text-xs font-bold text-accent">
-                      {(u.display_name || u.email || "?").charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium">{u.display_name || u.username || "-"}</span>
-                      {u.manager_id && <p className="text-[10px] text-muted">Manager ID: {u.manager_id.slice(0, 8)}...</p>}
-                    </div>
-                  </div>
-                </td>
-                <td className="table-cell text-xs text-secondary">{u.email || "-"}</td>
-                <td className="table-cell text-xs text-secondary">{u.department || "-"}</td>
-                <td className="table-cell text-xs text-secondary">{u.title || "-"}</td>
-                <td className="table-cell text-xs text-secondary">{u.groups?.length || 0} groups</td>
-                <td className="table-cell"><Badge variant={u.enabled ? "success" : "neutral"}>{u.enabled ? "Active" : "Disabled"}</Badge></td>
-                <td className="table-cell text-xs text-muted text-right">{u.last_synced_at ? new Date(u.last_synced_at).toLocaleDateString() : "-"}</td>
+          <thead><tr className="border-b border-gray-800">
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">User</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Email</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Dept</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Title</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Groups</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Status</th>
+            <th className="text-right py-1.5 px-2 text-xs text-gray-500">Synced</th>
+          </tr></thead>
+          <tbody className="divide-y divide-gray-800/50">
+            {identities.map((i: any, idx: number) => (
+              <tr key={i.id || idx} className="hover:bg-surface-100/30">
+                <td className="py-1.5 px-2 text-gray-200">{i.display_name || i.username || "?"}</td>
+                <td className="py-1.5 px-2 text-gray-400 font-mono text-xs">{i.email || "-"}</td>
+                <td className="py-1.5 px-2 text-gray-400 text-xs">{i.department || "-"}</td>
+                <td className="py-1.5 px-2 text-gray-400 text-xs">{i.title || "-"}</td>
+                <td className="py-1.5 px-2 text-gray-400 text-xs">{i.groups?.length || 0}</td>
+                <td className="py-1.5 px-2"><span className={`px-1.5 py-0.5 rounded text-xs ${i.enabled !== false ? "text-emerald-400 bg-emerald-500/10" : "text-gray-400 bg-gray-500/10"}`}>{i.enabled !== false ? "Active" : "Disabled"}</span></td>
+                <td className="py-1.5 px-2 text-right text-gray-500 text-xs font-mono">{i.last_synced_at ? new Date(i.last_synced_at).toLocaleDateString() : "-"}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="px-4 py-2 text-xs text-muted border-t border-border/50">
-          {data.total} accounts · {data.total > 100 ? `Showing 100 of ${data.total}` : "All shown"}
-        </div>
-      </div>
-    )
-  }
-  return <div className="p-8 text-center text-sm text-secondary">No accounts synced yet. Click Full Sync to import.</div>
+      )}
+      {total > identities.length && <div className="text-center text-gray-500 text-xs py-2">Showing {identities.length} of {total}</div>}
+    </div>
+  )
 }
 
-function renderGroupsTab(data: any, load: boolean, _connectorId: string) {
-  if (load) return <div className="p-8 text-center text-muted text-sm">Loading groups...</div>
-  if (data?.error) return <div className="p-4 text-center text-sm text-red-400">{data.error}</div>
-  if (data?.groups?.length > 0) {
-    return (
-      <div className="overflow-x-auto">
+function GroupsTab({ data }: { data: any }) {
+  const groups = data?.groups || []
+  return (
+    <div>
+      <div className="text-xs text-gray-500 mb-2">{data?.total || groups.length} groups</div>
+      {groups.length === 0 ? <div className="text-gray-500 text-sm py-4">No synced groups</div> : (
         <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/50">
-              <th className="table-header">Name</th>
-              <th className="table-header">Type</th>
-              <th className="table-header">Scope</th>
-              <th className="table-header">Members</th>
-              <th className="table-header">Description</th>
-              <th className="table-header text-right">Synced</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.groups.slice(0, 100).map((g: any) => (
-              <tr key={g.id} className="table-row">
-                <td className="table-cell font-medium text-sm">{g.name || g.external_id?.slice(0, 20)}</td>
-                <td className="table-cell"><Badge variant="info">{g.group_type || "group"}</Badge></td>
-                <td className="table-cell text-xs text-secondary">{g.scope || "-"}</td>
-                <td className="table-cell text-xs">{g.member_ids?.length || 0} members</td>
-                <td className="table-cell text-xs text-muted max-w-[200px] truncate">{g.description || "-"}</td>
-                <td className="table-cell text-xs text-muted text-right">{g.last_synced_at ? new Date(g.last_synced_at).toLocaleDateString() : "-"}</td>
+          <thead><tr className="border-b border-gray-800">
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Name</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Type</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Scope</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Members</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Description</th>
+          </tr></thead>
+          <tbody className="divide-y divide-gray-800/50">
+            {groups.map((g: any, idx: number) => (
+              <tr key={g.id || idx} className="hover:bg-surface-100/30">
+                <td className="py-1.5 px-2 text-gray-200">{g.name || "?"}</td>
+                <td className="py-1.5 px-2 text-gray-400 text-xs">{g.group_type || "-"}</td>
+                <td className="py-1.5 px-2 text-gray-400 text-xs">{g.scope || "-"}</td>
+                <td className="py-1.5 px-2 text-gray-400 text-xs">{g.member_ids?.length || 0}</td>
+                <td className="py-1.5 px-2 text-gray-400 text-xs truncate max-w-[200px]">{g.description || "-"}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="px-4 py-2 text-xs text-muted border-t border-border/50">
-          {data.total} groups · {data.total > 100 ? `Showing 100 of ${data.total}` : "All shown"}
-        </div>
-      </div>
-    )
-  }
-  return <div className="p-8 text-center text-sm text-secondary">No groups synced yet. Full Sync will import groups.</div>
+      )}
+    </div>
+  )
 }
 
-function renderEntitlementsTab(data: any, load: boolean, _connectorId: string) {
-  if (load) return <div className="p-8 text-center text-muted text-sm">Loading entitlements...</div>
-  if (data?.error) return <div className="p-4 text-center text-sm text-red-400">{data.error}</div>
-  if (data?.entitlements?.length > 0) {
-    return (
-      <div className="overflow-x-auto">
+function EntitlementsTab({ data }: { data: any }) {
+  const entitlements = data?.entitlements || []
+  const colorMap: Record<string, string> = {
+    directory_role: "text-blue-400 bg-blue-500/10 border-blue-500/30",
+    app_role: "text-purple-400 bg-purple-500/10 border-purple-500/30",
+    group_membership: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+    license: "text-amber-400 bg-amber-500/10 border-amber-500/30",
+    oauth2_permission: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30",
+  }
+  return (
+    <div>
+      <div className="text-xs text-gray-500 mb-2">{data?.total || entitlements.length} entitlements</div>
+      {entitlements.length === 0 ? <div className="text-gray-500 text-sm py-4">No synced entitlements</div> : (
         <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/50">
-              <th className="table-header">Type</th>
-              <th className="table-header">Identity</th>
-              <th className="table-header">Role / Source</th>
-              <th className="table-header">Application</th>
-              <th className="table-header">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.entitlements.map((e: any, i: number) => (
-              <tr key={i} className="table-row">
-                <td className="table-cell">
-                  <Badge variant={
-                    e.entitlement_type === "directory_role" ? "info" :
-                    e.entitlement_type === "app_role" ? "warning" : "success"
-                  }>
-                    {e.entitlement_type?.replace("_", " ")}
-                  </Badge>
-                </td>
-                <td className="table-cell font-mono text-xs">{e.identity_external_id?.slice(0, 12)}...</td>
-                <td className="table-cell text-sm">{e.source_name || e.source_id?.slice(0, 12) || "-"}</td>
-                <td className="table-cell text-xs text-secondary">{e.app_name || "-"}</td>
-                <td className="table-cell"><Badge variant={e.is_active ? "success" : "neutral"}>{e.is_active ? "Active" : "Inactive"}</Badge></td>
+          <thead><tr className="border-b border-gray-800">
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Type</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">User</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Source</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Application</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Active</th>
+          </tr></thead>
+          <tbody className="divide-y divide-gray-800/50">
+            {entitlements.map((e: any, idx: number) => (
+              <tr key={idx} className="hover:bg-surface-100/30">
+                <td className="py-1.5 px-2"><span className={`px-1.5 py-0.5 rounded text-xs border ${colorMap[e.entitlement_type] || "text-gray-400 bg-gray-500/10 border-gray-500/30"}`}>{e.entitlement_type ? e.entitlement_type.replace("_", " ") : "?"}</span></td>
+                <td className="py-1.5 px-2 text-gray-400 text-xs font-mono">{e.identity_external_id || "-"}</td>
+                <td className="py-1.5 px-2 text-gray-200 text-xs">{e.source_name || "-"}</td>
+                <td className="py-1.5 px-2 text-gray-200 text-xs">{e.app_name || "-"}</td>
+                <td className="py-1.5 px-2"><span className={`px-1.5 py-0.5 rounded text-xs ${e.is_active ? "text-emerald-400 bg-emerald-500/10" : "text-gray-400 bg-gray-500/10"}`}>{e.is_active ? "Yes" : "No"}</span></td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="px-4 py-2 text-xs text-muted border-t border-border/50">
-          {data.total} entitlements
-        </div>
-      </div>
-    )
-  }
-  return <div className="p-8 text-center text-sm text-secondary">No entitlements synced. Full Sync will import directory roles and app role assignments.</div>
+      )}
+    </div>
+  )
 }
 
-function renderResourcesTab(data: any, load: boolean, _connectorId: string) {
-  if (load) return <div className="p-8 text-center text-muted text-sm">Loading resources...</div>
-  if (data?.error) return <div className="p-4 text-center text-sm text-red-400">{data.error}</div>
-  if (data?.resources?.length > 0) {
-    const byType: Record<string, any[]> = {}
-    for (const r of data.resources) {
-      (byType[r.resource_type] = byType[r.resource_type] || []).push(r)
-    }
-
-    return (
-      <div className="px-5 py-4 space-y-4">
-        {Object.entries(byType).map(([type, items]) => (
-          <div key={type}>
-            <h4 className="text-xs font-bold text-muted uppercase tracking-wider mb-2 font-mono">
-              {type.replace("_", " ")} ({items.length})
-            </h4>
-            <div className="grid grid-cols-2 gap-2">
-              {items.slice(0, 20).map((r: any) => (
-                <div key={r.id} className="p-3 rounded bg-white/[0.02] border border-border/50">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium">{r.name || r.external_id?.slice(0, 16)}</span>
-                    <Badge variant={r.enabled ? "success" : "neutral"}>{r.enabled ? "Enabled" : "Disabled"}</Badge>
-                  </div>
-                  {r.description && <p className="text-xs text-muted truncate">{r.description}</p>}
-                  <p className="text-[10px] text-muted mt-1">{r.owner_ids?.length || 0} owners</p>
-                </div>
-              ))}
-              {items.length > 20 && (
-                <p className="text-xs text-muted col-span-2 text-center py-2">+{items.length - 20} more {type}</p>
-              )}
+function ResourcesTab({ data }: { data: any }) {
+  const resources = data?.resources || []
+  const grouped: Record<string, any[]> = {}
+  for (const r of resources) {
+    const t = r.resource_type || "other"
+    if (!grouped[t]) grouped[t] = []
+    grouped[t].push(r)
+  }
+  return (
+    <div>
+      <div className="text-xs text-gray-500 mb-2">{data?.total || resources.length} resources</div>
+      {resources.length === 0 ? <div className="text-gray-500 text-sm py-4">No synced resources</div> : (
+        <div className="space-y-3">
+          {Object.entries(grouped).map(([type, items]) => (
+            <div key={type}>
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{type.replace("_", " ")} ({items.length})</div>
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-gray-800">
+                  <th className="text-left py-1 px-2 text-xs text-gray-500">Name</th>
+                  <th className="text-left py-1 px-2 text-xs text-gray-500">Description</th>
+                  <th className="text-left py-1 px-2 text-xs text-gray-500">Status</th>
+                  <th className="text-left py-1 px-2 text-xs text-gray-500">Owners</th>
+                </tr></thead>
+                <tbody className="divide-y divide-gray-800/50">
+                  {items.map((r: any, idx: number) => (
+                    <tr key={r.id || idx} className="hover:bg-surface-100/30">
+                      <td className="py-1 px-2 text-gray-200 text-xs">{r.name || "?"}</td>
+                      <td className="py-1 px-2 text-gray-400 text-xs truncate max-w-[150px]">{r.description || "-"}</td>
+                      <td className="py-1 px-2"><span className={`px-1.5 py-0.5 rounded text-xs ${r.enabled ? "text-emerald-400 bg-emerald-500/10" : "text-gray-400 bg-gray-500/10"}`}>{r.enabled ? "Active" : "Inactive"}</span></td>
+                      <td className="py-1 px-2 text-gray-400 text-xs">{r.owner_ids?.length || 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        ))}
-        <div className="text-xs text-muted pt-2 border-t border-border/50">
-          {data.total} total resources
+          ))}
         </div>
-      </div>
-    )
-  }
-  return <div className="p-8 text-center text-sm text-secondary">No resources synced. Full Sync will import applications, service principals, and devices.</div>
+      )}
+    </div>
+  )
 }
 
-function renderSchemaTab(data: any, load: boolean) {
-  if (load) return <div className="p-8 text-center text-muted text-sm">Loading schema...</div>
-  if (data?.schema?.attributes?.length > 0) {
-    return (
-      <div className="overflow-x-auto">
+function SchemaTab({ data }: { data: any }) {
+  const attrs = data?.schema?.attributes || []
+  return (
+    <div>
+      <div className="text-xs text-gray-500 mb-2">{attrs.length} attribute{attrs.length !== 1 ? "s" : ""}</div>
+      {attrs.length === 0 ? <div className="text-gray-500 text-sm py-4">No schema discovered</div> : (
         <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/50">
-              <th className="table-header">Attribute</th>
-              <th className="table-header">Type</th>
-              <th className="table-header">Required</th>
-              <th className="table-header">Multi</th>
-              <th className="table-header">Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.schema.attributes.map((a: any) => (
-              <tr key={a.name} className="table-row">
-                <td className="table-cell font-mono text-xs text-accent">{a.name}</td>
-                <td className="table-cell text-xs"><Badge variant="info">{a.type}</Badge></td>
-                <td className="table-cell text-xs">{a.required ? <Badge variant="success">Yes</Badge> : <span className="text-muted">No</span>}</td>
-                <td className="table-cell text-xs">{a.multi_valued ? <Badge variant="warning">Multi</Badge> : <span className="text-muted">Single</span>}</td>
-                <td className="table-cell text-xs text-secondary">{a.description}</td>
+          <thead><tr className="border-b border-gray-800">
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Attribute</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Type</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Required</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Multi</th>
+            <th className="text-left py-1.5 px-2 text-xs text-gray-500">Description</th>
+          </tr></thead>
+          <tbody className="divide-y divide-gray-800/50">
+            {attrs.map((a: any, idx: number) => (
+              <tr key={idx} className="hover:bg-surface-100/30">
+                <td className="py-1.5 px-2 text-gray-200 font-mono text-xs">{a.name || a.attribute || "?"}</td>
+                <td className="py-1.5 px-2 text-gray-400 text-xs font-mono">{a.type || a.data_type || "-"}</td>
+                <td className="py-1.5 px-2"><span className={`px-1.5 py-0.5 rounded text-xs ${a.required ? "text-amber-400 bg-amber-500/10" : "text-gray-400 bg-gray-500/10"}`}>{a.required ? "Yes" : "No"}</span></td>
+                <td className="py-1.5 px-2"><span className={`px-1.5 py-0.5 rounded text-xs ${a.multi_valued ? "text-cyan-400 bg-cyan-500/10" : "text-gray-400 bg-gray-500/10"}`}>{a.multi_valued ? "Yes" : "No"}</span></td>
+                <td className="py-1.5 px-2 text-gray-400 text-xs truncate max-w-[200px]">{a.description || "-"}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="px-4 py-2 text-xs text-muted border-t border-border/50">
-          {data.schema.count} attributes discovered · {data.schema.object_type} schema
-        </div>
-      </div>
-    )
-  }
-  return <div className="p-8 text-center text-sm text-secondary">Schema not available. Connect and sync to discover attributes.</div>
-}
-
-/* ─── Sub-components ──────────────────────────────────────── */
-
-function StatBox({ label, value, variant }: { label: string; value: string | number; variant?: string }) {
-  const colors: Record<string, string> = {
-    success: "text-green-400", danger: "text-red-400", info: "text-blue-400",
-  }
-  return (
-    <Card>
-      <CardBody className="px-4 py-3">
-        <p className="text-[0.6rem] font-bold text-muted uppercase tracking-wider font-mono">{label}</p>
-        <p className={`text-xl font-bold font-mono mt-0.5 ${colors[variant || ""] || ""}`}>{value}</p>
-      </CardBody>
-    </Card>
+      )}
+    </div>
   )
-}
-
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`text-xs font-semibold pb-2 border-b-2 transition-colors whitespace-nowrap ${
-        active ? "border-accent text-primary" : "border-transparent text-muted hover:text-secondary"
-      }`}
-    >
-      {children}
-    </button>
-  )
-}
-
-function PlugIcon() {
-  return <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted">
-    <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/>
-  </svg>
 }

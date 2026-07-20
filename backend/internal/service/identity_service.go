@@ -1021,11 +1021,160 @@ func (s *IdentityService) BroadcastCAEP(w http.ResponseWriter, r *http.Request) 
 
 // ─── Connector Management Handlers ─────────────────────────
 
+// sanitizeConfig redacts sensitive fields for API responses.
+func sanitizeConfig(cfg connector.ConnectorConfig) connector.ConnectorConfig {
+	if cfg.ClientSecret != "" {
+		cfg.ClientSecret = "[redacted]"
+	}
+	if cfg.Password != "" {
+		cfg.Password = "[redacted]"
+	}
+	if cfg.Cert != "" {
+		cfg.Cert = "[redacted]"
+	}
+	// Redact bearer tokens stored in properties
+	if cfg.Properties != nil {
+		if _, ok := cfg.Properties["bearer_token"]; ok {
+			cfg.Properties["bearer_token"] = "[redacted]"
+		}
+	}
+	return cfg
+}
+
 func (s *IdentityService) ListConnectors(w http.ResponseWriter, r *http.Request) {
-	connectors := s.connMgr.List()
+	q := r.URL.Query()
+	limit, offset := paginationParams(r, 50, 0)
+	search := q.Get("search")
+	status := q.Get("status")
+	ctype := q.Get("type")
+
+	// Build dynamic query on PostgreSQL connectors table
+	args := []any{}
+	idx := 1
+	where := "WHERE 1=1"
+
+	if search != "" {
+		where += fmt.Sprintf(" AND (name ILIKE $%d OR connector_type ILIKE $%d)", idx, idx)
+		args = append(args, "%"+search+"%")
+		idx++
+	}
+	if status != "" {
+		where += fmt.Sprintf(" AND status = $%d", idx)
+		args = append(args, status)
+		idx++
+	}
+	if ctype != "" {
+		where += fmt.Sprintf(" AND connector_type = $%d", idx)
+		args = append(args, ctype)
+		idx++
+	}
+
+	// Count total
+	var total int
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM connectors %s", where)
+	if err := s.pgPool.QueryRow(r.Context(), countSQL, args...).Scan(&total); err != nil {
+		respondError(w, http.StatusInternalServerError, "Count query failed")
+		return
+	}
+
+	// Query connectors
+	dataSQL := fmt.Sprintf(`
+		SELECT id, tenant_id, name, connector_type, status, config,
+		       last_sync_at, last_error, created_at, updated_at
+		FROM connectors
+		%s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, where, idx, idx+1)
+	args = append(args, limit, offset)
+
+	rows, err := s.pgPool.Query(r.Context(), dataSQL, args...)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Query failed")
+		return
+	}
+	defer rows.Close()
+
+	// Fetch health + sync stats for each connector from the manager
+	type connectorSummary struct {
+		ID            string                  `json:"id"`
+		TenantID      string                  `json:"tenant_id"`
+		Name          string                  `json:"name"`
+		Type          string                  `json:"type"`
+		Status        string                  `json:"status"`
+		LastSyncAt    *string                 `json:"last_sync_at"`
+		LastError     *string                 `json:"last_error"`
+		CreatedAt     string                  `json:"created_at"`
+		UpdatedAt     string                  `json:"updated_at"`
+		Health        *connector.HealthReport  `json:"health,omitempty"`
+		SyncStats     *struct {
+			Users        int `json:"users"`
+			Groups       int `json:"groups"`
+			Entitlements int `json:"entitlements"`
+			Resources    int `json:"resources"`
+		} `json:"sync_stats,omitempty"`
+	}
+
+	connectors := []connectorSummary{}
+	for rows.Next() {
+		var c connectorSummary
+		var id, tid, name, ctype, cstatus string
+		var lastSyncAt *time.Time
+		var lastErr *string
+		var configJSON []byte
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&id, &tid, &name, &ctype, &cstatus, &configJSON, &lastSyncAt, &lastErr, &createdAt, &updatedAt); err != nil {
+			continue
+		}
+		c.ID = id
+		c.TenantID = tid
+		c.Name = name
+		c.Type = ctype
+		c.Status = cstatus
+		if lastSyncAt != nil {
+			s := lastSyncAt.Format(time.RFC3339)
+			c.LastSyncAt = &s
+		}
+		if lastErr != nil {
+			c.LastError = lastErr
+		}
+		c.CreatedAt = createdAt.Format(time.RFC3339)
+		c.UpdatedAt = updatedAt.Format(time.RFC3339)
+
+		// Enrich with health from manager
+		if health, err := s.connMgr.GetConnectorHealth(id); err == nil && health != nil {
+			c.Health = health
+		}
+
+		// Query sync stats from connector child tables
+		var userCount, groupCount, entCount, resCount int
+		if err := s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connector_identities WHERE connector_id = $1`, id).Scan(&userCount); err == nil && userCount > 0 {
+			c.SyncStats = &struct {
+				Users        int `json:"users"`
+				Groups       int `json:"groups"`
+				Entitlements int `json:"entitlements"`
+				Resources    int `json:"resources"`
+			}{Users: userCount}
+		}
+		if c.SyncStats != nil {
+			s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connector_groups WHERE connector_id = $1`, id).Scan(&groupCount)
+			s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connector_entitlements WHERE connector_id = $1`, id).Scan(&entCount)
+			s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connector_resources WHERE connector_id = $1`, id).Scan(&resCount)
+			c.SyncStats.Groups = groupCount
+			c.SyncStats.Entitlements = entCount
+			c.SyncStats.Resources = resCount
+		}
+
+		connectors = append(connectors, c)
+	}
+
+	if connectors == nil {
+		connectors = []connectorSummary{}
+	}
+
 	respondJSON(w, http.StatusOK, map[string]any{
 		"connectors": connectors,
-		"total":      len(connectors),
+		"total":      total,
 	})
 }
 
@@ -1061,7 +1210,7 @@ func (s *IdentityService) GetConnector(w http.ResponseWriter, r *http.Request) {
 	lastSync := s.connMgr.GetLastSyncResult(id)
 
 	respondJSON(w, http.StatusOK, map[string]any{
-		"connector": cfg,
+		"connector": sanitizeConfig(cfg),
 		"last_sync": lastSync,
 	})
 }
@@ -1241,14 +1390,37 @@ func (s *IdentityService) persistSyncedUsers(ctx context.Context, connectorID st
 func (s *IdentityService) GetConnectorIdentities(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
+	q := r.URL.Query()
+	limit, offset := paginationParams(r, 100, 0)
+	search := q.Get("search")
 
-	rows, err := s.pgPool.Query(r.Context(), `
+	args := []any{id}
+	idx := 2
+	where := "WHERE connector_id = $1"
+
+	if search != "" {
+		where += fmt.Sprintf(" AND (display_name ILIKE $%d OR email ILIKE $%d OR username ILIKE $%d)", idx, idx, idx)
+		args = append(args, "%"+search+"%")
+		idx++
+	}
+
+	// Count
+	var total int
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM connector_identities %s", where)
+	if err := s.pgPool.QueryRow(r.Context(), countSQL, args...).Scan(&total); err != nil {
+		respondError(w, http.StatusInternalServerError, "Count failed")
+		return
+	}
+
+	// Query
+	rows, err := s.pgPool.Query(r.Context(), fmt.Sprintf(`
 		SELECT id, external_id, username, email, display_name, first_name, last_name,
-		       department, title, enabled, locked, groups, roles, first_synced_at, last_synced_at
+		       department, title, employee_id, enabled, locked, groups, roles, first_synced_at, last_synced_at
 		FROM connector_identities
-		WHERE connector_id = $1
+		%s
 		ORDER BY display_name NULLS LAST, username NULLS LAST, email
-	`, id)
+		LIMIT $%d OFFSET $%d
+	`, where, idx, idx+1), append(args, limit, offset)...)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query failed: %s", err.Error()))
 		return
@@ -1265,6 +1437,7 @@ func (s *IdentityService) GetConnectorIdentities(w http.ResponseWriter, r *http.
 		LastName     string   `json:"last_name"`
 		Department   string   `json:"department"`
 		Title        string   `json:"title"`
+		EmployeeID   string   `json:"employee_id,omitempty"`
 		Enabled      bool     `json:"enabled"`
 		Locked       bool     `json:"locked"`
 		Groups       []string `json:"groups"`
@@ -1278,7 +1451,7 @@ func (s *IdentityService) GetConnectorIdentities(w http.ResponseWriter, r *http.
 		var e IdentityEntry
 		var firstSynced, lastSynced *time.Time
 		if err := rows.Scan(&e.ID, &e.ExternalID, &e.Username, &e.Email, &e.DisplayName,
-			&e.FirstName, &e.LastName, &e.Department, &e.Title, &e.Enabled, &e.Locked,
+			&e.FirstName, &e.LastName, &e.Department, &e.Title, &e.EmployeeID, &e.Enabled, &e.Locked,
 			&e.Groups, &e.Roles, &firstSynced, &lastSynced); err != nil {
 			continue
 		}
@@ -1294,7 +1467,7 @@ func (s *IdentityService) GetConnectorIdentities(w http.ResponseWriter, r *http.
 	respondJSON(w, http.StatusOK, map[string]any{
 		"connector_id": id,
 		"identities":   identities,
-		"total":        len(identities),
+		"total":        total,
 	})
 }
 
@@ -1317,6 +1490,39 @@ func (s *IdentityService) GetConnectorUsers(w http.ResponseWriter, r *http.Reque
 		"users":        users,
 		"total":        len(users),
 	})
+}
+
+// ─── Connector Statistics ─────────────────────────────────────
+
+func (s *IdentityService) GetConnectorStats(w http.ResponseWriter, r *http.Request) {
+	type ConnectorStats struct {
+		TotalConnectors   int `json:"total_connectors"`
+		ConnectedCount    int `json:"connected_count"`
+		DisconnectedCount int `json:"disconnected_count"`
+		ErrorCount        int `json:"error_count"`
+		SyncingCount      int `json:"syncing_count"`
+		TotalIdentities   int `json:"total_identities"`
+		TotalGroups       int `json:"total_groups"`
+		TotalEntitlements int `json:"total_entitlements"`
+		TotalResources    int `json:"total_resources"`
+	}
+
+	stats := ConnectorStats{}
+
+	// Count connectors by status
+	_ = s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connectors`).Scan(&stats.TotalConnectors)
+	_ = s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connectors WHERE status = $1`, "connected").Scan(&stats.ConnectedCount)
+	_ = s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connectors WHERE status = $1`, "disconnected").Scan(&stats.DisconnectedCount)
+	_ = s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connectors WHERE status = $1`, "error").Scan(&stats.ErrorCount)
+	_ = s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connectors WHERE status = $1`, "syncing").Scan(&stats.SyncingCount)
+
+	// Count synced entities
+	_ = s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connector_identities`).Scan(&stats.TotalIdentities)
+	_ = s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connector_groups`).Scan(&stats.TotalGroups)
+	_ = s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connector_entitlements`).Scan(&stats.TotalEntitlements)
+	_ = s.pgPool.QueryRow(r.Context(), `SELECT COUNT(*) FROM connector_resources`).Scan(&stats.TotalResources)
+
+	respondJSON(w, http.StatusOK, stats)
 }
 
 // ─── Delta Sync ──────────────────────────────────────────────
@@ -1391,13 +1597,33 @@ func (s *IdentityService) GetConnectorHealth(w http.ResponseWriter, r *http.Requ
 func (s *IdentityService) GetConnectorGroups(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
+	q := r.URL.Query()
+	limit, offset := paginationParams(r, 100, 0)
+	search := q.Get("search")
 
-	rows, err := s.pgPool.Query(r.Context(), `
+	args := []any{id}
+	idx := 2
+	where := "WHERE connector_id = $1"
+
+	if search != "" {
+		where += fmt.Sprintf(" AND name ILIKE $%d", idx)
+		args = append(args, "%"+search+"%")
+		idx++
+	}
+
+	var total int
+	if err := s.pgPool.QueryRow(r.Context(), fmt.Sprintf("SELECT COUNT(*) FROM connector_groups %s", where), args...).Scan(&total); err != nil {
+		respondError(w, http.StatusInternalServerError, "Count failed")
+		return
+	}
+
+	rows, err := s.pgPool.Query(r.Context(), fmt.Sprintf(`
 		SELECT id, external_id, name, description, group_type, scope, member_ids, first_synced_at, last_synced_at
 		FROM connector_groups
-		WHERE connector_id = $1
+		%s
 		ORDER BY name NULLS LAST
-	`, id)
+		LIMIT $%d OFFSET $%d
+	`, where, idx, idx+1), append(args, limit, offset)...)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query failed: %s", err.Error()))
 		return
@@ -1436,7 +1662,7 @@ func (s *IdentityService) GetConnectorGroups(w http.ResponseWriter, r *http.Requ
 	respondJSON(w, http.StatusOK, map[string]any{
 		"connector_id": id,
 		"groups":       groups,
-		"total":        len(groups),
+		"total":        total,
 	})
 }
 
@@ -1445,14 +1671,34 @@ func (s *IdentityService) GetConnectorGroups(w http.ResponseWriter, r *http.Requ
 func (s *IdentityService) GetConnectorEntitlements(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
+	q := r.URL.Query()
+	limit, offset := paginationParams(r, 100, 0)
+	search := q.Get("search")
 
-	rows, err := s.pgPool.Query(r.Context(), `
+	args := []any{id}
+	idx := 2
+	where := "WHERE connector_id = $1"
+
+	if search != "" {
+		where += fmt.Sprintf(" AND (source_name ILIKE $%d OR app_name ILIKE $%d)", idx, idx)
+		args = append(args, "%"+search+"%")
+		idx++
+	}
+
+	var total int
+	if err := s.pgPool.QueryRow(r.Context(), fmt.Sprintf("SELECT COUNT(*) FROM connector_entitlements %s", where), args...).Scan(&total); err != nil {
+		respondError(w, http.StatusInternalServerError, "Count failed")
+		return
+	}
+
+	rows, err := s.pgPool.Query(r.Context(), fmt.Sprintf(`
 		SELECT identity_external_id, entitlement_type, source_id, source_name, source_type,
 		       app_id, app_name, is_active
 		FROM connector_entitlements
-		WHERE connector_id = $1
+		%s
 		ORDER BY entitlement_type, source_name NULLS LAST
-	`, id)
+		LIMIT $%d OFFSET $%d
+	`, where, idx, idx+1), append(args, limit, offset)...)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query failed: %s", err.Error()))
 		return
@@ -1484,7 +1730,7 @@ func (s *IdentityService) GetConnectorEntitlements(w http.ResponseWriter, r *htt
 	respondJSON(w, http.StatusOK, map[string]any{
 		"connector_id":  id,
 		"entitlements":  entitlements,
-		"total":         len(entitlements),
+		"total":         total,
 	})
 }
 
@@ -1493,13 +1739,25 @@ func (s *IdentityService) GetConnectorEntitlements(w http.ResponseWriter, r *htt
 func (s *IdentityService) GetConnectorResources(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
+	limit, offset := paginationParams(r, 100, 0)
 
-	rows, err := s.pgPool.Query(r.Context(), `
+	args := []any{id}
+	idx := 2
+	where := "WHERE connector_id = $1"
+
+	var total int
+	if err := s.pgPool.QueryRow(r.Context(), fmt.Sprintf("SELECT COUNT(*) FROM connector_resources %s", where), args...).Scan(&total); err != nil {
+		respondError(w, http.StatusInternalServerError, "Count failed")
+		return
+	}
+
+	rows, err := s.pgPool.Query(r.Context(), fmt.Sprintf(`
 		SELECT id, external_id, resource_type, name, description, enabled, owner_ids, first_synced_at, last_synced_at
 		FROM connector_resources
-		WHERE connector_id = $1
+		%s
 		ORDER BY resource_type, name NULLS LAST
-	`, id)
+		LIMIT $%d OFFSET $%d
+	`, where, idx, idx+1), append(args, limit, offset)...)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Query failed: %s", err.Error()))
 		return
@@ -1539,7 +1797,7 @@ func (s *IdentityService) GetConnectorResources(w http.ResponseWriter, r *http.R
 	respondJSON(w, http.StatusOK, map[string]any{
 		"connector_id": id,
 		"resources":    resources,
-		"total":        len(resources),
+		"total":        total,
 	})
 }
 
