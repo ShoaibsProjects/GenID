@@ -561,6 +561,9 @@ func main() {
 	scim.HandleFunc("/Users/{id}", svc.ScimUpdateUser).Methods("PUT")
 	scim.HandleFunc("/Users/{id}", svc.ScimPatchUser).Methods("PATCH")
 	scim.HandleFunc("/Users/{id}", svc.ScimDeleteUser).Methods("DELETE")
+	scim.HandleFunc("/ServiceProviderConfig", svc.ScimServiceProviderConfig).Methods("GET")
+	scim.HandleFunc("/ResourceTypes", svc.ScimResourceTypes).Methods("GET")
+	scim.HandleFunc("/Schemas", svc.ScimSchemas).Methods("GET")
 
 	// Identity API
 	api := r.PathPrefix("/api/v1").Subrouter()
@@ -645,6 +648,11 @@ func main() {
 	// ─── Entitlements ───────────────────
 	api.HandleFunc("/entitlements", svc.ListEntitlements).Methods("GET")
 	api.HandleFunc("/entitlements", svc.CreateEntitlement).Methods("POST")
+
+	// ─── CSV Import/Export ──────────────────────────
+	api.HandleFunc("/identities/csv/preview", svc.PreviewCSVImport).Methods("POST")
+	api.HandleFunc("/identities/csv/import", svc.ImportCSV).Methods("POST")
+	api.HandleFunc("/identities/csv/export", svc.ExportCSV).Methods("GET")
 
 	// ─── Audit / Access Logs ──────────────────────
 	api.HandleFunc("/audit/logs", svc.ListAuditLogs).Methods("GET")
