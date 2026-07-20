@@ -639,6 +639,13 @@ func main() {
 	api.HandleFunc("/roles/assign", workflowGuard.Protect(middleware.OpAssignRole, svc.AssignRole)).Methods("POST")
 	api.HandleFunc("/roles/remove", workflowGuard.Protect(middleware.OpRemoveRole, svc.RemoveRole)).Methods("POST")
 
+	api.HandleFunc("/groups/{id}/entitlements", svc.LinkEntitlementToRole).Methods("POST")
+	api.HandleFunc("/groups/{id}/entitlements/{entitlement_id}", svc.UnlinkEntitlementFromRole).Methods("DELETE")
+
+	// ─── Entitlements ───────────────────
+	api.HandleFunc("/entitlements", svc.ListEntitlements).Methods("GET")
+	api.HandleFunc("/entitlements", svc.CreateEntitlement).Methods("POST")
+
 	// ─── Audit / Access Logs ──────────────────────
 	api.HandleFunc("/audit/logs", svc.ListAuditLogs).Methods("GET")
 	api.HandleFunc("/audit/logs/{id}", svc.GetAuditLog).Methods("GET")
