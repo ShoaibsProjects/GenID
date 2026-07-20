@@ -634,6 +634,7 @@ func main() {
 	// ─── Role / Group Management ───────────────────
 	api.HandleFunc("/groups", svc.ListGroups).Methods("GET")
 	api.HandleFunc("/groups", workflowGuard.Protect(middleware.OpCreateGroup, svc.CreateGroup)).Methods("POST")
+	api.HandleFunc("/groups/{id}", svc.GetGroup).Methods("GET")
 	api.HandleFunc("/groups/{id}", workflowGuard.Protect(middleware.OpDeleteGroup, svc.DeleteGroup)).Methods("DELETE")
 	api.HandleFunc("/roles/assign", workflowGuard.Protect(middleware.OpAssignRole, svc.AssignRole)).Methods("POST")
 	api.HandleFunc("/roles/remove", workflowGuard.Protect(middleware.OpRemoveRole, svc.RemoveRole)).Methods("POST")
