@@ -159,7 +159,7 @@ export function createConnector(config: ConnectorConfig): Promise<any> {
 }
 
 export function testConnectorConnection(config: ConnectorConfig): Promise<any> {
-  return apiRequest<any>("/api/v1/connectors/test", { method: "QUERY", body: config })
+  return apiRequest<any>("/api/v1/connectors/test", { method: "POST", body: config })
 }
 
 export function connectConnector(id: string): Promise<any> {

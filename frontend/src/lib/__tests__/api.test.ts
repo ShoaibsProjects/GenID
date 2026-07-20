@@ -205,7 +205,7 @@ describe("QUERY method endpoints (RFC 10008)", () => {
     )
   })
 
-  it("testConnectorConnection uses QUERY method", async () => {
+  it("testConnectorConnection uses POST method", async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true }),
@@ -214,7 +214,7 @@ describe("QUERY method endpoints (RFC 10008)", () => {
     await testConnectorConnection({ name: "LDAP", type: "ldap" })
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/v1/connectors/test",
-      expect.objectContaining({ method: "QUERY" })
+      expect.objectContaining({ method: "POST" })
     )
   })
 })

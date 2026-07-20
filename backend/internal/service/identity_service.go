@@ -2527,10 +2527,24 @@ func (s *IdentityService) ListAuditLogs(w http.ResponseWriter, r *http.Request) 
 		limit = 100
 	}
 	offset, _ := strconv.Atoi(q.Get("offset"))
-	level := audit.Level(q.Get("level"))
-	path := q.Get("path")
 
-	entries := s.auditLog.List(limit, offset, level, path)
+	f := audit.Filter{
+		Level:    audit.Level(q.Get("level")),
+		Method:   q.Get("method"),
+		Path:     q.Get("path"),
+		SourceIP: q.Get("source_ip"),
+	}
+	if s := q.Get("status"); s != "" {
+		f.Status, _ = strconv.Atoi(s)
+	}
+	if s := q.Get("since"); s != "" {
+		f.Since, _ = time.Parse(time.RFC3339, s)
+	}
+	if s := q.Get("until"); s != "" {
+		f.Until, _ = time.Parse(time.RFC3339, s)
+	}
+
+	entries := s.auditLog.List(limit, offset, f)
 	if entries == nil {
 		entries = []audit.Entry{}
 	}

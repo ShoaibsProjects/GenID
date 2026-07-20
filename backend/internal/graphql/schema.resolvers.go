@@ -410,7 +410,7 @@ func (r *queryResolver) AuditLogs(ctx context.Context, limit *int, offset *int, 
 	}
 
 	store := r.Svc.AuditStore()
-	entries := store.List(l, o, audit.Level(lvl), pth)
+	entries := store.List(l, o, audit.Filter{Level: audit.Level(lvl), Path: pth})
 	result := make([]*AuditEntry, len(entries))
 	for i, e := range entries {
 		method := e.Method

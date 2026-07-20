@@ -163,6 +163,7 @@ func main() {
 	rateLimiter := middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200
 	apiKeyAuth := middleware.NewAPIKeyAuth(loadAPIKeys(), "/health", "/ready", "/healthz", "/")
 	requestValidation := middleware.NewRequestValidation()
+	workflowGuard := middleware.NewWorkflowGuard(cfg.MasterKey)
 
 	// ─── Start HTTP/gRPC Server ───────────────────────────
 	r := mux.NewRouter()
@@ -572,14 +573,14 @@ func main() {
 	api.HandleFunc("/agents", svc.ListAgents).Methods("GET")
 	api.HandleFunc("/agents", svc.RegisterAgent).Methods("POST")
 	api.HandleFunc("/agents/{id}", svc.GetAgent).Methods("GET")
-	api.HandleFunc("/agents/{id}/kill-switch", svc.AgentKillSwitch).Methods("POST")
-	api.HandleFunc("/agents/{id}/delegate", svc.DelegateAgent).Methods("POST")
+	api.HandleFunc("/agents/{id}/kill-switch", workflowGuard.Protect(middleware.OpKillSwitch, svc.AgentKillSwitch)).Methods("POST")
+	api.HandleFunc("/agents/{id}/delegate", workflowGuard.Protect(middleware.OpDelegateAgent, svc.DelegateAgent)).Methods("POST")
 	api.HandleFunc("/agents/{id}/card", svc.GetAgentCard).Methods("GET")
 
 	// Access API
 	api.HandleFunc("/access/check", svc.CheckAccess).Methods("QUERY", "POST")
-	api.HandleFunc("/access/grant", svc.GrantAccess).Methods("POST")
-	api.HandleFunc("/access/revoke", svc.RevokeAccess).Methods("POST")
+	api.HandleFunc("/access/grant", workflowGuard.Protect(middleware.OpGrantAccess, svc.GrantAccess)).Methods("POST")
+	api.HandleFunc("/access/revoke", workflowGuard.Protect(middleware.OpRevokeAccess, svc.RevokeAccess)).Methods("POST")
 	api.HandleFunc("/access/jit", svc.JustInTimeAccess).Methods("POST")
 
 	// AI Copilot API
@@ -614,27 +615,27 @@ func main() {
 	api.HandleFunc("/connectors/csv/upload", svc.CSVUpload).Methods("POST")
 
 	// ─── IAM Lifecycle Management (LCM) ────────────
-	api.HandleFunc("/lcm", svc.ExecuteLCM).Methods("POST")
+	api.HandleFunc("/lcm", workflowGuard.Protect(middleware.OpExecuteLCM, svc.ExecuteLCM)).Methods("POST")
 	api.HandleFunc("/lcm/history", svc.GetLCMHistory).Methods("GET")
 
 	// ─── Identity CRUD ─────────────────────────────
 	api.HandleFunc("/identities", svc.CreateIdentityRecord).Methods("POST")
-	api.HandleFunc("/identities/bulk", svc.BulkImportIdentities).Methods("POST")
+	api.HandleFunc("/identities/bulk", workflowGuard.Protect(middleware.OpBulkImport, svc.BulkImportIdentities)).Methods("POST")
 	api.HandleFunc("/identities/{id}", svc.UpdateIdentityRecord).Methods("PATCH")
 	api.HandleFunc("/identities/{id}", svc.DeleteIdentityRecord).Methods("DELETE")
 
 	// ─── Vault / Secrets ────────────────────────────
 	api.HandleFunc("/vault/secrets", svc.ListSecrets).Methods("GET")
-	api.HandleFunc("/vault/secrets", svc.StoreSecret).Methods("POST")
+	api.HandleFunc("/vault/secrets", workflowGuard.Protect(middleware.OpVaultStore, svc.StoreSecret)).Methods("POST")
 	api.HandleFunc("/vault/secrets/{id}", svc.RetrieveSecret).Methods("GET")
-	api.HandleFunc("/vault/secrets/{id}", svc.DeleteSecret).Methods("DELETE")
+	api.HandleFunc("/vault/secrets/{id}", workflowGuard.Protect(middleware.OpVaultDelete, svc.DeleteSecret)).Methods("DELETE")
 
 	// ─── Role / Group Management ───────────────────
 	api.HandleFunc("/groups", svc.ListGroups).Methods("GET")
-	api.HandleFunc("/groups", svc.CreateGroup).Methods("POST")
-	api.HandleFunc("/groups/{id}", svc.DeleteGroup).Methods("DELETE")
-	api.HandleFunc("/roles/assign", svc.AssignRole).Methods("POST")
-	api.HandleFunc("/roles/remove", svc.RemoveRole).Methods("POST")
+	api.HandleFunc("/groups", workflowGuard.Protect(middleware.OpCreateGroup, svc.CreateGroup)).Methods("POST")
+	api.HandleFunc("/groups/{id}", workflowGuard.Protect(middleware.OpDeleteGroup, svc.DeleteGroup)).Methods("DELETE")
+	api.HandleFunc("/roles/assign", workflowGuard.Protect(middleware.OpAssignRole, svc.AssignRole)).Methods("POST")
+	api.HandleFunc("/roles/remove", workflowGuard.Protect(middleware.OpRemoveRole, svc.RemoveRole)).Methods("POST")
 
 	// ─── Audit / Access Logs ──────────────────────
 	api.HandleFunc("/audit/logs", svc.ListAuditLogs).Methods("GET")
@@ -709,7 +710,7 @@ func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, QUERY, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Requested-With")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Master-Key, X-User-Role, X-User-ID, X-Requested-With")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 			if allowedOrigin != "" && allowedOrigin != "*" {
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -726,17 +727,18 @@ func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
 }
 
 type Config struct {
-	DatabaseURL      string
-	Neo4jURI         string
-	Neo4jUser        string
-	Neo4jPassword    string
-	RedisAddr        string
-	RedisPassword    string
-	RedisTLS         bool
-	TemporalHost     string
+	DatabaseURL       string
+	Neo4jURI          string
+	Neo4jUser         string
+	Neo4jPassword     string
+	RedisAddr         string
+	RedisPassword     string
+	RedisTLS          bool
+	TemporalHost      string
 	TemporalNamespace string
-	CORSOrigin       string
-	QdrantAddr       string
+	CORSOrigin        string
+	QdrantAddr        string
+	MasterKey         string
 }
 
 func loadConfig() *Config {
@@ -752,6 +754,7 @@ func loadConfig() *Config {
 		TemporalNamespace: getEnv("TEMPORAL_NAMESPACE", "critical-offboarding"),
 		CORSOrigin:       getEnv("CORS_ORIGIN", ""),
 		QdrantAddr:       getEnv("QDRANT_ADDR", "localhost:6333"),
+		MasterKey:        getEnv("MASTER_KEY", ""),
 	}
 }
 

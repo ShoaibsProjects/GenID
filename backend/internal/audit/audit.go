@@ -12,12 +12,23 @@ import (
 type Level string
 
 const (
-	LevelDebug   Level = "debug"
-	LevelInfo    Level = "info"
-	LevelWarn    Level = "warn"
-	LevelError   Level = "error"
-	LevelFatal   Level = "fatal"
+	LevelDebug Level = "debug"
+	LevelInfo  Level = "info"
+	LevelWarn  Level = "warn"
+	LevelError Level = "error"
+	LevelFatal Level = "fatal"
 )
+
+// Filter holds all supported query-time filters for the audit log.
+type Filter struct {
+	Level    Level
+	Method   string
+	Path     string
+	Status   int
+	SourceIP string
+	Since    time.Time
+	Until    time.Time
+}
 
 type Entry struct {
 	ID        string    `json:"id"`
@@ -68,7 +79,7 @@ func (s *Store) Append(e Entry) {
 	}
 }
 
-func (s *Store) List(limit, offset int, level Level, path string) []Entry {
+func (s *Store) List(limit, offset int, f Filter) []Entry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -79,10 +90,25 @@ func (s *Store) List(limit, offset int, level Level, path string) []Entry {
 
 	var filtered []Entry
 	for _, e := range s.entries {
-		if level != "" && e.Level != level {
+		if f.Level != "" && e.Level != f.Level {
 			continue
 		}
-		if path != "" && !strings.Contains(e.Path, path) {
+		if f.Method != "" && e.Method != f.Method {
+			continue
+		}
+		if f.Path != "" && !strings.Contains(e.Path, f.Path) {
+			continue
+		}
+		if f.Status > 0 && e.Status != f.Status {
+			continue
+		}
+		if f.SourceIP != "" && !strings.Contains(e.SourceIP, f.SourceIP) {
+			continue
+		}
+		if !f.Since.IsZero() && e.Timestamp.Before(f.Since) {
+			continue
+		}
+		if !f.Until.IsZero() && e.Timestamp.After(f.Until) {
 			continue
 		}
 		filtered = append(filtered, e)
