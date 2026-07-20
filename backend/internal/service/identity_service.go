@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -3029,27 +3030,146 @@ func evaluateCedarPolicy(ctx context.Context, pool *pgxpool.Pool, identityID, ac
 		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
+	// Get identity type for policy matching
+	var identityType, identityDept string
+	_ = pool.QueryRow(ctx,
+		`SELECT COALESCE(type::text, 'human'), COALESCE(department, '') FROM identities WHERE id = $1`,
+		identityID,
+	).Scan(&identityType, &identityDept)
+
+	// Get resource type/classification for policy matching
+	var resourceType, resourceClass string
+	pool.QueryRow(ctx,
+		`SELECT COALESCE(r.resource_type, ''), COALESCE(r.criticality, '') FROM resources r WHERE r.id = $1`,
+		resourceID,
+	).Scan(&resourceType, &resourceClass)
+
+	// Also check Neo4j Resource node as fallback if PG resources table is empty
+	if resourceType == "" {
+		resourceType = resourceID // use raw resource ID for pattern matching
+	}
+
+	// Build the match set: identity can match by type, department, or wildcard
+	identityValues := []string{identityType, identityDept}
+	// Build the resource match set: resource ID, resource type, classification
+	resourceValues := []string{resourceID, resourceType, resourceClass}
+
 	rows, err := pool.Query(ctx, `
-		SELECT policy_id, effect FROM cedar_policies
+		SELECT policy_id, effect, policy_source, version FROM cedar_policies
 		WHERE tenant_id = $1 AND is_active = true
-		ORDER BY priority DESC, version DESC
+		ORDER BY version DESC
 	`, tenantID)
 	if err != nil {
 		return "", fmt.Errorf("cedar query: %w", err)
 	}
 	defer rows.Close()
 
+	var permitMatch bool
 	for rows.Next() {
-		var policyID, effect string
-		if err := rows.Scan(&policyID, &effect); err != nil {
+		var policyID, effect, policySource string
+		var version int
+		if err := rows.Scan(&policyID, &effect, &policySource, &version); err != nil {
 			continue
 		}
 
-		// Forbid wins — if any active policy forbids, deny immediately
+		if !matchPolicyConditions(policySource, identityValues, action, resourceValues, accessTypes) {
+			continue
+		}
+
+		// Forbid wins immediately — highest priority
 		if effect == "forbid" {
 			return "forbid", nil
 		}
+
+		// At least one permit policy matched
+		if effect == "permit" {
+			permitMatch = true
+		}
 	}
 
+	if permitMatch {
+		return "permit", nil
+	}
 	return "", nil
+}
+
+// matchPolicyConditions evaluates whether a policy_source pattern matches the
+// given request context. Policy source format:
+//
+//	"permit(identity_pattern, action_pattern, resource_pattern)"
+//	"forbid(Engineering, *, res-hr-db)"
+//
+// Patterns can be literal values or "*" (wildcard).
+// identityValues: [identityType, department, ...] — any value can match
+// resourceValues: [resourceID, resourceType, classification] — any value can match
+func matchPolicyConditions(policySource string, identityValues []string, action string, resourceValues []string, accessTypes []string) bool {
+	// Extract the parenthesized pattern: "effect(p1, p2, p3)"
+	open := strings.Index(policySource, "(")
+	close := strings.LastIndex(policySource, ")")
+	if open == -1 || close == -1 || open >= close {
+		return false
+	}
+
+	raw := policySource[open+1 : close]
+	fields := splitPolicyFields(raw)
+	if len(fields) < 3 {
+		return false
+	}
+
+	idPattern := strings.TrimSpace(fields[0])
+	actPattern := strings.TrimSpace(fields[1])
+	resPattern := strings.TrimSpace(fields[2])
+
+	// Match identity across all identity candidate values
+	idMatch := idPattern == "*" || idPattern == ""
+	if !idMatch {
+		for _, v := range identityValues {
+			if v != "" && strings.EqualFold(idPattern, strings.TrimSpace(v)) {
+				idMatch = true
+				break
+			}
+		}
+	}
+	if !idMatch {
+		return false
+	}
+
+	// Match action: literal or wildcard
+	if actPattern != "*" && actPattern != "" && !strings.EqualFold(actPattern, strings.TrimSpace(action)) {
+		return false
+	}
+
+	// Match resource across all resource candidate values
+	resMatch := resPattern == "*" || resPattern == ""
+	if !resMatch {
+		for _, v := range resourceValues {
+			if v != "" && strings.EqualFold(resPattern, strings.TrimSpace(v)) {
+				resMatch = true
+				break
+			}
+		}
+	}
+	if !resMatch {
+		return false
+	}
+
+	return true
+}
+
+// splitPolicyFields splits a comma-separated policy pattern string into fields,
+// handling quoted strings and whitespace.
+func splitPolicyFields(s string) []string {
+	var fields []string
+	current := strings.Builder{}
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if ch == ',' {
+			fields = append(fields, current.String())
+			current.Reset()
+			continue
+		}
+		current.WriteByte(ch)
+	}
+	fields = append(fields, current.String())
+	return fields
 }

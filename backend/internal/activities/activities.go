@@ -878,18 +878,28 @@ func (s *ActivityService) CheckAccessPolicy(ctx context.Context, params PolicyCh
 }
 
 func evaluatePolicyConditions(effect, source, identityType, action, resourceType string) bool {
-	// Parse the Cedar-like policy source for condition matching
-	parts := strings.Fields(source)
+	// Parse policy_source: "effect(pattern1, pattern2, pattern3)"
+	open := strings.Index(source, "(")
+	close := strings.LastIndex(source, ")")
+	if open == -1 || close == -1 || open >= close {
+		return false
+	}
+
+	raw := source[open+1 : close]
+	parts := strings.SplitN(raw, ",", 3)
 	if len(parts) < 3 {
 		return false
 	}
 
-	// Pattern: "permit(identity_type, action, resource_type)"
-	hasIdentity := strings.Contains(source, identityType)
-	hasAction := strings.Contains(source, action)
-	hasResource := strings.Contains(source, resourceType)
+	idPat := strings.TrimSpace(parts[0])
+	actPat := strings.TrimSpace(parts[1])
+	resPat := strings.TrimSpace(parts[2])
 
-	return hasIdentity && hasAction && hasResource
+	idMatch := idPat == "*" || idPat == "" || (identityType != "" && strings.EqualFold(idPat, identityType))
+	actMatch := actPat == "*" || actPat == "" || (action != "" && strings.EqualFold(actPat, action))
+	resMatch := resPat == "*" || resPat == "" || (resourceType != "" && strings.EqualFold(resPat, resourceType))
+
+	return idMatch && actMatch && resMatch
 }
 
 // ─── SoD Check Activity ─────────────────────────────────

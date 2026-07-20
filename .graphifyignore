@@ -26,3 +26,4 @@ uv.lock
 # Temp files
 /tmp/
 *.log
+graphify-out/cache/
