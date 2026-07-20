@@ -76,7 +76,7 @@ export default function ConnectorsPage() {
     setBusySync(id)
     try {
       const url = delta ? `/api/v1/connectors/${id}/sync-delta` : `/api/v1/connectors/${id}/sync`
-      await fetch(url, { method: "POST" })
+      await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" } })
       load()
       if (expanded === id) loadTab(id, activeTab)
     } catch (e: any) { alert("Sync failed: " + e.message) }
@@ -89,7 +89,7 @@ export default function ConnectorsPage() {
     const prev = testMsg[id]
     setTestMsg(t => ({...t, [id]: {ok: false, msg: "Testing..."}}))
     try {
-      const r = await fetch(`/api/v1/connectors/${id}/test`, { method: "POST" }).then(r => r.json())
+      const r = await fetch(`/api/v1/connectors/${id}/test`, { method: "POST", headers: { "Content-Type": "application/json" } }).then(r => r.json())
       setTestMsg(t => ({...t, [id]: {ok: r.success, msg: r.success ? "OK" : (r.error || "Failed")}}))
       setTimeout(() => setTestMsg(t => { const n = {...t}; delete n[id]; return n }), 3000)
     } catch (e: any) {
