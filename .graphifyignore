@@ -1,0 +1,28 @@
+# Build artifacts and dependencies
+node_modules/
+frontend/.next/
+frontend/out/
+backend/bin/
+backend/identity-service
+vendor/
+
+# Generated code
+backend/internal/graphql/generated.go
+*.pb.go
+*.gen.go
+
+# Lockfiles and configs (not source code relationships)
+go.sum
+frontend/package-lock.json
+frontend/yarn.lock
+uv.lock
+*.lock
+
+# IDE / tooling
+.idea/
+.vscode/
+.DS_Store
+
+# Temp files
+/tmp/
+*.log
