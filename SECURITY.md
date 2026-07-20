@@ -4,41 +4,42 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.0.x   | ✅ Active development |
+| `main` branch | :white_check_mark: Active development |
+| Tagged releases | :white_check_mark: Once released |
 
 ## Reporting a Vulnerability
 
-**ObserveID Reimagined is an identity and access governance platform. Security is our top priority.**
+**Do not open a public GitHub issue for security vulnerabilities.**
 
-If you discover a security vulnerability, please **DO NOT** file a public issue. Instead:
+Email security reports to the project maintainers. You should receive a response within 48 hours. If the issue is confirmed, we will release a patch as soon as possible.
 
-1. Email: **security@observeid.io** (not yet active — use GitHub advisory for now)
-2. GitHub: Use the **Security** tab → **Report a vulnerability** (preferred)
+## Security Architecture
 
-We will:
-- Acknowledge receipt within 24 hours
-- Provide an initial assessment within 72 hours
-- Deploy a fix based on severity (critical: <24h, high: <72h, medium: <7d)
+ObserveID implements defense-in-depth for identity data:
 
-## Disclosure Policy
+- **AES-256-GCM** authenticated encryption for all stored secrets (vault)
+- **API key authentication** with configurable key rotation (`API_KEYS` env var)
+- **WorkflowGuard** — 12 sensitive operations require master permission
+- **HTTP security headers** — nosniff, XFO, HSTS, Permissions-Policy
+- **Pre-commit gitleaks hook** — 60+ commits scanned, zero secrets leaked
+- **Request validation** — Content-Type enforcement, 10MB body limit, JSON-only
+- **Rate limiting** — Per-IP token bucket (100 req/s, burst 200)
+- **Cedar policy engine** — Forbid always wins over permit, evaluates at access-check time
 
-- We follow coordinated disclosure: 90-day window from fix release
-- We publicly credit researchers (with permission)
-- Bug bounty: TBD (currently appreciation + recognition)
+## Security Best Practices for Deployers
 
-## Scope
+1. **Set `VAULT_MASTER_KEY`** — a 32-byte hex key (`openssl rand -hex 32`). Do not use the default fallback key.
+2. **Set `API_KEYS`** — comma-delimited `name:key` pairs. Without this, auth is disabled.
+3. **Set `MASTER_KEY`** — enables WorkflowGuard for sensitive operations.
+4. **Enable TLS** — set `TLS_CERT_FILE` and `TLS_KEY_FILE` for production deployments.
+5. **Rotate API keys regularly** — the `API_KEYS` env var supports hot-reloading via `SetKeys()`.
+6. **Restrict CORS** — set `CORS_ORIGIN` to your frontend domain in production.
 
-In-scope:
-- The ObserveID Reimagined Identity Service (Go backend)
-- The ObserveID Reimagined Frontend (Next.js)
-- Authentication and authorization flows
-- API endpoints and SCIM interfaces
-- Temporal workflow execution
+## Dependency Security
 
-Out-of-scope:
-- Third-party dependencies (report via their channels)
-- Infrastructure providers (AWS, Cloudflare, etc.)
+This project's dependencies are managed via:
+- Go: `go.sum` with `go mod verify` checks
+- TypeScript: `package-lock.json` with `npm audit`
+- Infrastructure: Pinned Docker image tags
 
-## Hall of Fame
-
-Coming soon. Thank you for helping keep identity infrastructure secure.
+Run `gitleaks detect` before committing. The pre-commit hook automates this.
