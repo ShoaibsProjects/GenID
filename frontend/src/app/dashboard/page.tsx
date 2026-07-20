@@ -16,7 +16,6 @@ export default function DashboardPage() {
           fetch("/api/v1/audit/stats").then(r => r.json()).catch(() => null),
           fetch("/healthz").then(r => r.json()).catch(() => null),
         ])
-        // Identity stats from list endpoint
         const idRes = await fetch("/api/v1/identities?limit=1").then(r => r.json()).catch(() => null)
         setIdentityStats(idRes)
         setConnectorStats(conn)
@@ -29,71 +28,110 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [])
 
-  const metrics = [
-    { label: "Identities", value: identityStats?.total ?? "?", color: "text-blue-400", icon: "\u{1F464}" },
-    { label: "Connectors", value: connectorStats?.total_connectors ?? "?", color: "text-emerald-400", icon: "\u{1F517}" },
-    { label: "Connected", value: connectorStats?.connected_count ?? "?", color: "text-emerald-400", icon: "\u2705" },
-    { label: "Errors", value: connectorStats?.error_count ?? "0", color: connectorStats?.error_count > 0 ? "text-red-400" : "text-gray-400", icon: "\u274C" },
-    { label: "Synced Users", value: connectorStats?.total_identities ?? "?", color: "text-purple-400", icon: "\u{1F465}" },
-    { label: "Synced Groups", value: connectorStats?.total_groups ?? "?", color: "text-amber-400", icon: "\u{1F4E6}" },
-    { label: "Audit Entries", value: auditStats?.total ?? "?", color: "text-cyan-400", icon: "\u{1F4CB}" },
-    { label: "Buffer Usage", value: auditStats?.usage_pct ? Math.round(auditStats.usage_pct) + "%" : "?", color: auditStats?.usage_pct > 80 ? "text-amber-400" : "text-emerald-400", icon: "\u{1F4BE}" },
-  ]
-
   const services = health?.checks ? Object.entries(health.checks).map(([name, status]) => ({ name, ok: status === "ok" })) : []
 
+  const statCards = [
+    { label: "Identities", value: identityStats?.total ?? "—", color: "#FBBF24", accent: "rgba(245,158,11,0.15)", sub: `Identity Fabric` },
+    { label: "Connectors", value: connectorStats?.total_connectors ?? "—", color: "#60A5FA", accent: "rgba(59,130,246,0.15)", sub: `${connectorStats?.connected_count ?? 0} active` },
+    { label: "Synced Users", value: connectorStats?.total_identities ?? "—", color: "#34D399", accent: "rgba(52,211,153,0.12)", sub: `from ${connectorStats?.total_groups ?? 0} groups` },
+    { label: "Audit Events", value: auditStats?.total ?? "—", color: "#A78BFA", accent: "rgba(167,139,250,0.12)", sub: `buffer ${auditStats?.usage_pct ? Math.round(auditStats.usage_pct) + '%' : '—'}` },
+  ]
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-sm text-gray-400 mt-1">ObserveID Identity Fabric — System Overview</p>
+    <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ marginBottom: 32 }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #F0EFEC 30%, #A1A1AA)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 4 }}>
+          Dashboard
+        </h1>
+        <p style={{ fontSize: 13, color: '#5C5C62', lineHeight: 1.5 }}>
+          Identity Fabric overview — <span style={{ color: '#34D399' }}>all systems nominal</span>
+        </p>
       </div>
 
-      {loading ? <div className="p-12 text-center text-gray-500">Loading metrics...</div> : (
+      {loading ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+          {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 120, borderRadius: 16 }} />)}
+        </div>
+      ) : (
         <>
-          {/* Metrics Grid */}
-          <div className="grid grid-cols-4 gap-3">
-            {metrics.map(m => (
-              <div key={m.label} className="glass-card p-4">
-                <div className="flex items-center justify-between mb-2"><span className="text-xs text-gray-500 uppercase tracking-wider">{m.label}</span><span className="text-lg">{m.icon}</span></div>
-                <div className={`text-3xl font-bold ${m.color}`}>{m.value}</div>
+          {/* Stat Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
+            {statCards.map((card, i) => (
+              <div key={card.label} className="stat-card animate-slide-in" style={{ animationDelay: `${i * 0.08}s` }}>
+                {/* Colored top accent */}
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${card.accent}, ${card.color}40, transparent)`, borderTopLeftRadius: 16, borderTopRightRadius: 16 }} />
+                {/* Ambient glow dot */}
+                <div style={{ position: 'absolute', top: 20, right: 20, width: 40, height: 40, borderRadius: '50%', background: card.accent, filter: 'blur(20px)', pointerEvents: 'none' }} />
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5C5C62', marginBottom: 8 }}>{card.label}</p>
+                  <p style={{ fontSize: 36, fontWeight: 700, color: card.color, letterSpacing: '-0.03em', marginBottom: 4 }}>{card.value}</p>
+                  <p style={{ fontSize: 12, color: '#5C5C62' }}>{card.sub}</p>
+                </div>
               </div>
             ))}
           </div>
 
-          {/* Services Health */}
-          <div className="glass-card p-4">
-            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Service Health</h3>
-            <div className="flex gap-4 flex-wrap">
-              {services.map(s => (
-                <div key={s.name} className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${s.ok ? "bg-emerald-500" : "bg-red-500"}`} />
-                  <span className="text-sm text-gray-300 capitalize">{s.name === "neo4j" ? "Neo4j" : s.name === "postgres" ? "PostgreSQL" : s.name === "temporal" ? "Temporal" : s.name}</span>
-                  <span className={`text-xs ${s.ok ? "text-emerald-400" : "text-red-400"}`}>{s.ok ? "OK" : "DOWN"}</span>
-                </div>
-              ))}
-              {services.length === 0 && <span className="text-sm text-gray-500">Health check unavailable</span>}
+          {/* Service Health + System */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 32 }}>
+            {/* Service Health */}
+            <div className="glass-card" style={{ padding: 24 }}>
+              <h3 style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5C5C62', marginBottom: 16 }}>System Health</h3>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                {services.map(s => (
+                  <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderRadius: 10, background: s.ok ? 'rgba(52,211,153,0.04)' : 'rgba(239,68,68,0.04)', border: `1px solid ${s.ok ? 'rgba(52,211,153,0.10)' : 'rgba(239,68,68,0.10)'}` }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.ok ? '#34D399' : '#EF4444', boxShadow: s.ok ? '0 0 8px rgba(52,211,153,0.4)' : '0 0 8px rgba(239,68,68,0.4)' }} />
+                    <span style={{ fontSize: 13, color: '#F0EFEC', textTransform: 'capitalize' }}>{s.name === "neo4j" ? "Neo4j" : s.name === "postgres" ? "PostgreSQL" : s.name}</span>
+                    <span style={{ fontSize: 11, color: s.ok ? '#34D399' : '#EF4444', fontWeight: 600, letterSpacing: '0.05em' }}>{s.ok ? "ACTIVE" : "DOWN"}</span>
+                  </div>
+                ))}
+                {services.length === 0 && <span style={{ fontSize: 13, color: '#5C5C62' }}>Health check unavailable</span>}
+              </div>
+            </div>
+
+            {/* System Architecture */}
+            <div className="glass-card" style={{ padding: 24 }}>
+              <h3 style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5C5C62', marginBottom: 16 }}>Data Layer</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {[
+                  ["PostgreSQL", "ACID Identity Store", "#60A5FA"],
+                  ["Neo4j 5", "Identity Graph", "#34D399"],
+                  ["Redis 7", "Cache Layer", "#FBBF24"],
+                  ["Temporal", "Workflow Engine", "#A78BFA"],
+                  ["OTel", "Distributed Tracing", "#F472B6"],
+                  ["Grafana", "Visualization", "#F59E0B"],
+                ].map(([name, desc, color]) => (
+                  <div key={name as string} style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color as string, boxShadow: `0 0 6px ${color}` }} />
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#F0EFEC' }}>{name as string}</span>
+                    </div>
+                    <span style={{ fontSize: 11, color: '#5C5C62', marginLeft: 14 }}>{desc as string}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* System Architecture */}
-          <div className="glass-card p-4">
-            <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">System Architecture</h3>
-            <div className="grid grid-cols-4 gap-3 text-xs">
+          {/* Architecture Map */}
+          <div className="glass-card" style={{ padding: 24, position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.10), transparent)', pointerEvents: 'none' }} />
+            <h3 style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5C5C62', marginBottom: 20 }}>Architecture</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, fontSize: 12 }}>
               {[
-                ["Go HTTP API", ":8080", "gorilla/mux + 30+ handlers"],
-                ["PostgreSQL", "Source of Truth", "ACID, 17 tables, GIN indexes"],
-                ["Neo4j 5", "Identity Graph", "Entities + Relationships + Paths"],
-                ["Redis 7", "Cache Layer", "Revocation cache + Rate limiting"],
-                ["Temporal", "Workflow Engine", "9 workflows + 25+ activities"],
-                ["OTel", "Observability", "Traces + Metrics + Prometheus"],
-                ["Grafana", "Dashboards", ":3000 — metrics visualization"],
-                ["Entra ID", "Directory Sync", "Users + Groups + Roles + Apps"],
-              ].map(([name, tag, desc]) => (
-                <div key={name} className="p-3 rounded bg-surface-100/30">
-                  <div className="text-gray-200 font-medium mb-1">{name}</div>
-                  <div className="text-brand-400 font-mono mb-1">{tag}</div>
-                  <div className="text-gray-500">{desc}</div>
+                ["HTTP API", "gorilla/mux", "30+ handlers", 0, "#FBBF24"],
+                ["Workflows", "Temporal", "9 workflows", 1, "#A78BFA"],
+                ["Graph Query", "Cypher", "entities + paths", 2, "#34D399"],
+                ["Frontend", "Next.js + TS", "14 pages", 3, "#60A5FA"],
+                ["PostgreSQL", "identities, audit", "ACID + GIN indexes", 0, "#60A5FA"],
+                ["Neo4j 5", "Resources, Roles", "HAS_ROLE *1..N", 1, "#34D399"],
+                ["Redis 7", "Caches + TTLs", "30s decision cache", 2, "#FBBF24"],
+                ["Temporal", "Durable Execution", "500 concurrent", 3, "#A78BFA"],
+              ].map(([title, subtitle, desc, col]) => (
+                <div key={title as string} style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#F0EFEC', marginBottom: 2 }}>{title as string}</p>
+                  <p style={{ fontSize: 11, color: '#9C9CA0', marginBottom: 4 }}>{subtitle as string}</p>
+                  <p style={{ fontSize: 10, color: '#5C5C62' }}>{desc as string}</p>
                 </div>
               ))}
             </div>

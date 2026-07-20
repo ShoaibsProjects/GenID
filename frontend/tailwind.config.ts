@@ -5,7 +5,6 @@ const config: Config = {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
-    "../../node_modules/@tremor/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: "class",
   theme: {
@@ -13,40 +12,25 @@ const config: Config = {
       colors: {
         accent: {
           DEFAULT: "#F59E0B",
-          50: "#FFFBEB",
-          100: "#FEF3C7",
-          200: "#FDE68A",
-          300: "#FCD34D",
           400: "#FBBF24",
           500: "#F59E0B",
           600: "#D97706",
-          700: "#B45309",
-          800: "#92400E",
-          900: "#78350F",
-          dim: "rgba(245, 158, 11, 0.12)",
-          glow: "rgba(245, 158, 11, 0.25)",
+          dim: "rgba(245, 158, 11, 0.10)",
+          glow: "rgba(245, 158, 11, 0.20)",
+          strong: "rgba(245, 158, 11, 0.35)",
         },
-        surface: {
-          DEFAULT: "#0A0A0C",
-          50: "#121214",
-          100: "#1A1A1F",
-          200: "#1E1E24",
-          300: "#26292E",
-          400: "#3B3D45",
-          500: "#555862",
+        obsidian: {
+          DEFAULT: "#050508",
+          raised: "#0C0C10",
+          elevated: "#14141A",
+          floating: "#1C1C24",
+          border: "rgba(255, 255, 255, 0.06)",
         },
-        border: {
-          DEFAULT: "#1E1E24",
-          light: "#2A2A32",
-        },
-        muted: {
-          DEFAULT: "#52525B",
-        },
-        primary: {
-          DEFAULT: "#F5F5F0",
-        },
-        secondary: {
-          DEFAULT: "#A1A1AA",
+        glass: {
+          1: "rgba(255, 255, 255, 0.02)",
+          2: "rgba(255, 255, 255, 0.04)",
+          3: "rgba(255, 255, 255, 0.06)",
+          4: "rgba(255, 255, 255, 0.08)",
         },
       },
       fontFamily: {
@@ -54,43 +38,54 @@ const config: Config = {
         mono: ["JetBrains Mono", "Fira Code", "monospace"],
       },
       animation: {
-        "page-in": "fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both",
-        "card-in": "fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both",
-        "slide-down": "slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "float": "float 6s ease-in-out infinite",
+        "float-slow": "floatSlow 8s ease-in-out infinite",
+        "glow-pulse": "glowPulse 2s ease-in-out infinite",
+        "breathe": "breathe 3s ease-in-out infinite",
+        "fade-in": "fadeSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both",
         "shimmer": "shimmer 1.5s ease-in-out infinite",
-        "glow": "glowPulse 3s ease-in-out infinite",
-        "status": "statusPulse 2s ease-in-out infinite",
-        "fade-in": "fadeIn 0.2s ease both",
-        "count-up": "countUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "border-pulse": "borderPulse 3s ease-in-out infinite",
+        "data-flow": "dataFlow 4s ease-in-out infinite",
+        "slide-in": "slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both",
       },
       keyframes: {
-        fadeInUp: {
-          "from": { opacity: "0", transform: "translateY(16px)" },
-          "to":   { opacity: "1", transform: "translateY(0)" },
+        float: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-6px)" },
         },
-        fadeIn: {
-          "from": { opacity: "0" },
-          "to":   { opacity: "1" },
-        },
-        slideDown: {
-          "from": { opacity: "0", transform: "translateY(-8px)" },
-          "to":   { opacity: "1", transform: "translateY(0)" },
-        },
-        shimmer: {
-          "0%":   { backgroundPosition: "-200% 0" },
-          "100%": { backgroundPosition: "200% 0" },
+        floatSlow: {
+          "0%, 100%": { transform: "translateY(0) scale(1)" },
+          "33%": { transform: "translateY(-8px) scale(1.02)" },
+          "66%": { transform: "translateY(-3px) scale(0.98)" },
         },
         glowPulse: {
-          "0%, 100%": { boxShadow: "0 0 8px rgba(245, 158, 11, 0.08)" },
-          "50%":      { boxShadow: "0 0 20px rgba(245, 158, 11, 0.2)" },
+          "0%, 100%": { opacity: "0.6" },
+          "50%": { opacity: "1" },
         },
-        statusPulse: {
-          "0%, 100%": { opacity: "1", transform: "scale(1)" },
-          "50%":      { opacity: "0.7", transform: "scale(1.15)" },
+        breathe: {
+          "0%, 100%": { transform: "scale(1)", opacity: "0.8" },
+          "50%": { transform: "scale(1.05)", opacity: "1" },
         },
-        countUp: {
-          "from": { opacity: "0", transform: "translateY(8px)" },
-          "to":   { opacity: "1", transform: "translateY(0)" },
+        fadeSlideUp: {
+          "from": { opacity: "0", transform: "translateY(20px)" },
+          "to": { opacity: "1", transform: "translateY(0)" },
+        },
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
+        borderPulse: {
+          "0%, 100%": { borderColor: "rgba(255, 255, 255, 0.06)" },
+          "50%": { borderColor: "rgba(245, 158, 11, 0.15)" },
+        },
+        dataFlow: {
+          "0%": { backgroundPosition: "0% 50%" },
+          "50%": { backgroundPosition: "100% 50%" },
+          "100%": { backgroundPosition: "0% 50%" },
+        },
+        slideIn: {
+          "from": { opacity: "0", transform: "translateX(16px)" },
+          "to": { opacity: "1", transform: "translateX(0)" },
         },
       },
     },
