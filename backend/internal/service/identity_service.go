@@ -83,10 +83,103 @@ func (s *IdentityService) LoadConnectors(ctx context.Context) error {
 // ─── SCIM 2.0 Handlers ─────────────────────────────────────
 
 func (s *IdentityService) ScimListUsers(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("count"))
+	if limit <= 0 {
+		limit = 100
+	}
+	startIndex, _ := strconv.Atoi(q.Get("startIndex"))
+	if startIndex < 1 {
+		startIndex = 1
+	}
+	offset := startIndex - 1
+	filter := q.Get("filter")
+
+	// Build query — support SCIM filter: userName eq "value"
+	args := []any{}
+	idx := 1
+	where := "WHERE status != 'terminated'"
+
+	if filter != "" {
+		// Simple filter parsing: "userName eq \"value\""
+		parts := strings.Split(filter, " ")
+		if len(parts) >= 3 {
+			attr := parts[0]
+			op := parts[1]
+			val := strings.Trim(strings.TrimSpace(strings.Join(parts[2:], " ")), "\"")
+			if op == "eq" {
+				switch attr {
+				case "userName", "email":
+					where += fmt.Sprintf(" AND email = $%d", idx)
+				case "externalId":
+					where += fmt.Sprintf(" AND employee_id = $%d", idx)
+				case "displayName":
+					where += fmt.Sprintf(" AND display_name ILIKE $%d", idx)
+					val = "%" + val + "%"
+				default:
+					where += fmt.Sprintf(" AND $%d = $%d", idx, idx) // no-op
+				}
+				args = append(args, val)
+				idx++
+			}
+		}
+	}
+
+	var total int
+	s.pgPool.QueryRow(r.Context(), fmt.Sprintf("SELECT COUNT(*) FROM identities %s", where), args...).Scan(&total)
+
+	rows, err := s.pgPool.Query(r.Context(), fmt.Sprintf(`
+		SELECT id, email, display_name, type, status, department,
+		       employee_id, source, created_at, updated_at
+		FROM identities %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d
+	`, where, idx, idx+1), append(args, limit, offset)...)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Query failed")
+		return
+	}
+	defer rows.Close()
+
+	var resources []map[string]any
+	for rows.Next() {
+		var id, email, name, idType, status, dept, empID, source string
+		var created, updated time.Time
+		if err := rows.Scan(&id, &email, &name, &idType, &status, &dept, &empID, &source, &created, &updated); err != nil {
+			continue
+		}
+		active := status == "active"
+		u := map[string]any{
+			"schemas":    []string{"urn:ietf:params:scim:schemas:core:2.0:User"},
+			"id":         id,
+			"userName":   email,
+			"externalId": empID,
+			"active":     active,
+			"displayName": name,
+			"name": map[string]any{"formatted": name},
+			"emails":     []map[string]any{{"value": email, "primary": true}},
+			"userType":   idType,
+			"meta": map[string]any{
+				"resourceType": "User",
+				"created":      created.Format(time.RFC3339),
+				"lastModified": updated.Format(time.RFC3339),
+			},
+		}
+		if dept != "" {
+			u["urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"] = map[string]any{
+				"department": dept,
+			}
+		}
+		resources = append(resources, u)
+	}
+	if resources == nil {
+		resources = []map[string]any{}
+	}
+
 	respondJSON(w, http.StatusOK, map[string]any{
 		"schemas":      []string{"urn:ietf:params:scim:api:messages:2.0:ListResponse"},
-		"totalResults": 0,
-		"Resources":    []any{},
+		"totalResults": total,
+		"startIndex":   startIndex,
+		"itemsPerPage": limit,
+		"Resources":    resources,
 	})
 }
 
@@ -98,13 +191,92 @@ func (s *IdentityService) ScimCreateUser(w http.ResponseWriter, r *http.Request)
 	}
 
 	userName, _ := scimUser["userName"].(string)
+	if userName == "" {
+		respondError(w, http.StatusBadRequest, "userName is required")
+		return
+	}
+	displayName, _ := scimUser["displayName"].(string)
+	if displayName == "" {
+		displayName = userName
+	}
+	active := true
+	if v, ok := scimUser["active"].(bool); ok {
+		active = v
+	}
+	status := "active"
+	if !active {
+		status = "inactive"
+	}
+
+	// Extract name
+	firstName := ""
+	lastName := ""
+	if nameObj, ok := scimUser["name"].(map[string]any); ok {
+		firstName, _ = nameObj["givenName"].(string)
+		lastName, _ = nameObj["familyName"].(string)
+	}
+	// Extract manager
+	managerID := ""
+	if ext, ok := scimUser["urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"].(map[string]any); ok {
+		if mgr, ok := ext["manager"].(map[string]any); ok {
+			managerID, _ = mgr["value"].(string)
+		}
+	}
+
+	// Create identity in PG + Neo4j via the regular CreateIdentityRecord flow
+	createReq := map[string]any{
+		"email":        userName,
+		"display_name": displayName,
+		"first_name":   firstName,
+		"last_name":    lastName,
+		"status":       status,
+		"source":       "scim",
+		"tenant_id":    "00000000-0000-0000-0000-000000000001",
+	}
+	if managerID != "" {
+		createReq["manager_id"] = managerID
+	}
+
+	// Create in PostgreSQL
 	id := uuid.New().String()
+	attrs := map[string]any{}
+	if firstName != "" {
+		attrs["first_name"] = firstName
+	}
+	if lastName != "" {
+		attrs["last_name"] = lastName
+	}
+
+	_, err := s.pgPool.Exec(r.Context(), `
+		INSERT INTO identities (id, tenant_id, email, display_name, status, source, attributes)
+		VALUES ($1, $2, $3, $4, $5, 'scim', $6)
+		ON CONFLICT (tenant_id, email) DO UPDATE SET
+			display_name = EXCLUDED.display_name, status = EXCLUDED.status
+	`, id, "00000000-0000-0000-0000-000000000001", userName, displayName, status, mustJSON(attrs))
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Create failed: "+err.Error())
+		return
+	}
+
+	// Create in Neo4j
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(r.Context())
+	session.Run(r.Context(), `
+		MERGE (i:Identity {uuid: $uuid})
+		SET i.tenant_id = $tenant, i.email = $email, i.display_name = $name,
+		    i.status = $status, i.type = 'human', i.source = 'scim',
+		    i.created_at = datetime()
+	`, map[string]any{
+		"uuid": id, "tenant": "00000000-0000-0000-0000-000000000001",
+		"email": userName, "name": displayName, "status": status,
+	})
 
 	respondJSON(w, http.StatusCreated, map[string]any{
-		"schemas":  []string{"urn:ietf:params:scim:schemas:core:2.0:User"},
-		"id":       id,
-		"userName": userName,
-		"active":   true,
+		"schemas":    []string{"urn:ietf:params:scim:schemas:core:2.0:User"},
+		"id":         id,
+		"userName":   userName,
+		"active":     active,
+		"displayName": displayName,
 		"meta": map[string]any{
 			"resourceType": "User",
 			"created":      time.Now().Format(time.RFC3339),
@@ -115,20 +287,99 @@ func (s *IdentityService) ScimCreateUser(w http.ResponseWriter, r *http.Request)
 func (s *IdentityService) ScimGetUser(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
+
+	var email, name, idType, empID, status string
+	var created, updated time.Time
+	err := s.pgPool.QueryRow(r.Context(), `
+		SELECT email, display_name, type, status, COALESCE(employee_id,''), created_at, updated_at
+		FROM identities WHERE id = $1
+	`, id).Scan(&email, &name, &idType, &empID, &status, &created, &updated)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "User not found")
+		return
+	}
+
+	active := status == "active"
 	respondJSON(w, http.StatusOK, map[string]any{
-		"schemas":  []string{"urn:ietf:params:scim:schemas:core:2.0:User"},
-		"id":       id,
-		"userName": "user@" + id,
-		"active":   true,
+		"schemas":     []string{"urn:ietf:params:scim:schemas:core:2.0:User"},
+		"id":          id,
+		"userName":    email,
+		"externalId":  empID,
+		"active":      active,
+		"displayName": name,
+		"name":        map[string]any{"formatted": name},
+		"emails":      []map[string]any{{"value": email, "primary": true}},
+		"userType":    idType,
+		"meta": map[string]any{
+			"resourceType": "User",
+			"created":      created.Format(time.RFC3339),
+			"lastModified": updated.Format(time.RFC3339),
+		},
 	})
 }
 
 func (s *IdentityService) ScimUpdateUser(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	var scimUser map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&scimUser); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid payload")
+		return
+	}
+
+	// Update in PG
+	sets := []string{}
+	args := []any{id}
+	idx := 2
+
+	if v, ok := scimUser["displayName"].(string); ok && v != "" {
+		sets = append(sets, fmt.Sprintf("display_name = $%d", idx))
+		args = append(args, v); idx++
+	}
+	if v, ok := scimUser["active"].(bool); ok {
+		st := "active"
+		if !v {
+			st = "inactive"
+		}
+		sets = append(sets, fmt.Sprintf("status = $%d", idx))
+		args = append(args, st); idx++
+	}
+
+	if len(sets) > 0 {
+		s.pgPool.Exec(r.Context(), fmt.Sprintf("UPDATE identities SET %s, updated_at = NOW() WHERE id = $1", strings.Join(sets, ", ")), args...)
+	}
+
+	// Update in Neo4j
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(r.Context())
+	cypher := "MATCH (i:Identity {uuid: $uuid}) SET i.updated_at = datetime()"
+	params := map[string]any{"uuid": id}
+	for _, s := range sets {
+		switch {
+		case strings.Contains(s, "display_name"):
+			cypher += ", i.display_name = $name"
+			params["name"] = args[strings.Index(s, "display_name")]
+		case strings.Contains(s, "status"):
+			cypher += ", i.status = $status"
+			params["status"] = args[strings.Index(s, "status")]
+		}
+	}
+	session.Run(r.Context(), cypher, params)
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:User"},
+		"id":      id,
+		"meta": map[string]any{
+			"resourceType":  "User",
+			"lastModified": time.Now().Format(time.RFC3339),
+		},
+	})
 }
 
 func (s *IdentityService) ScimPatchUser(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]string{"status": "patched"})
+	// SCIM PATCH: same as update for now — full replacement
+	s.ScimUpdateUser(w, r)
 }
 
 func (s *IdentityService) ScimDeleteUser(w http.ResponseWriter, r *http.Request) {
@@ -3633,4 +3884,9 @@ func splitPolicyFields(s string) []string {
 	}
 	fields = append(fields, current.String())
 	return fields
+}
+
+func mustJSON(v any) json.RawMessage {
+	b, _ := json.Marshal(v)
+	return json.RawMessage(b)
 }
