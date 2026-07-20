@@ -155,41 +155,160 @@ func (s *IdentityService) ScimDeleteUser(w http.ResponseWriter, r *http.Request)
 // ─── Identity API Handlers ─────────────────────────────────
 
 func (s *IdentityService) ListIdentities(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
 	limit, offset := paginationParams(r, 50, 0)
 
-	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-	defer session.Close(r.Context())
+	// --- Build dynamic query from PG for search + filtering ---
+	search := q.Get("search")
+	status := q.Get("status")
+	idType := q.Get("type")
+	department := q.Get("department")
+	source := q.Get("source")
+	sortBy := q.Get("sort_by")
+	sortDir := q.Get("sort_dir")
 
-	result, err := session.Run(r.Context(), `
-		MATCH (i:Identity)
-		RETURN i.uuid AS uuid, i.display_name AS name, i.email AS email,
-			   i.status AS status, i.type AS type, i.department AS department,
-			   i.risk_score AS risk_score
-		ORDER BY i.created_at DESC
-		SKIP $offset LIMIT $limit
-	`, map[string]any{"offset": offset, "limit": limit})
+	if sortBy == "" {
+		sortBy = "created_at"
+	}
+	if sortDir != "asc" && sortDir != "ASC" {
+		sortDir = "DESC"
+	}
+
+	// Allowed sort columns (whitelist to prevent SQL injection)
+	allowedSort := map[string]bool{
+		"created_at": true, "updated_at": true, "display_name": true,
+		"email": true, "department": true, "status": true, "type": true,
+		"risk_score": true, "last_accessed_at": true,
+	}
+	if !allowedSort[sortBy] {
+		sortBy = "created_at"
+	}
+
+	args := []any{}
+	idx := 1
+	where := "WHERE 1=1"
+
+	if search != "" {
+		where += fmt.Sprintf(" AND to_tsvector('english', coalesce(display_name,'') || ' ' || coalesce(email,'')) @@ plainto_tsquery('english', $%d)", idx)
+		args = append(args, search)
+		idx++
+	}
+	if status != "" {
+		where += fmt.Sprintf(" AND status = $%d", idx)
+		args = append(args, status)
+		idx++
+	}
+	if idType != "" {
+		where += fmt.Sprintf(" AND type = $%d", idx)
+		args = append(args, idType)
+		idx++
+	}
+	if department != "" {
+		where += fmt.Sprintf(" AND department = $%d", idx)
+		args = append(args, department)
+		idx++
+	}
+	if source != "" {
+		where += fmt.Sprintf(" AND source = $%d", idx)
+		args = append(args, source)
+		idx++
+	}
+
+	// Count total (for pagination)
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM identities %s", where)
+	var total int
+	if err := s.pgPool.QueryRow(r.Context(), countSQL, args...).Scan(&total); err != nil {
+		respondError(w, http.StatusInternalServerError, "Count query failed")
+		return
+	}
+
+	// Query with all fields
+	dataSQL := fmt.Sprintf(`
+		SELECT id, tenant_id, type, status, email, display_name, department,
+		       employee_id, manager_id, source, risk_score, risk_factors,
+		       assurance_level, attributes, created_at, updated_at,
+		       last_accessed_at, last_reviewed_at
+		FROM identities
+		%s
+		ORDER BY %s %s NULLS LAST
+		LIMIT $%d OFFSET $%d
+	`, where, sortBy, sortDir, idx, idx+1)
+	args = append(args, limit, offset)
+
+	rows, err := s.pgPool.Query(r.Context(), dataSQL, args...)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Query failed")
 		return
 	}
+	defer rows.Close()
 
-	var identities []map[string]any
-	for result.Next(r.Context()) {
-		rec := result.Record()
-		identities = append(identities, map[string]any{
-			"id":         getRecordVal(rec, "uuid"),
-			"name":       getRecordVal(rec, "name"),
-			"email":      getRecordVal(rec, "email"),
-			"status":     getRecordVal(rec, "status"),
-			"type":       getRecordVal(rec, "type"),
-			"department": getRecordVal(rec, "department"),
-			"risk_score": getRecordVal(rec, "risk_score"),
-		})
+	type identityItem struct {
+		ID             string    `json:"id"`
+		TenantID       string    `json:"tenant_id"`
+		Type           string    `json:"type"`
+		Status         string    `json:"status"`
+		Email          string    `json:"email"`
+		DisplayName    string    `json:"display_name"`
+		Department     *string   `json:"department"`
+		EmployeeID     *string   `json:"employee_id"`
+		ManagerID      *string   `json:"manager_id"`
+		Source         string    `json:"source"`
+		RiskScore      float64   `json:"risk_score"`
+		RiskFactors    []string  `json:"risk_factors"`
+		AssuranceLevel string    `json:"assurance_level"`
+		Attributes     string    `json:"attributes"`
+		CreatedAt      string    `json:"created_at"`
+		UpdatedAt      string    `json:"updated_at"`
+		LastAccessedAt *string   `json:"last_accessed_at"`
+		LastReviewedAt *string   `json:"last_reviewed_at"`
+	}
+
+	identities := []identityItem{}
+	for rows.Next() {
+		var i identityItem
+		var dept, empID, mgrID *string
+		var lastAcc, lastRev *time.Time
+		var riskFactors []string
+		var attrs string
+		var createdAt, updatedAt time.Time
+		err := rows.Scan(&i.ID, &i.TenantID, &i.Type, &i.Status, &i.Email, &i.DisplayName,
+			&dept, &empID, &mgrID, &i.Source, &i.RiskScore, &riskFactors,
+			&i.AssuranceLevel, &attrs, &createdAt, &updatedAt, &lastAcc, &lastRev)
+		if err != nil {
+			continue
+		}
+		// Map nullable fields
+		if dept != nil {
+			i.Department = dept
+		}
+		if empID != nil {
+			i.EmployeeID = empID
+		}
+		if mgrID != nil {
+			i.ManagerID = mgrID
+		}
+		i.RiskFactors = riskFactors
+		i.Attributes = attrs
+		i.CreatedAt = createdAt.Format(time.RFC3339)
+		i.UpdatedAt = updatedAt.Format(time.RFC3339)
+		if lastAcc != nil && !lastAcc.IsZero() {
+			str := lastAcc.Format(time.RFC3339)
+			i.LastAccessedAt = &str
+		}
+		if lastRev != nil && !lastRev.IsZero() {
+			str := lastRev.Format(time.RFC3339)
+			i.LastReviewedAt = &str
+		}
+		identities = append(identities, i)
+	}
+
+	if identities == nil {
+		identities = []identityItem{}
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"identities": identities,
-		"total":      len(identities),
+		"total":      total,
 	})
 }
 
