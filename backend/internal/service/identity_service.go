@@ -3174,15 +3174,15 @@ func (s *IdentityService) ImportCSV(w http.ResponseWriter, r *http.Request) {
 
 func (s *IdentityService) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.pgPool.Query(r.Context(), `
-		SELECT email, display_name, department, employee_id, source, status, type,
-		       risk_score, attributes, created_at, updated_at
+		SELECT email, display_name, COALESCE(department,''), COALESCE(employee_id,''),
+		       source, status, type, risk_score,
+		       COALESCE(attributes::text,'{}'), created_at, updated_at
 		FROM identities ORDER BY created_at DESC
 	`)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Query failed")
 		return
 	}
-	defer rows.Close()
 
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", "attachment; filename=observeid-identities.csv")
@@ -3193,9 +3193,7 @@ func (s *IdentityService) ExportCSV(w http.ResponseWriter, r *http.Request) {
 		"status", "type", "risk_score", "custom_attributes", "created_at", "updated_at",
 	})
 
-	count := 0
 	for rows.Next() {
-		count++
 		var email, name, dept, empID, source, status, idType, attrs string
 		var risk float64
 		var created, updated time.Time
@@ -3208,6 +3206,7 @@ func (s *IdentityService) ExportCSV(w http.ResponseWriter, r *http.Request) {
 			created.Format("2006-01-02 15:04:05"), updated.Format("2006-01-02 15:04:05"),
 		})
 	}
+	rows.Close()
 	writer.Flush()
 }
 
