@@ -204,7 +204,12 @@ func (s *IdentityService) GetIdentity(w http.ResponseWriter, r *http.Request) {
 		MATCH (i:Identity {uuid: $id})
 		OPTIONAL MATCH (i)-[:HAS_ROLE]->(r:Role)
 		OPTIONAL MATCH (i)-[:MANAGES]->(reports:Identity)
-		RETURN i, COLLECT(DISTINCT r) AS roles, COLLECT(DISTINCT reports) AS direct_reports
+		RETURN i.uuid AS uuid, i.display_name AS display_name, i.email AS email,
+			   i.status AS status, i.type AS type, i.department AS department,
+			   i.title AS title, i.employee_id AS employee_id, i.source AS source,
+			   i.risk_score AS risk_score, i.created_at AS created_at, i.updated_at AS updated_at,
+			   COLLECT(DISTINCT {name: r.name, uuid: r.uuid, role_type: r.role_type}) AS roles,
+			   COLLECT(DISTINCT {uuid: reports.uuid, display_name: reports.display_name}) AS direct_reports
 	`, map[string]any{"id": id})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Query failed")
@@ -212,13 +217,27 @@ func (s *IdentityService) GetIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if result.Next(r.Context()) {
-		record := result.Record()
-		node, _ := record.Get("i")
-		roles, _ := record.Get("roles")
-		reports, _ := record.Get("direct_reports")
+		rec := result.Record()
+		roles, _ := rec.Get("roles")
+		reports, _ := rec.Get("direct_reports")
+
+		identity := map[string]any{
+			"id":            getRecordVal(rec, "uuid"),
+			"display_name":  getRecordVal(rec, "display_name"),
+			"email":         getRecordVal(rec, "email"),
+			"status":        getRecordVal(rec, "status"),
+			"type":          getRecordVal(rec, "type"),
+			"department":    getRecordVal(rec, "department"),
+			"title":         getRecordVal(rec, "title"),
+			"employee_id":   getRecordVal(rec, "employee_id"),
+			"source":        getRecordVal(rec, "source"),
+			"risk_score":    getRecordVal(rec, "risk_score"),
+			"created_at":    getRecordVal(rec, "created_at"),
+			"updated_at":    getRecordVal(rec, "updated_at"),
+		}
 
 		respondJSON(w, http.StatusOK, map[string]any{
-			"identity":       node,
+			"identity":       identity,
 			"roles":          roles,
 			"direct_reports": reports,
 		})
@@ -644,7 +663,7 @@ func (s *IdentityService) CheckAccess(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	start := time.Now()
+	start = time.Now()
 
 	// Query Neo4j for entitlement path
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
@@ -738,14 +757,14 @@ func (s *IdentityService) CheckAccess(w http.ResponseWriter, r *http.Request) {
 	s.redis.Set(r.Context(), cacheKey, cacheVal, 30*time.Second)
 
 	// Record metrics
-	decision := "deny"
+	metricDecision := "deny"
 	if allowed {
-		decision = "permit"
+		metricDecision = "permit"
 	}
-	telemetry.AccessCheckTotal.WithLabelValues(decision, tenantID).Inc()
+	telemetry.AccessCheckTotal.WithLabelValues(metricDecision, tenantID).Inc()
 	telemetry.AccessCheckLatency.WithLabelValues(tenantID).Observe(float64(latency))
 	if !allowed {
-		telemetry.CedarDenyRate.Inc()
+		telemetry.CedarDenyRate.WithLabelValues("human", req.Action, "resource").Inc()
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
