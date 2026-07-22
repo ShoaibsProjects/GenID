@@ -3,9 +3,23 @@ package middleware
 import (
 	"mime"
 	"net/http"
+	"strings"
 )
 
 const DefaultMaxBodyBytes = 10 << 20 // 10 MB
+
+// Paths that accept application/x-www-form-urlencoded in addition to JSON.
+var formURLEncodedPaths = []string{
+	"/authorize",
+	"/token",
+	"/userinfo",
+	"/.well-known/",
+	"/oidc/",
+	"/introspect",
+	"/revoke",
+	"/device_authorization",
+	"/device",
+}
 
 type RequestValidation struct {
 	MaxBodyBytes int64
@@ -37,6 +51,13 @@ func (v *RequestValidation) Middleware(next http.Handler) http.Handler {
 				w.Write([]byte(`{"error":"invalid_content_type"}`))
 				return
 			}
+
+			// Allow form-urlencoded for OIDC/OAuth2 endpoints.
+			if mediaType == "application/x-www-form-urlencoded" && isFormURLEncodedPath(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			if mediaType != "application/json" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -46,4 +67,13 @@ func (v *RequestValidation) Middleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isFormURLEncodedPath(path string) bool {
+	for _, prefix := range formURLEncodedPaths {
+		if strings.HasPrefix(path, prefix) || path == prefix {
+			return true
+		}
+	}
+	return false
 }

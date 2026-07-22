@@ -152,7 +152,7 @@
     <text x="96" y="364" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">React · Tailwind · Radix UI</text>
     <text x="96" y="380" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Static export → Cloudflare Pages</text>
     <rect x="96" y="390" width="244" height="26" rx="4" fill="#27272A"/>
-    <text x="104" y="408" font-family="'JetBrains Mono', monospace" font-size="8" fill="#717D96">Pages: dashboard, identities, agents, connectors, audit, vault…</text>
+    <text x="104" y="408" font-family="'JetBrains Mono', monospace" font-size="8" fill="#717D96">Pages: dashboard, identities, agents, connectors, audit, vault, idp…</text>
   </g>
 
   <!-- Arrow from ALB to NGINX -->
@@ -241,11 +241,10 @@
 
   <!-- Connector Framework (wide) -->
   <g filter="url(#boxShadow)">
-    <rect x="80" y="600" width="540" height="120" rx="6" fill="url(#serviceGrad)" stroke="#6366F1" stroke-opacity="0.4" stroke-width="1"/>
-    <rect x="80" y="600" width="4" height="120" rx="2" fill="#6366F1"/>
+    <rect x="80" y="600" width="540" height="132" rx="6" fill="url(#serviceGrad)" stroke="#6366F1" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="80" y="600" width="4" height="132" rx="2" fill="#6366F1"/>
     <text x="96" y="622" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#A5B4FC">Connector Framework</text>
     
-    <!-- Sub-connectors -->
     <g filter="url(#boxShadow)">
       <rect x="96" y="634" width="120" height="34" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
       <text x="104" y="650" font-family="'JetBrains Mono', monospace" font-size="9" fill="#93C5FD">Entra ID</text>
@@ -259,26 +258,29 @@
     <g filter="url(#boxShadow)">
       <rect x="356" y="634" width="120" height="34" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
       <text x="368" y="650" font-family="'JetBrains Mono', monospace" font-size="9" fill="#93C5FD">SCIM 2.0</text>
-      <text x="368" y="662" font-family="'JetBrains Mono', monospace" font-size="7" fill="#717D96">Okta · Azure</text>
+      <text x="368" y="662" font-family="'JetBrains Mono', monospace" font-size="7" fill="#717D96">Okta · Azure · Custom</text>
     </g>
     <g filter="url(#boxShadow)">
       <rect x="486" y="634" width="120" height="34" rx="4" fill="#1F2937" stroke="#374151" stroke-width="1"/>
       <text x="498" y="650" font-family="'JetBrains Mono', monospace" font-size="9" fill="#93C5FD">Generic</text>
-      <text x="498" y="662" font-family="'JetBrains Mono', monospace" font-size="7" fill="#717D96">REST · CSV · gRPC</text>
+      <text x="498" y="662" font-family="'JetBrains Mono', monospace" font-size="7" fill="#717D96">REST · CSV · gRPC · OIDC</text>
     </g>
     
     <text x="96" y="686" font-family="'JetBrains Mono', monospace" font-size="8" fill="#717D96">ListUsers · ListGroups · ListEntitlements · ListResources · Delta Sync · Schema Discovery</text>
+    <text x="96" y="700" font-family="'JetBrains Mono', monospace" font-size="8" fill="#717D96">CSV import/export · ABAC conditions · Toxic detection</text>
   </g>
 
   <!-- Vault -->
   <g filter="url(#boxShadow)">
-    <rect x="640" y="600" width="260" height="120" rx="6" fill="url(#serviceGrad)" stroke="#EF4444" stroke-opacity="0.3" stroke-width="1"/>
-    <rect x="640" y="600" width="4" height="120" rx="2" fill="#EF4444"/>
+    <rect x="640" y="600" width="260" height="132" rx="6" fill="url(#serviceGrad)" stroke="#EF4444" stroke-opacity="0.3" stroke-width="1"/>
+    <rect x="640" y="600" width="4" height="132" rx="2" fill="#EF4444"/>
     <text x="656" y="622" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FCA5A5">Credential Vault</text>
     <text x="656" y="642" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">AES-256-GCM encryption</text>
-    <text x="656" y="660" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">File-persisted JSON store</text>
-    <text x="656" y="678" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">VAULT_MASTER_KEY env</text>
-    <text x="656" y="696" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Store/Retrieve/Delete/List</text>
+    <text x="656" y="660" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">File JSON store · 0600 permissions</text>
+    <text x="656" y="678" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">VAULT_MASTER_KEY from env</text>
+    <text x="656" y="696" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Store / Retrieve / Delete / List</text>
+    <text x="656" y="712" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Micron: crypto/rand · SHA-256 key</text>
+    <text x="656" y="726" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Unlocked by VAULT_MASTER_KEY env var</text>
   </g>
 
   <!-- LCM Provisioning -->
@@ -342,6 +344,45 @@
   </g>
 
   <!-- ══════════════════════════════════════════════════════════════════
+     Row 4: Authentication &amp; Secrets Layer
+     ══════════════════════════════════════════════════════════════════ -->
+
+  <!-- OIDC / OAuth 2.0 Identity Provider -->
+  <g filter="url(#boxShadow)">
+    <rect x="80" y="836" width="540" height="56" rx="6" fill="url(#serviceGrad)" stroke="#F472B6" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="80" y="836" width="4" height="56" rx="2" fill="#F472B6"/>
+    <text x="96" y="858" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#F9A8D4">OIDC / OAuth 2.0 Identity Provider</text>
+    <text x="96" y="876" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Discovery · JWKS · Authorize · Token · UserInfo · Introspect · Revoke · Register</text>
+  </g>
+
+  <!-- IDP Management UI (frontend route /idp) -->
+  <g filter="url(#boxShadow)">
+    <rect x="640" y="836" width="260" height="56" rx="6" fill="url(#serviceGrad)" stroke="#F472B6" stroke-opacity="0.3" stroke-width="1"/>
+    <rect x="640" y="836" width="4" height="56" rx="2" fill="#F472B6"/>
+    <text x="656" y="858" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="600" fill="#F9A8D4">IDP Management UI</text>
+    <text x="656" y="876" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Client CRUD · Discovery · Flow Test</text>
+  </g>
+
+  <!-- Secrets Management 3-Tier -->
+  <g filter="url(#boxShadow)">
+    <rect x="920" y="836" width="540" height="56" rx="6" fill="url(#serviceGrad)" stroke="#EF4444" stroke-opacity="0.4" stroke-width="1"/>
+    <rect x="920" y="836" width="4" height="56" rx="2" fill="#EF4444"/>
+    <text x="936" y="858" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FCA5A5">Secrets Management · 3-Tier</text>
+    <text x="936" y="876" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">Dev: .env template + Vault → Staging: Cloudflare/Fly secrets → Prod: Platform KMS + Vault</text>
+  </g>
+
+  <!-- OIDC Connector (Generic sub-type) -->
+  <g filter="url(#boxShadow)">
+    <rect x="920" y="634" width="120" height="34" rx="4" fill="#1F2937" stroke="#F472B6" stroke-opacity="0.4" stroke-width="1"/>
+    <text x="932" y="650" font-family="'JetBrains Mono', monospace" font-size="9" fill="#F9A8D4">OIDC IdP</text>
+    <text x="932" y="662" font-family="'JetBrains Mono', monospace" font-size="7" fill="#717D96">RFC 6749 · PKCE</text>
+  </g>
+
+  <!-- Go API → OIDC Provider -->
+  <line x1="1050" y1="430" x2="1050" y2="830" stroke="#F472B6" stroke-opacity="0.4" stroke-width="1.5" marker-end="url(#arrowPink)"/>
+  <line x1="360" y1="428" x2="350" y2="830" stroke="#F472B6" stroke-opacity="0.3" stroke-width="1" stroke-dasharray="4,3"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════
      CONNECTION ARROWS (SERVICE → SERVICE) within Compute Subnet
      ══════════════════════════════════════════════════════════════════ -->
 
@@ -394,7 +435,7 @@
     <text x="468" y="969" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Neo4j 5 Enterprise</text>
     <text x="436" y="992" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">8 labels · 7 relationships · Full-text indexes</text>
     <text x="436" y="1008" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">Blast radius · SoD analysis · Access paths</text>
-    <text x="436" y="1022" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Bolt :7687 · neo4j:observeid123</text>
+    <text x="436" y="1022" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Bolt :7687 · neo4j:[secret]</text>
   </g>
 
   <!-- Redis -->

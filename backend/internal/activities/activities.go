@@ -11,13 +11,13 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/observeid/identity-platform/internal/cedar"
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -196,17 +196,19 @@ type ActivityService struct {
 	neo4j    neo4j.DriverWithContext
 	redis    *redis.Client
 	temporal client.Client
+	cedarEng *cedar.CedarEngine
 
 	lockMu       sync.Mutex
 	fenceCounter int64
 }
 
-func NewActivityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *ActivityService {
+func NewActivityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client, cedarEng *cedar.CedarEngine) *ActivityService {
 	return &ActivityService{
 		pgPool:       pgPool,
 		neo4j:        neo4j,
 		redis:        rdb,
 		temporal:     tc,
+		cedarEng:     cedarEng,
 		fenceCounter: time.Now().UnixMilli(),
 	}
 }
@@ -822,49 +824,69 @@ func (s *ActivityService) AssignRoleToIdentity(ctx context.Context, params Assig
 // ─── Policy Activities ────────────────────────────────────
 
 func (s *ActivityService) CheckAccessPolicy(ctx context.Context, params PolicyCheckParams) (PolicyCheckResult, error) {
-	// Evaluate against stored Cedar policies
-	rows, err := s.pgPool.Query(ctx, `
-		SELECT policy_id, effect, policy_source FROM cedar_policies
-		WHERE tenant_id = $1 AND is_active = true
-		ORDER BY version DESC`, params.TenantID)
-	if err != nil {
-		return PolicyCheckResult{}, fmt.Errorf("policy query: %w", err)
+	// Build Cedar authorization request
+	tenantID := params.TenantID
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
 	}
-	defer rows.Close()
 
-	var matchedPolicies []string
-	var effect string
+	cedarReq := cedar.AuthRequest{
+		PrincipalID:   params.IdentityID,
+		PrincipalType: params.IdentityType,
+		Action:        params.Action,
+		ResourceID:    params.ResourceID,
+		ResourceType:  params.ResourceType,
+		TenantID:      tenantID,
+		Context:       params.Context,
+	}
 
-	for rows.Next() {
-		var policyID, polEffect, source string
-		if err := rows.Scan(&policyID, &polEffect, &source); err != nil {
-			continue
+	// Enrich with identity attributes from PG if available
+	if s.pgPool != nil {
+		var dept string
+		var clearance int64
+		var isActive bool
+		err := s.pgPool.QueryRow(ctx,
+			`SELECT COALESCE(department, ''), COALESCE(clearance_level, 0), COALESCE(is_active, true)
+			 FROM identities WHERE id = $1`,
+			params.IdentityID,
+		).Scan(&dept, &clearance, &isActive)
+		if err == nil {
+			cedarReq.Department = dept
+			cedarReq.Clearance = clearance
+			cedarReq.IsActive = isActive
 		}
+	}
 
-		// Simple pattern matching: check if the policy conditions align
-		// In production: use cedar-go evaluator
-		matched := evaluatePolicyConditions(
-			polEffect, source,
-			params.IdentityType, params.Action, params.ResourceType,
-		)
-		if matched {
-			matchedPolicies = append(matchedPolicies, policyID)
-			effect = polEffect
+	// Enrich resource criticality from PG if available
+	if s.pgPool != nil {
+		var crit string
+		err := s.pgPool.QueryRow(ctx,
+			`SELECT COALESCE(criticality, '') FROM resources WHERE id = $1`,
+			params.ResourceID,
+		).Scan(&crit)
+		if err == nil {
+			cedarReq.Criticality = crit
 		}
+	}
+
+	// Evaluate via Cedar engine
+	decision, err := s.cedarEng.IsAuthorized(ctx, cedarReq)
+	if err != nil {
+		return PolicyCheckResult{}, fmt.Errorf("cedar evaluation: %w", err)
 	}
 
 	result := PolicyCheckResult{
-		MatchedPolicies: matchedPolicies,
+		Allowed:         decision.Allowed,
+		Decision:        decision.Decision,
+		MatchedPolicies: decision.MatchedPolicies,
 	}
 
-	if len(matchedPolicies) > 0 {
-		result.Allowed = (effect == "permit")
-		result.Decision = effect
-		result.Reason = fmt.Sprintf("matched %d policies, decision: %s", len(matchedPolicies), effect)
+	if len(decision.MatchedPolicies) > 0 {
+		result.Reason = fmt.Sprintf("matched %d Cedar policies, decision: %s", len(decision.MatchedPolicies), decision.Decision)
 	} else {
-		result.Allowed = true // default allow if no policy matches
+		result.Allowed = true
 		result.Decision = "not_applicable"
-		result.Reason = "no matching policies, default allow"
+		result.Reason = "no matching Cedar policies, default allow"
 	}
 
 	// Cache decision in Redis
@@ -875,31 +897,6 @@ func (s *ActivityService) CheckAccessPolicy(ctx context.Context, params PolicyCh
 
 	activity.RecordHeartbeat(ctx, "policy_checked", result.Decision)
 	return result, nil
-}
-
-func evaluatePolicyConditions(effect, source, identityType, action, resourceType string) bool {
-	// Parse policy_source: "effect(pattern1, pattern2, pattern3)"
-	open := strings.Index(source, "(")
-	close := strings.LastIndex(source, ")")
-	if open == -1 || close == -1 || open >= close {
-		return false
-	}
-
-	raw := source[open+1 : close]
-	parts := strings.SplitN(raw, ",", 3)
-	if len(parts) < 3 {
-		return false
-	}
-
-	idPat := strings.TrimSpace(parts[0])
-	actPat := strings.TrimSpace(parts[1])
-	resPat := strings.TrimSpace(parts[2])
-
-	idMatch := idPat == "*" || idPat == "" || (identityType != "" && strings.EqualFold(idPat, identityType))
-	actMatch := actPat == "*" || actPat == "" || (action != "" && strings.EqualFold(actPat, action))
-	resMatch := resPat == "*" || resPat == "" || (resourceType != "" && strings.EqualFold(resPat, resourceType))
-
-	return idMatch && actMatch && resMatch
 }
 
 // ─── SoD Check Activity ─────────────────────────────────

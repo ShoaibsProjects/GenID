@@ -1,0 +1,162 @@
+<svg width="1920" height="1080" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="bgDeep" x1="0" y1="0" x2="1920" y2="1080"><stop offset="0%" stop-color="#0B0D11"/><stop offset="50%" stop-color="#0F1118"/><stop offset="100%" stop-color="#07090C"/></linearGradient>
+<linearGradient id="amber" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#FBBF24"/></linearGradient>
+<linearGradient id="purple" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#8B5CF6"/><stop offset="100%" stop-color="#A78BFA"/></linearGradient>
+<linearGradient id="teal" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#14B8A6"/><stop offset="100%" stop-color="#2DD4BF"/></linearGradient>
+<linearGradient id="pink" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#EC4899"/><stop offset="100%" stop-color="#F472B6"/></linearGradient>
+<linearGradient id="blue" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#3B82F6"/><stop offset="100%" stop-color="#60A5FA"/></linearGradient>
+<linearGradient id="green" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#10B981"/><stop offset="100%" stop-color="#34D399"/></linearGradient>
+<filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<filter id="shadow"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.5"/></filter>
+</defs>
+
+<!-- Background -->
+<rect width="1920" height="1080" fill="url(#bgDeep)"/>
+
+<!-- Title -->
+<text x="80" y="50" font-family="sans-serif" font-size="42" font-weight="800" fill="#F59E0B">OBSERVEID</text>
+<text x="80" y="75" font-family="monospace" font-size="14" fill="#717D96">IDENTITY FABRIC FOR THE AI ERA</text>
+<rect x="80" y="85" width="300" height="2" fill="#F59E0B" filter="url(#glow)"/>
+
+<!-- CLOUDFLARE EDGE (Top) -->
+<g transform="translate(960,130)">
+<ellipse cx="0" cy="0" rx="250" ry="50" fill="none" stroke="#F38020" stroke-width="2" stroke-dasharray="15,10" opacity="0.5" filter="url(#glow)"/>
+<circle cx="0" cy="0" r="15" fill="#F38020" filter="url(#glow)"/>
+<line x1="-30" y1="-40" x2="-40" y2="60" stroke="#FBBF24" stroke-width="2" stroke-dasharray="5,8" opacity="0.6"/>
+<line x1="0" y1="-40" x2="-10" y2="60" stroke="#FBBF24" stroke-width="2" stroke-dasharray="5,8" opacity="0.6"/>
+<line x1="30" y1="-40" x2="20" y2="60" stroke="#FBBF24" stroke-width="2" stroke-dasharray="5,8" opacity="0.6"/>
+<rect x="-80" y="-80" width="160" height="24" rx="4" fill="#1C1E26" stroke="#F38020" stroke-width="1"/>
+<text x="0" y="-63" text-anchor="middle" font-family="monospace" font-size="11" fill="#FBC394">CLOUDFLARE EDGE</text>
+</g>
+
+<!-- FRONTEND (Left Middle) -->
+<g transform="translate(500,350)">
+<rect x="-120" y="-60" width="240" height="120" rx="8" fill="#1C1E26" stroke="#3B82F6" stroke-width="2" opacity="0.8"/>
+<!-- 15 windows -->
+<g fill="#F59E0B" filter="url(#glow)">
+<rect x="-105" y="-45" width="14" height="14" rx="2"/><rect x="-87" y="-45" width="14" height="14" rx="2"/><rect x="-69" y="-45" width="14" height="14" rx="2"/>
+<rect x="-51" y="-45" width="14" height="14" rx="2"/><rect x="-33" y="-45" width="14" height="14" rx="2"/><rect x="-15" y="-45" width="14" height="14" rx="2"/>
+<rect x="3" y="-45" width="14" height="14" rx="2"/><rect x="21" y="-45" width="14" height="14" rx="2"/><rect x="39" y="-45" width="14" height="14" rx="2"/>
+<rect x="57" y="-45" width="14" height="14" rx="2"/><rect x="75" y="-45" width="14" height="14" rx="2"/><rect x="93" y="-45" width="14" height="14" rx="2"/>
+<rect x="-105" y="-27" width="14" height="14" rx="2"/><rect x="-87" y="-27" width="14" height="14" rx="2"/><rect x="-69" y="-27" width="14" height="14" rx="2"/>
+</g>
+<rect x="-80" y="75" width="160" height="24" rx="4" fill="#1C1E26" stroke="#3B82F6" stroke-width="1"/>
+<text x="0" y="92" text-anchor="middle" font-family="monospace" font-size="12" fill="#93C5FD" font-weight="600">FRONTEND</text>
+</g>
+
+<!-- API ENGINE (Right Middle) -->
+<g transform="translate(1420,350)">
+<rect x="-120" y="-70" width="240" height="140" rx="4" fill="#1C1E26" stroke="#8B5CF6" stroke-width="2" filter="url(#glow)"/>
+<!-- Middleware streams -->
+<rect x="-80" y="-60" width="6" height="120" fill="url(#purple)" opacity="0.7"/><rect x="-50" y="-60" width="6" height="120" fill="url(#blue)" opacity="0.7"/>
+<rect x="-20" y="-60" width="6" height="120" fill="url(#teal)" opacity="0.7"/><rect x="10" y="-60" width="6" height="120" fill="url(#pink)" opacity="0.7"/>
+<rect x="40" y="-60" width="6" height="120" fill="url(#green)" opacity="0.7"/><rect x="70" y="-60" width="6" height="120" fill="#EF4444" opacity="0.7"/>
+<rect x="-80" y="85" width="160" height="24" rx="4" fill="#1C1E26" stroke="#8B5CF6" stroke-width="1"/>
+<text x="0" y="102" text-anchor="middle" font-family="monospace" font-size="12" fill="#C4B5FD" font-weight="600">API ENGINE</text>
+</g>
+
+<!-- GRAPH POD (Center) -->
+<g transform="translate(960,480)">
+<polygon points="0,-50 43,-25 43,25 0,50 -43,25 -43,-25" fill="none" stroke="#14B8A6" stroke-width="2" filter="url(#glow)" opacity="0.9"/>
+<circle cx="-15" cy="-15" r="5" fill="#2DD4BF" filter="url(#glow)"/><circle cx="15" cy="-15" r="5" fill="#2DD4BF" filter="url(#glow)"/><circle cx="0" cy="20" r="5" fill="#2DD4BF" filter="url(#glow)"/>
+<line x1="-15" y1="-15" x2="15" y2="-15" stroke="#14B8A6" stroke-width="1" opacity="0.4"/><line x1="-15" y1="-15" x2="0" y2="20" stroke="#14B8A6" stroke-width="1" opacity="0.4"/><line x1="15" y1="-15" x2="0" y2="20" stroke="#14B8A6" stroke-width="1" opacity="0.4"/>
+<rect x="-60" y="70" width="120" height="24" rx="4" fill="#1C1E26" stroke="#14B8A6" stroke-width="1"/>
+<text x="0" y="87" text-anchor="middle" font-family="monospace" font-size="12" fill="#2DD4BF" font-weight="600">GRAPH</text>
+</g>
+
+<!-- POLICY POD (Left) -->
+<g transform="translate(680,520)">
+<rect x="-50" y="-35" width="100" height="70" rx="4" fill="#1C1E26" stroke="#EC4899" stroke-width="2" filter="url(#glow)"/>
+<text x="-30" y="-10" font-family="monospace" font-size="12" fill="#F472B6">permit</text>
+<text x="-30" y="12" font-family="monospace" font-size="12" fill="#F87171">forbid</text>
+<rect x="-50" y="50" width="100" height="24" rx="4" fill="#1C1E26" stroke="#EC4899" stroke-width="1"/>
+<text x="0" y="67" text-anchor="middle" font-family="monospace" font-size="12" fill="#F472B6" font-weight="600">POLICY</text>
+</g>
+
+<!-- AI COPILOT (Right) -->
+<g transform="translate(1240,520)">
+<ellipse cx="0" cy="0" rx="50" ry="35" fill="none" stroke="#A78BFA" stroke-width="2" filter="url(#glow)"/>
+<circle cx="0" cy="-22" r="4" fill="#A78BFA" filter="url(#glow)"/><circle cx="28" cy="-12" r="4" fill="#A78BFA" filter="url(#glow)"/><circle cx="28" cy="12" r="4" fill="#A78BFA" filter="url(#glow)"/>
+<circle cx="0" cy="22" r="4" fill="#A78BFA" filter="url(#glow)"/><circle cx="-28" cy="12" r="4" fill="#A78BFA" filter="url(#glow)"/><circle cx="-28" cy="-12" r="4" fill="#A78BFA" filter="url(#glow)"/>
+<rect x="-60" y="50" width="120" height="24" rx="4" fill="#1C1E26" stroke="#A78BFA" stroke-width="1"/>
+<text x="0" y="67" text-anchor="middle" font-family="monospace" font-size="12" fill="#C4B5FD" font-weight="600">AI COPILOT</text>
+</g>
+
+<!-- CONNECTORS (Back Left) -->
+<g transform="translate(800,600)">
+<circle cx="0" cy="0" r="45" fill="none" stroke="#60A5FA" stroke-width="2" stroke-dasharray="6,4" filter="url(#glow)"/>
+<circle cx="0" cy="-32" r="7" fill="#3B82F6"/><circle cx="27" cy="-17" r="7" fill="#10B981"/><circle cx="27" cy="17" r="7" fill="#F59E0B"/>
+<circle cx="-27" cy="17" r="7" fill="#9CA3AF"/><circle cx="-27" cy="-17" r="7" fill="#EC4899"/>
+<rect x="-60" y="55" width="120" height="24" rx="4" fill="#1C1E26" stroke="#60A5FA" stroke-width="1"/>
+<text x="0" y="72" text-anchor="middle" font-family="monospace" font-size="12" fill="#93C5FD" font-weight="600">CONNECTORS</text>
+</g>
+
+<!-- VAULT (Back Right) -->
+<g transform="translate(1120,600)">
+<rect x="-45" y="-30" width="90" height="60" rx="4" fill="#1C1E26" stroke="#EF4444" stroke-width="2" filter="url(#glow)"/>
+<circle cx="0" cy="0" r="18" fill="none" stroke="#EF4444" stroke-width="2" stroke-dasharray="3,3"/>
+<rect x="-45" y="45" width="90" height="24" rx="4" fill="#1C1E26" stroke="#EF4444" stroke-width="1"/>
+<text x="0" y="62" text-anchor="middle" font-family="monospace" font-size="12" fill="#FCA5A5" font-weight="600">VAULT</text>
+</g>
+
+<!-- POSTGRES (Bottom Left) -->
+<g transform="translate(380,780)">
+<rect x="-70" y="-40" width="140" height="80" rx="6" fill="#1C1E26" stroke="#3B82F6" stroke-width="2" filter="url(#glow)"/>
+<rect x="-60" y="-30" width="35" height="25" rx="2" fill="#3B82F6" opacity="0.25"/><rect x="-20" y="-30" width="35" height="25" rx="2" fill="#3B82F6" opacity="0.25"/><rect x="20" y="-30" width="35" height="25" rx="2" fill="#3B82F6" opacity="0.25"/>
+<rect x="-60" y="0" width="35" height="25" rx="2" fill="#3B82F6" opacity="0.25"/><rect x="-20" y="0" width="35" height="25" rx="2" fill="#3B82F6" opacity="0.25"/><rect x="20" y="0" width="35" height="25" rx="2" fill="#3B82F6" opacity="0.25"/>
+<rect x="-70" y="55" width="140" height="24" rx="4" fill="#1C1E26" stroke="#3B82F6" stroke-width="1"/>
+<text x="0" y="72" text-anchor="middle" font-family="monospace" font-size="12" fill="#93C5FD" font-weight="600">POSTGRES</text>
+</g>
+
+<!-- NEO4J (Bottom Center-Left) -->
+<g transform="translate(680,780)">
+<rect x="-70" y="-40" width="140" height="80" rx="6" fill="#1C1E26" stroke="#10B981" stroke-width="2" filter="url(#glow)"/>
+<circle cx="-35" cy="-20" r="7" fill="#10B981" filter="url(#glow)"/><circle cx="35" cy="-20" r="7" fill="#10B981" filter="url(#glow)"/><circle cx="0" cy="20" r="7" fill="#10B981" filter="url(#glow)"/>
+<line x1="-35" y1="-20" x2="35" y2="-20" stroke="#10B981" stroke-width="2" opacity="0.4"/><line x1="-35" y1="-20" x2="0" y2="20" stroke="#10B981" stroke-width="2" opacity="0.4"/><line x1="35" y1="-20" x2="0" y2="20" stroke="#10B981" stroke-width="2" opacity="0.4"/>
+<rect x="-70" y="55" width="140" height="24" rx="4" fill="#1C1E26" stroke="#10B981" stroke-width="1"/>
+<text x="0" y="72" text-anchor="middle" font-family="monospace" font-size="12" fill="#6EE7B7" font-weight="600">NEO4J</text>
+</g>
+
+<!-- REDIS (Bottom Center-Right) -->
+<g transform="translate(980,780)">
+<rect x="-70" y="-40" width="140" height="80" rx="6" fill="#1C1E26" stroke="#EF4444" stroke-width="2" filter="url(#glow)"/>
+<circle cx="-45" cy="0" r="5" fill="#EF4444" filter="url(#glow)"/><circle cx="0" cy="0" r="5" fill="#EF4444" filter="url(#glow)"/><circle cx="45" cy="0" r="5" fill="#EF4444" filter="url(#glow)"/>
+<path d="M -45 0 Q -22 -15 0 0 Q 22 -15 45 0" fill="none" stroke="#EF4444" stroke-width="2" opacity="0.4"/>
+<rect x="-70" y="55" width="140" height="24" rx="4" fill="#1C1E26" stroke="#EF4444" stroke-width="1"/>
+<text x="0" y="72" text-anchor="middle" font-family="monospace" font-size="12" fill="#FCA5A5" font-weight="600">REDIS</text>
+</g>
+
+<!-- TEMPORAL (Bottom Right) -->
+<g transform="translate(1280,780)">
+<circle cx="0" cy="0" r="60" fill="none" stroke="#EC4899" stroke-width="2" filter="url(#glow)"/>
+<circle cx="0" cy="0" r="42" fill="none" stroke="#EC4899" stroke-width="2" stroke-dasharray="6,4" opacity="0.6"/>
+<circle cx="0" cy="-35" r="9" fill="#EC4899" filter="url(#glow)"/><circle cx="30" cy="-18" r="9" fill="#EC4899" filter="url(#glow)"/><circle cx="30" cy="18" r="9" fill="#EC4899" filter="url(#glow)"/>
+<circle cx="0" cy="35" r="9" fill="#EC4899" filter="url(#glow)"/><circle cx="-30" cy="18" r="9" fill="#EC4899" filter="url(#glow)"/><circle cx="-30" cy="-18" r="9" fill="#EC4899" filter="url(#glow)"/>
+<rect x="-70" y="75" width="140" height="24" rx="4" fill="#1C1E26" stroke="#EC4899" stroke-width="1"/>
+<text x="0" y="92" text-anchor="middle" font-family="monospace" font-size="12" fill="#FDA4AF" font-weight="600">TEMPORAL</text>
+</g>
+
+<!-- ACCESS BEAM (Golden flow from Edge to Graph) -->
+<path d="M 960 180 L 960 430" stroke="#F59E0B" stroke-width="4" stroke-dasharray="8,4" opacity="0.8" filter="url(#glow)" marker-end="url(#arrow)"/>
+<circle cx="960" cy="300" r="4" fill="#FBBF24" filter="url(#glow)"><animate attributeName="cy" from="180" to="430" dur="2s" repeatCount="indefinite"/></circle>
+
+<!-- Connection lines -->
+<path d="M 380 350 L 380 740" stroke="#3B82F6" stroke-width="2" opacity="0.4" stroke-dasharray="4,4"/>
+<path d="M 1420 350 L 1420 740" stroke="#8B5CF6" stroke-width="2" opacity="0.4" stroke-dasharray="4,4"/>
+<path d="M 500 480 L 680 740" stroke="#14B8A6" stroke-width="2" opacity="0.3"/>
+<path d="M 1420 480 L 1280 740" stroke="#10B981" stroke-width="2" opacity="0.3"/>
+
+<!-- Legend -->
+<g transform="translate(80,950)">
+<rect x="0" y="0" width="1760" height="80" rx="8" fill="#16171E" stroke="#27272A" stroke-width="1"/>
+<text x="20" y="25" font-family="monospace" font-size="11" fill="#717D96" font-weight="600">ARCHITECTURE</text>
+<circle cx="150" cy="55" r="6" fill="#F38020"/><text x="165" y="60" font-family="monospace" font-size="10" fill="#9CA3AF">Edge</text>
+<circle cx="280" cy="55" r="6" fill="#3B82F6"/><text x="295" y="60" font-family="monospace" font-size="10" fill="#9CA3AF">Frontend</text>
+<circle cx="430" cy="55" r="6" fill="#8B5CF6"/><text x="445" y="60" font-family="monospace" font-size="10" fill="#9CA3AF">API</text>
+<circle cx="560" cy="55" r="6" fill="#14B8A6"/><text x="575" y="60" font-family="monospace" font-size="10" fill="#9CA3AF">Graph</text>
+<circle cx="700" cy="55" r="6" fill="#10B981"/><text x="715" y="60" font-family="monospace" font-size="10" fill="#9CA3AF">Data</text>
+<circle cx="840" cy="55" r="6" fill="#EC4899"/><text x="855" y="60" font-family="monospace" font-size="10" fill="#9CA3AF">Workflow</text>
+<text x="1600" y="60" font-family="monospace" font-size="10" fill="#52525B" text-anchor="end">2026 · ObserveID</text>
+</g>
+</svg>

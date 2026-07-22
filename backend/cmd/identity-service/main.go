@@ -150,7 +150,7 @@ func main() {
 	w.RegisterWorkflow(workflow.CascadeRevokeWorkflow)
 	w.RegisterWorkflow(workflow.RevokeAccessChildWorkflow)
 
-	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient)
+	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient, svc.CedarEngine())
 	w.RegisterActivity(act)
 
 	if err := w.Start(); err != nil {
@@ -158,6 +158,10 @@ func main() {
 	}
 	defer w.Stop()
 	log.Info().Msg("Temporal worker started")
+
+	// ─── Start Cedar Hot Reload (30s interval) ──────────
+	svc.CedarEngine().StartHotReload(context.Background(), 30*time.Second)
+	log.Info().Msg("Cedar hot reload started (30s interval)")
 
 	// ─── Initialize Security Middleware ────────────────────
 	rateLimiter := middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200
@@ -194,7 +198,7 @@ func main() {
 		// Next.js static export creates flat .html files (dashboard.html, identities.html, etc.)
 		// Map each frontend route to its .html file
 		frontendPages := []string{"dashboard", "identities", "agents", "connectors", "groups",
-			"access", "policies", "audit", "certifications", "sod", "vault", "settings"}
+			"access", "policies", "audit", "certifications", "sod", "vault", "settings", "idp"}
 		for _, page := range frontendPages {
 			p := page // capture
 			r.HandleFunc("/"+p, func(w http.ResponseWriter, r *http.Request) {
@@ -653,6 +657,59 @@ func main() {
 	api.HandleFunc("/identities/csv/preview", svc.PreviewCSVImport).Methods("POST")
 	api.HandleFunc("/identities/csv/import", svc.ImportCSV).Methods("POST")
 	api.HandleFunc("/identities/csv/export", svc.ExportCSV).Methods("GET")
+
+	// ─── OIDC / OAuth 2.0 Identity Provider ──────────
+	oidcProvider := svc.OIDCProvider()
+	if oidcProvider != nil {
+		r.HandleFunc("/.well-known/openid-configuration", oidcProvider.DiscoveryHandler).Methods("GET")
+		r.HandleFunc("/.well-known/jwks.json", oidcProvider.JWKSHandler).Methods("GET")
+		r.HandleFunc("/authorize", oidcProvider.AuthorizationHandler).Methods("GET", "POST")
+		r.HandleFunc("/token", oidcProvider.TokenHandler).Methods("POST")
+		r.HandleFunc("/userinfo", oidcProvider.UserInfoHandler).Methods("GET")
+		r.HandleFunc("/introspect", oidcProvider.IntrospectionHandler).Methods("POST")
+		r.HandleFunc("/revoke", oidcProvider.RevocationHandler).Methods("POST")
+		r.HandleFunc("/device_authorization", oidcProvider.DeviceAuthorizationHandler).Methods("POST")
+		r.HandleFunc("/device", oidcProvider.DeviceVerificationHandler).Methods("GET", "POST")
+		// Client management (admin)
+		api.HandleFunc("/oidc/clients", func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case "GET":
+				clients, err := oidcProvider.ListClients(r.Context())
+				if err != nil {
+					http.Error(w, err.Error(), 500); return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]any{"clients": clients})
+			case "POST":
+				var req struct {
+					Name         string   `json:"name"`
+					RedirectURIs []string `json:"redirect_uris"`
+					GrantTypes   []string `json:"grant_types"`
+					IsPublic     bool     `json:"is_public"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+					http.Error(w, err.Error(), 400); return
+				}
+				client, err := oidcProvider.RegisterClient(r.Context(), req.Name, req.RedirectURIs, req.GrantTypes, []string{"openid","profile","email"}, req.IsPublic)
+				if err != nil {
+					http.Error(w, err.Error(), 500); return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				json.NewEncoder(w).Encode(client)
+			}
+		}).Methods("GET", "POST")
+		api.HandleFunc("/oidc/clients/{client_id}", func(w http.ResponseWriter, r *http.Request) {
+			vars := mux.Vars(r)
+			if r.Method == "DELETE" {
+				if err := oidcProvider.DeleteClient(r.Context(), vars["client_id"]); err != nil {
+					http.Error(w, err.Error(), 500); return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(`{"status":"deleted"}`))
+			}
+		}).Methods("DELETE")
+	}
 
 	// ─── Audit / Access Logs ──────────────────────
 	api.HandleFunc("/audit/logs", svc.ListAuditLogs).Methods("GET")

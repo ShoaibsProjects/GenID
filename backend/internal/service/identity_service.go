@@ -22,7 +22,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/observeid/identity-platform/internal/audit"
+	"github.com/observeid/identity-platform/internal/cedar"
 	"github.com/observeid/identity-platform/internal/connector"
+	"github.com/observeid/identity-platform/internal/oidc"
 	"github.com/observeid/identity-platform/internal/vault"
 	"github.com/observeid/identity-platform/internal/workflow"
 	"github.com/observeid/identity-platform/pkg/telemetry"
@@ -39,6 +41,8 @@ type IdentityService struct {
 	provisionEng *connector.ProvisioningEngine
 	vault        *vault.Vault
 	auditLog     *audit.Store
+	oidcProvider *oidc.Provider
+	cedarEngine  *cedar.CedarEngine
 }
 
 func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *IdentityService {
@@ -53,6 +57,16 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 		vlt, _ = vault.NewVault("default-insecure-key-do-not-use-in-production-32chars-min", "")
 	}
 	alog := audit.NewStore(10000)
+	oidcProv, err := oidc.NewProvider(pgPool, "http://localhost:8080")
+	if err != nil {
+		log.Printf("[IDENTITY] OIDC provider initialization failed: %v", err)
+	}
+	cedarEng := cedar.NewCedarEngine(pgPool)
+	if err := cedarEng.LoadPolicies(context.Background(), ""); err != nil {
+		log.Printf("[CEDAR] Initial policy load failed: %v", err)
+	} else {
+		log.Printf("[CEDAR] Loaded %d policies", cedarEng.PolicyCount(""))
+	}
 	return &IdentityService{
 		pgPool:       pgPool,
 		neo4j:        neo4j,
@@ -62,6 +76,8 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 		provisionEng: connector.NewProvisioningEngine(connMgr),
 		vault:        vlt,
 		auditLog:     alog,
+		oidcProvider: oidcProv,
+		cedarEngine:  cedarEng,
 	}
 }
 
@@ -69,9 +85,11 @@ func (s *IdentityService) AuditStore() *audit.Store { return s.auditLog }
 func (s *IdentityService) SaveVault() error         { return s.vault.Save() }
 func (s *IdentityService) ConnectorManager() *connector.Manager { return s.connMgr }
 func (s *IdentityService) Pool() *pgxpool.Pool                 { return s.pgPool }
-func (s *IdentityService) Neo4j() neo4j.DriverWithContext      { return s.neo4j }
-func (s *IdentityService) Redis() *redis.Client                { return s.redis }
+func (s *IdentityService) Neo4j() neo4j.DriverWithContext     { return s.neo4j }
+func (s *IdentityService) Redis() *redis.Client               { return s.redis }
+func (s *IdentityService) CedarEngine() *cedar.CedarEngine    { return s.cedarEngine }
 func (s *IdentityService) Vault() *vault.Vault                { return s.vault }
+func (s *IdentityService) OIDCProvider() *oidc.Provider       { return s.oidcProvider }
 func (s *IdentityService) LoadConnectors(ctx context.Context) error {
 	configs, err := s.connMgr.LoadAll(ctx)
 	if err != nil {
@@ -1106,7 +1124,6 @@ func (s *IdentityService) CheckAccess(w http.ResponseWriter, r *http.Request) {
 
 	var identityStatus string
 	hasPath := false
-	accessTypes := []string{}
 
 	if result.Next(r.Context()) {
 		rec := result.Record()
@@ -1115,11 +1132,6 @@ func (s *IdentityService) CheckAccess(w http.ResponseWriter, r *http.Request) {
 		}
 		if path, _ := rec.Get("hasPath"); path != nil {
 			hasPath, _ = path.(bool)
-		}
-		if types, _ := rec.Get("accessTypes"); types != nil {
-			if typeList, ok := types.([]string); ok {
-				accessTypes = typeList
-			}
 		}
 	}
 
@@ -1145,18 +1157,42 @@ func (s *IdentityService) CheckAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check Cedar policies from PostgreSQL
-	decision, err := evaluateCedarPolicy(r.Context(), s.pgPool, req.IdentityID, req.Action, req.ResourceID, req.TenantID, accessTypes)
-	if err != nil {
-		logError("policy", fmt.Errorf("cedar evaluation: %w", err))
-		// Fall through to default deny on policy eval failure
+	// Check Cedar policies via real Cedar engine
+	var identityType, identityDept string
+	var isActive bool
+	_ = s.pgPool.QueryRow(r.Context(),
+		`SELECT COALESCE(type::text, 'User'), COALESCE(department, ''),
+		        (status = 'active')
+		 FROM identities WHERE id = $1`, req.IdentityID,
+	).Scan(&identityType, &identityDept, &isActive)
+
+	var resourceType, resourceClass string
+	_ = s.pgPool.QueryRow(r.Context(),
+		`SELECT COALESCE(resource_type, 'Resource'), COALESCE(criticality, '')
+		 FROM resources WHERE id = $1`, req.ResourceID,
+	).Scan(&resourceType, &resourceClass)
+
+	cedarDecision, cedarErr := s.cedarEngine.IsAuthorized(r.Context(), cedar.AuthRequest{
+		PrincipalID:      req.IdentityID,
+		PrincipalType:    identityType,
+		Action:           req.Action,
+		ResourceID:       req.ResourceID,
+		ResourceType:     resourceType,
+		TenantID:         req.TenantID,
+		Department:       identityDept,
+		IsActive:         isActive,
+		Criticality:      resourceClass,
+		MFAPresent:       true,
+	})
+	if cedarErr != nil {
+		logError("cedar", fmt.Errorf("cedar evaluation: %w", cedarErr))
 	}
 
 	var allowed bool
 	var reason string
-	if decision != "" {
-		allowed = (decision == "permit")
-		reason = fmt.Sprintf("cedar_%s", decision)
+	if cedarErr == nil && cedarDecision.Decision != "not_applicable" {
+		allowed = cedarDecision.Allowed
+		reason = fmt.Sprintf("cedar_%s", cedarDecision.Decision)
 	} else {
 		allowed = hasPath
 		reason = "default_allow_by_path"
@@ -4020,155 +4056,6 @@ func getRecordVal(record *neo4j.Record, key string) string {
 
 func logError(component string, err error) {
 	fmt.Printf("[ERROR] %s: %v\n", component, err)
-}
-
-func evaluateCedarPolicy(ctx context.Context, pool *pgxpool.Pool, identityID, action, resourceID, tenantID string, accessTypes []string) (string, error) {
-	if tenantID == "" {
-		tenantID = "00000000-0000-0000-0000-000000000001"
-	}
-
-	// Get identity type for policy matching
-	var identityType, identityDept string
-	_ = pool.QueryRow(ctx,
-		`SELECT COALESCE(type::text, 'human'), COALESCE(department, '') FROM identities WHERE id = $1`,
-		identityID,
-	).Scan(&identityType, &identityDept)
-
-	// Get resource type/classification for policy matching
-	var resourceType, resourceClass string
-	pool.QueryRow(ctx,
-		`SELECT COALESCE(r.resource_type, ''), COALESCE(r.criticality, '') FROM resources r WHERE r.id = $1`,
-		resourceID,
-	).Scan(&resourceType, &resourceClass)
-
-	// Also check Neo4j Resource node as fallback if PG resources table is empty
-	if resourceType == "" {
-		resourceType = resourceID // use raw resource ID for pattern matching
-	}
-
-	// Build the match set: identity can match by type, department, or wildcard
-	identityValues := []string{identityType, identityDept}
-	// Build the resource match set: resource ID, resource type, classification
-	resourceValues := []string{resourceID, resourceType, resourceClass}
-
-	rows, err := pool.Query(ctx, `
-		SELECT policy_id, effect, policy_source, version FROM cedar_policies
-		WHERE tenant_id = $1 AND is_active = true
-		ORDER BY version DESC
-	`, tenantID)
-	if err != nil {
-		return "", fmt.Errorf("cedar query: %w", err)
-	}
-	defer rows.Close()
-
-	var permitMatch bool
-	for rows.Next() {
-		var policyID, effect, policySource string
-		var version int
-		if err := rows.Scan(&policyID, &effect, &policySource, &version); err != nil {
-			continue
-		}
-
-		if !matchPolicyConditions(policySource, identityValues, action, resourceValues, accessTypes) {
-			continue
-		}
-
-		// Forbid wins immediately — highest priority
-		if effect == "forbid" {
-			return "forbid", nil
-		}
-
-		// At least one permit policy matched
-		if effect == "permit" {
-			permitMatch = true
-		}
-	}
-
-	if permitMatch {
-		return "permit", nil
-	}
-	return "", nil
-}
-
-// matchPolicyConditions evaluates whether a policy_source pattern matches the
-// given request context. Policy source format:
-//
-//	"permit(identity_pattern, action_pattern, resource_pattern)"
-//	"forbid(Engineering, *, res-hr-db)"
-//
-// Patterns can be literal values or "*" (wildcard).
-// identityValues: [identityType, department, ...] — any value can match
-// resourceValues: [resourceID, resourceType, classification] — any value can match
-func matchPolicyConditions(policySource string, identityValues []string, action string, resourceValues []string, accessTypes []string) bool {
-	// Extract the parenthesized pattern: "effect(p1, p2, p3)"
-	open := strings.Index(policySource, "(")
-	close := strings.LastIndex(policySource, ")")
-	if open == -1 || close == -1 || open >= close {
-		return false
-	}
-
-	raw := policySource[open+1 : close]
-	fields := splitPolicyFields(raw)
-	if len(fields) < 3 {
-		return false
-	}
-
-	idPattern := strings.TrimSpace(fields[0])
-	actPattern := strings.TrimSpace(fields[1])
-	resPattern := strings.TrimSpace(fields[2])
-
-	// Match identity across all identity candidate values
-	idMatch := idPattern == "*" || idPattern == ""
-	if !idMatch {
-		for _, v := range identityValues {
-			if v != "" && strings.EqualFold(idPattern, strings.TrimSpace(v)) {
-				idMatch = true
-				break
-			}
-		}
-	}
-	if !idMatch {
-		return false
-	}
-
-	// Match action: literal or wildcard
-	if actPattern != "*" && actPattern != "" && !strings.EqualFold(actPattern, strings.TrimSpace(action)) {
-		return false
-	}
-
-	// Match resource across all resource candidate values
-	resMatch := resPattern == "*" || resPattern == ""
-	if !resMatch {
-		for _, v := range resourceValues {
-			if v != "" && strings.EqualFold(resPattern, strings.TrimSpace(v)) {
-				resMatch = true
-				break
-			}
-		}
-	}
-	if !resMatch {
-		return false
-	}
-
-	return true
-}
-
-// splitPolicyFields splits a comma-separated policy pattern string into fields,
-// handling quoted strings and whitespace.
-func splitPolicyFields(s string) []string {
-	var fields []string
-	current := strings.Builder{}
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		if ch == ',' {
-			fields = append(fields, current.String())
-			current.Reset()
-			continue
-		}
-		current.WriteByte(ch)
-	}
-	fields = append(fields, current.String())
-	return fields
 }
 
 func mustJSON(v any) json.RawMessage {

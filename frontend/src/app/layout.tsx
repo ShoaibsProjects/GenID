@@ -38,6 +38,7 @@ const NAV = [
     group: "System",
     items: [
       { href: "/vault",         label: "Vault",         icon: "◬" },
+      { href: "/idp",           label: "IDP / OIDC",    icon: "⊛" },
       { href: "/settings",      label: "Settings",      icon: "⚙" },
     ]
   },

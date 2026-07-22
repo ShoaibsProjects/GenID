@@ -577,3 +577,90 @@ INSERT INTO identity_roles (tenant_id, identity_id, role_id, assigned_by, source
      '00000000-0000-0000-0000-000000000002',
      '00000000-0000-0000-0000-000000000010',
      '00000000-0000-0000-0000-000000000002', 'direct');
+
+-- ─── OIDC / OAuth2 Clients ────────────────────────────────────
+CREATE TABLE oidc_clients (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id       UUID NOT NULL REFERENCES tenants(id),
+    name            VARCHAR(255) NOT NULL,
+    client_id       VARCHAR(255) UNIQUE NOT NULL,
+    client_secret   VARCHAR(255) NOT NULL,
+    redirect_uris   TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    grant_types     TEXT[] NOT NULL DEFAULT ARRAY['authorization_code', 'refresh_token']::TEXT[],
+    scopes          TEXT[] NOT NULL DEFAULT ARRAY['openid', 'profile', 'email']::TEXT[],
+    is_public       BOOLEAN NOT NULL DEFAULT FALSE,
+    response_types  TEXT[] NOT NULL DEFAULT ARRAY['code']::TEXT[],
+    token_endpoint_auth_method VARCHAR(50) NOT NULL DEFAULT 'client_secret_basic',
+    jwks_uri        VARCHAR(500),
+    sector_identifier_uri    VARCHAR(500),
+    request_uris    TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    contacts        TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    logo_uri        VARCHAR(500),
+    policy_uri      VARCHAR(500),
+    tos_uri         VARCHAR(500),
+    backchannel_logout_uri   VARCHAR(500),
+    backchannel_logout_session_required BOOLEAN NOT NULL DEFAULT FALSE,
+    frontchannel_logout_uri  VARCHAR(500),
+    frontchannel_logout_session_required BOOLEAN NOT NULL DEFAULT FALSE,
+    attributes      JSONB NOT NULL DEFAULT '{}',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_oidc_clients_tenant ON oidc_clients(tenant_id);
+CREATE INDEX idx_oidc_clients_client_id ON oidc_clients(client_id);
+
+-- ─── OIDC Authorization Codes (for persistence across restarts) ──────────
+CREATE TABLE oidc_auth_codes (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code            VARCHAR(255) UNIQUE NOT NULL,
+    client_id       VARCHAR(255) NOT NULL REFERENCES oidc_clients(client_id),
+    user_id         UUID NOT NULL REFERENCES identities(id),
+    redirect_uri    VARCHAR(500) NOT NULL,
+    scope           TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    code_challenge  VARCHAR(255),
+    code_challenge_method VARCHAR(20) DEFAULT 'S256',
+    nonce           VARCHAR(255),
+    expires_at      TIMESTAMPTZ NOT NULL,
+    consumed_at     TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_oidc_auth_codes_code ON oidc_auth_codes(code);
+CREATE INDEX idx_oidc_auth_codes_client ON oidc_auth_codes(client_id);
+CREATE INDEX idx_oidc_auth_codes_expires ON oidc_auth_codes(expires_at);
+
+-- ─── OIDC Refresh Tokens ─────────────────────────────────────────────────
+CREATE TABLE oidc_refresh_tokens (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    token_hash      VARCHAR(255) UNIQUE NOT NULL,
+    client_id       VARCHAR(255) NOT NULL REFERENCES oidc_clients(client_id),
+    user_id         UUID NOT NULL REFERENCES identities(id),
+    scope           TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    expires_at      TIMESTAMPTZ NOT NULL,
+    revoked_at      TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at    TIMESTAMPTZ
+);
+
+CREATE INDEX idx_oidc_refresh_tokens_hash ON oidc_refresh_tokens(token_hash);
+CREATE INDEX idx_oidc_refresh_tokens_client ON oidc_refresh_tokens(client_id);
+CREATE INDEX idx_oidc_refresh_tokens_user ON oidc_refresh_tokens(user_id);
+CREATE INDEX idx_oidc_refresh_tokens_expires ON oidc_refresh_tokens(expires_at);
+
+-- ─── OIDC Device Authorization (RFC 8628) ────────────────────────────────
+CREATE TABLE oidc_device_codes (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    device_code     VARCHAR(255) UNIQUE NOT NULL,
+    user_code       VARCHAR(20) UNIQUE NOT NULL,
+    client_id       VARCHAR(255) NOT NULL REFERENCES oidc_clients(client_id),
+    scope           TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    expires_at      TIMESTAMPTZ NOT NULL,
+    authorized_at   TIMESTAMPTZ,
+    user_id         UUID REFERENCES identities(id),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_oidc_device_codes_device ON oidc_device_codes(device_code);
+CREATE INDEX idx_oidc_device_codes_user_code ON oidc_device_codes(user_code);
+CREATE INDEX idx_oidc_device_codes_expires ON oidc_device_codes(expires_at);
