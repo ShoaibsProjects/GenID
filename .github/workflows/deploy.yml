@@ -108,19 +108,11 @@ jobs:
     name: Deploy Backend (Fly.io)
     runs-on: ubuntu-latest
     needs: [test-backend, test-frontend]
+    if: ${{ secrets.FLY_API_TOKEN != '' }}
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Require FLY_API_TOKEN
-        run: |
-          if [ -z "$FLY_API_TOKEN" ]; then
-            echo "ERROR: FLY_API_TOKEN is not set."
-            echo "Add it to repository secrets at Settings → Secrets and variables → Actions."
-            echo "Generate a token with: fly auth token"
-            exit 1
-          fi
 
       - uses: superfly/flyctl-actions/setup-flyctl@v1
 
@@ -131,7 +123,8 @@ jobs:
   deploy-frontend:
     name: Deploy Frontend (Cloudflare Pages)
     runs-on: ubuntu-latest
-    needs: [deploy-backend]
+    needs: [test-frontend]
+    if: ${{ always() && needs.test-frontend.result == 'success' }}
     permissions:
       contents: read
       deployments: write
