@@ -664,3 +664,31 @@ CREATE TABLE oidc_device_codes (
 CREATE INDEX idx_oidc_device_codes_device ON oidc_device_codes(device_code);
 CREATE INDEX idx_oidc_device_codes_user_code ON oidc_device_codes(user_code);
 CREATE INDEX idx_oidc_device_codes_expires ON oidc_device_codes(expires_at);
+
+-- ─── Outbox Events (Event Sourcing / PG→Neo4j Sync) ──────────────────────
+-- Ensures consistency between PostgreSQL and Neo4j via transactional outbox pattern.
+-- Events are inserted atomically with the main operation, then processed asynchronously.
+
+CREATE TABLE outbox_events (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_type      VARCHAR(50) NOT NULL,           -- e.g., 'identity.created', 'role.assigned'
+    aggregate_type  VARCHAR(50) NOT NULL,           -- e.g., 'identity', 'role', 'entitlement'
+    aggregate_id    VARCHAR(255) NOT NULL,          -- ID of the entity being modified
+    payload         JSONB NOT NULL,                 -- Full event data
+    metadata        JSONB,                          -- Optional: user_id, ip, correlation_id
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    processed       BOOLEAN NOT NULL DEFAULT FALSE,
+    processed_at    TIMESTAMPTZ,
+    retry_count     INTEGER NOT NULL DEFAULT 0,
+    error_message   TEXT,
+    expires_at      TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '7 days'
+);
+
+-- Indexes for efficient polling
+CREATE INDEX idx_outbox_unprocessed ON outbox_events (processed, created_at)
+    WHERE processed = FALSE;
+CREATE INDEX idx_outbox_aggregate ON outbox_events (aggregate_type, aggregate_id);
+CREATE INDEX idx_outbox_retry ON outbox_events (processed, retry_count, created_at)
+    WHERE processed = FALSE AND retry_count > 0;
+CREATE INDEX idx_outbox_expires ON outbox_events (expires_at)
+    WHERE processed = FALSE;

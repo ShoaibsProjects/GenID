@@ -35,6 +35,7 @@ import (
 	"github.com/observeid/identity-platform/internal/audit"
 	"github.com/observeid/identity-platform/internal/graphql"
 	"github.com/observeid/identity-platform/internal/middleware"
+	"github.com/observeid/identity-platform/internal/outbox"
 	"github.com/observeid/identity-platform/internal/service"
 	"github.com/observeid/identity-platform/internal/workflow"
 	"github.com/observeid/identity-platform/pkg/telemetry"
@@ -162,6 +163,12 @@ func main() {
 	// ─── Start Cedar Hot Reload (30s interval) ──────────
 	svc.CedarEngine().StartHotReload(context.Background(), 30*time.Second)
 	log.Info().Msg("Cedar hot reload started (30s interval)")
+
+	// ─── Start Outbox Processor (PG→Neo4j sync) ─────────
+	outboxProc := outbox.NewProcessor(svc.Outbox(), neo4jDriver, outbox.DefaultConfig())
+	go outboxProc.Start(context.Background())
+	log.Info().Msg("Outbox processor started (500ms poll, batch 100)")
+	defer outboxProc.Stop()
 
 	// ─── Initialize Security Middleware ────────────────────
 	rateLimiter := middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200

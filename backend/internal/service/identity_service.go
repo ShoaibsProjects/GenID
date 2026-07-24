@@ -25,6 +25,7 @@ import (
 	"github.com/observeid/identity-platform/internal/cedar"
 	"github.com/observeid/identity-platform/internal/connector"
 	"github.com/observeid/identity-platform/internal/oidc"
+	"github.com/observeid/identity-platform/internal/outbox"
 	"github.com/observeid/identity-platform/internal/vault"
 	"github.com/observeid/identity-platform/internal/workflow"
 	"github.com/observeid/identity-platform/pkg/telemetry"
@@ -43,6 +44,7 @@ type IdentityService struct {
 	auditLog     *audit.Store
 	oidcProvider *oidc.Provider
 	cedarEngine  *cedar.CedarEngine
+	outbox       *outbox.Outbox
 }
 
 func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client) *IdentityService {
@@ -67,6 +69,7 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 	} else {
 		log.Printf("[CEDAR] Loaded %d policies", cedarEng.PolicyCount(""))
 	}
+	outboxEng := outbox.NewOutbox(pgPool)
 	return &IdentityService{
 		pgPool:       pgPool,
 		neo4j:        neo4j,
@@ -78,6 +81,7 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 		auditLog:     alog,
 		oidcProvider: oidcProv,
 		cedarEngine:  cedarEng,
+		outbox:       outboxEng,
 	}
 }
 
@@ -88,6 +92,7 @@ func (s *IdentityService) Pool() *pgxpool.Pool                 { return s.pgPool
 func (s *IdentityService) Neo4j() neo4j.DriverWithContext     { return s.neo4j }
 func (s *IdentityService) Redis() *redis.Client               { return s.redis }
 func (s *IdentityService) CedarEngine() *cedar.CedarEngine    { return s.cedarEngine }
+func (s *IdentityService) Outbox() *outbox.Outbox             { return s.outbox }
 func (s *IdentityService) Vault() *vault.Vault                { return s.vault }
 func (s *IdentityService) OIDCProvider() *oidc.Provider       { return s.oidcProvider }
 func (s *IdentityService) LoadConnectors(ctx context.Context) error {
@@ -266,7 +271,15 @@ func (s *IdentityService) ScimCreateUser(w http.ResponseWriter, r *http.Request)
 		attrs["last_name"] = lastName
 	}
 
-	_, err := s.pgPool.Exec(r.Context(), `
+	// Begin transaction — PostgreSQL + outbox are atomic
+	tx, err := s.pgPool.Begin(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Transaction failed")
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	_, err = tx.Exec(r.Context(), `
 		INSERT INTO identities (id, tenant_id, email, display_name, status, source, attributes)
 		VALUES ($1, $2, $3, $4, $5, 'scim', $6)
 		ON CONFLICT (tenant_id, email) DO UPDATE SET
@@ -277,19 +290,31 @@ func (s *IdentityService) ScimCreateUser(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Create in Neo4j
-	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(r.Context())
-	session.Run(r.Context(), `
-		MERGE (i:Identity {uuid: $uuid})
-		SET i.tenant_id = $tenant, i.email = $email, i.display_name = $name,
-		    i.status = $status, i.type = 'human', i.source = 'scim',
-		    i.created_at = datetime()
-	`, map[string]any{
-		"uuid": id, "tenant": "00000000-0000-0000-0000-000000000001",
-		"email": userName, "name": displayName, "status": status,
-	})
+	// Publish outbox event (same transaction — atomic with PG insert)
+	err = s.outbox.Publish(r.Context(), tx, "identity.created", "identity", id,
+		map[string]any{
+			"tenant_id":    "00000000-0000-0000-0000-000000000001",
+			"email":        userName,
+			"display_name": displayName,
+			"status":       status,
+			"type":         "human",
+			"source":       "scim",
+		},
+		map[string]any{
+			"method": "scim",
+		})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Outbox failed: "+err.Error())
+		return
+	}
 
+	// Commit both operations atomically
+	if err := tx.Commit(r.Context()); err != nil {
+		respondError(w, http.StatusInternalServerError, "Commit failed")
+		return
+	}
+
+	// Neo4j sync happens asynchronously via outbox processor
 	respondJSON(w, http.StatusCreated, map[string]any{
 		"schemas":    []string{"urn:ietf:params:scim:schemas:core:2.0:User"},
 		"id":         id,
@@ -352,9 +377,13 @@ func (s *IdentityService) ScimUpdateUser(w http.ResponseWriter, r *http.Request)
 	args := []any{id}
 	idx := 2
 
+	payloadFields := map[string]any{}
+
 	if v, ok := scimUser["displayName"].(string); ok && v != "" {
 		sets = append(sets, fmt.Sprintf("display_name = $%d", idx))
-		args = append(args, v); idx++
+		args = append(args, v)
+		idx++
+		payloadFields["display_name"] = v
 	}
 	if v, ok := scimUser["active"].(bool); ok {
 		st := "active"
@@ -362,30 +391,43 @@ func (s *IdentityService) ScimUpdateUser(w http.ResponseWriter, r *http.Request)
 			st = "inactive"
 		}
 		sets = append(sets, fmt.Sprintf("status = $%d", idx))
-		args = append(args, st); idx++
+		args = append(args, st)
+		idx++
+		payloadFields["status"] = st
 	}
 
 	if len(sets) > 0 {
-		s.pgPool.Exec(r.Context(), fmt.Sprintf("UPDATE identities SET %s, updated_at = NOW() WHERE id = $1", strings.Join(sets, ", ")), args...)
-	}
+		// Begin transaction — PG update + outbox are atomic
+		tx, err := s.pgPool.Begin(r.Context())
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "Transaction failed")
+			return
+		}
+		defer tx.Rollback(r.Context())
 
-	// Update in Neo4j
-	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(r.Context())
-	cypher := "MATCH (i:Identity {uuid: $uuid}) SET i.updated_at = datetime()"
-	params := map[string]any{"uuid": id}
-	for _, s := range sets {
-		switch {
-		case strings.Contains(s, "display_name"):
-			cypher += ", i.display_name = $name"
-			params["name"] = args[strings.Index(s, "display_name")]
-		case strings.Contains(s, "status"):
-			cypher += ", i.status = $status"
-			params["status"] = args[strings.Index(s, "status")]
+		_, err = tx.Exec(r.Context(), fmt.Sprintf("UPDATE identities SET %s, updated_at = NOW() WHERE id = $1", strings.Join(sets, ", ")), args...)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "Update failed: "+err.Error())
+			return
+		}
+
+		// Publish outbox event (same transaction)
+		payloadFields["id"] = id
+		err = s.outbox.Publish(r.Context(), tx, "identity.updated", "identity", id,
+			payloadFields,
+			map[string]any{"method": "scim"})
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, "Outbox failed: "+err.Error())
+			return
+		}
+
+		if err := tx.Commit(r.Context()); err != nil {
+			respondError(w, http.StatusInternalServerError, "Commit failed")
+			return
 		}
 	}
-	session.Run(r.Context(), cypher, params)
 
+	// Neo4j sync happens asynchronously via outbox processor
 	respondJSON(w, http.StatusOK, map[string]any{
 		"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:User"},
 		"id":      id,
