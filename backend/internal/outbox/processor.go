@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/observeid/identity-platform/pkg/telemetry"
 )
 
 // ProcessorConfig holds configuration for the outbox processor.
@@ -76,6 +77,8 @@ func (p *Processor) Stop() {
 
 // processBatch fetches and processes a batch of unprocessed events.
 func (p *Processor) processBatch(ctx context.Context) {
+	startTime := time.Now()
+	
 	events, err := p.outbox.GetUnprocessed(ctx, p.config.BatchSize)
 	if err != nil {
 		log.Printf("[OUTBOX] fetch error: %v", err)
@@ -88,10 +91,17 @@ func (p *Processor) processBatch(ctx context.Context) {
 
 	log.Printf("[OUTBOX] processing %d events", len(events))
 
+	successCount := 0
+	failCount := 0
+
 	for _, event := range events {
+		eventStart := time.Now()
+		
 		// Skip events that have exceeded max retries
 		if event.RetryCount >= p.config.MaxRetries {
 			log.Printf("[OUTBOX] event %s exceeded max retries (%d), dead-lettering", event.ID, event.RetryCount)
+			failCount++
+			telemetry.OutboxEventsFailed.Inc()
 			continue
 		}
 
@@ -99,10 +109,24 @@ func (p *Processor) processBatch(ctx context.Context) {
 			log.Printf("[OUTBOX] event %s failed (retry %d/%d): %v",
 				event.ID, event.RetryCount+1, p.config.MaxRetries, err)
 			p.outbox.MarkFailed(ctx, event.ID, err.Error())
+			failCount++
+			telemetry.OutboxEventsFailed.Inc()
 		} else {
 			p.outbox.MarkProcessed(ctx, event.ID)
+			successCount++
+			telemetry.OutboxEventsProcessed.Inc()
+			telemetry.OutboxProcessingLatency.
+				WithLabelValues(event.EventType).
+				Observe(float64(time.Since(eventStart).Milliseconds()))
 		}
 	}
+
+	// Update queue size metric
+	stats, _ := p.outbox.Stats(ctx)
+	telemetry.OutboxQueueSize.Set(float64(stats["pending"]))
+
+	log.Printf("[OUTBOX] batch complete: %d success, %d failed in %v",
+		successCount, failCount, time.Since(startTime))
 }
 
 // applyToNeo4j applies an event to Neo4j based on its event type.

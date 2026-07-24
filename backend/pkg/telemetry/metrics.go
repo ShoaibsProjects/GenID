@@ -132,6 +132,36 @@ var (
 		},
 		[]string{"principal_type", "action", "resource_type"},
 	)
+
+	OutboxQueueSize = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "observeid_outbox_queue_size",
+			Help: "Current number of pending outbox events",
+		},
+	)
+
+	OutboxEventsProcessed = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "observeid_outbox_events_processed_total",
+			Help: "Total outbox events processed successfully",
+		},
+	)
+
+	OutboxEventsFailed = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "observeid_outbox_events_failed_total",
+			Help: "Total outbox events that failed processing",
+		},
+	)
+
+	OutboxProcessingLatency = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "observeid_outbox_processing_latency_ms",
+			Help:    "Outbox event processing latency in milliseconds",
+			Buckets: []float64{1, 5, 10, 25, 50, 100, 250, 500, 1000},
+		},
+		[]string{"event_type"},
+	)
 )
 
 // ─── Initialization ───────────────────────────────────────
@@ -151,6 +181,10 @@ func init() {
 	prometheus.MustRegister(DLQSize)
 	prometheus.MustRegister(CedarEvaluationLatency)
 	prometheus.MustRegister(CedarDenyRate)
+	prometheus.MustRegister(OutboxQueueSize)
+	prometheus.MustRegister(OutboxEventsProcessed)
+	prometheus.MustRegister(OutboxEventsFailed)
+	prometheus.MustRegister(OutboxProcessingLatency)
 }
 
 func MetricsHandler() http.Handler {
