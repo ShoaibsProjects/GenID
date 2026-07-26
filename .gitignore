@@ -38,7 +38,7 @@
 *~
 
 # OS
-.DS_Store
+**/.DS_Store
 Thumbs.db
 
 # Docker
@@ -75,3 +75,9 @@ media/*.png
 # Temp
 **/tmp
 **/temp
+
+# Graphify tool output
+**/graphify-out/
+
+# OpenCode config (personal)
+**/.opencode/

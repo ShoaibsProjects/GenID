@@ -7,7 +7,7 @@
 
 ##  Architecture Overview
 
-![Architecture Diagram](media/architecture.svg)
+![Architecture Diagram](../media/architecture.svg)
 
 **Deployment flow:** Cloudflare Pages (Frontend) → HTTPS → Cloudflare Tunnel → `localhost:8080` → Go Backend (HTTP Router, Temporal Workflows, Connector Framework, Vault) → PostgreSQL 16, Neo4j 5, Redis 7, Kafka 7.6, Temporal 1.25, Qdrant 1.10, Grafana 11.1, OpenTelemetry Collector.
 
