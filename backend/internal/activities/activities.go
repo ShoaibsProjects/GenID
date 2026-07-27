@@ -1,6 +1,7 @@
 package activities
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -9,11 +10,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
+	"net/http"
+	"os"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -89,6 +94,7 @@ type RevocationParams struct {
 type ProvisionParams struct {
 	IdentityID      string `json:"identity_id"`
 	ResourceID      string `json:"resource_id"`
+	Action          string `json:"action"`
 	RoleID          string `json:"role_id"`
 	ConnectorID     string `json:"connector_id"`
 	DurationMinutes int    `json:"duration_minutes"`
@@ -577,6 +583,28 @@ func (s *ActivityService) ProvisionTemporaryAccess(ctx context.Context, params P
 		return fmt.Errorf("temp provision: neo4j relationship: %w", err)
 	}
 
+	// Mint a short-lived JWT (5-minute TTL) with scoped claims
+	jti := uuid.New().String()
+	claims := jwt.MapClaims{
+		"sub":         params.IdentityID,
+		"tenant_id":   params.TenantID,
+		"resource_id": params.ResourceID,
+		"action":      params.Action,
+		"jit":         true,
+		"exp":         time.Now().Add(5 * time.Minute).Unix(),
+		"iat":         time.Now().Unix(),
+		"jti":         jti,
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenStr, err := token.SignedString([]byte(os.Getenv("JWT_SIGNING_KEY")))
+	if err != nil {
+		return fmt.Errorf("temp provision: mint jwt: %w", err)
+	}
+
+	// Store JWT jti in Redis with TTL for revocation checking
+	jwtKey := fmt.Sprintf("jit:jwt:%s", jti)
+	s.redis.Set(ctx, jwtKey, tokenStr, 5*time.Minute)
+
 	activity.RecordHeartbeat(ctx, "temp_access_granted")
 	return nil
 }
@@ -733,11 +761,12 @@ func (s *ActivityService) BroadcastCAEPEvent(ctx context.Context, params CAEPEve
 	}
 
 	// Persist CAEP event to PostgreSQL
+	eventJTI := event["jti"].(string)
 	_, err = s.pgPool.Exec(ctx, `
 		INSERT INTO caep_events (id, tenant_id, event_type, event_jti, identity_id, session_id,
 		                         initiating_entity, reason_admin, reason_user, payload, delivery_status, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', NOW())`,
-		uuid.New().String(), params.TenantID, params.EventType, event["jti"].(string),
+		uuid.New().String(), params.TenantID, params.EventType, eventJTI,
 		params.IdentityID, params.SessionID, params.ReasonAdmin,
 		params.ReasonAdmin, params.ReasonUser, payload,
 	)
@@ -745,9 +774,44 @@ func (s *ActivityService) BroadcastCAEPEvent(ctx context.Context, params CAEPEve
 		return fmt.Errorf("caep persist: %w", err)
 	}
 
-	// In production: JWT-sign and POST to registered webhook receivers
-	// Implementation: sign payload with HMAC-SHA256, POST to tenant webhook URLs
-	activity.RecordHeartbeat(ctx, "caep_payload_ready", fmt.Sprintf("%d bytes", len(payload)))
+	// HTTP POST webhook delivery with HMAC-SHA256 signing
+	webhookURL := os.Getenv("CAEP_WEBHOOK_URL")
+	if webhookURL != "" {
+		hmacSecret := os.Getenv("CAEP_HMAC_SECRET")
+		if hmacSecret == "" {
+			hmacSecret = "observeid-dev-secret"
+		}
+
+		// HMAC-SHA256 sign the payload
+		mac := hmac.New(sha256.New, []byte(hmacSecret))
+		mac.Write(payload)
+		signature := hex.EncodeToString(mac.Sum(nil))
+
+		// POST to webhook
+		req, err := http.NewRequestWithContext(ctx, "POST", webhookURL, bytes.NewReader(payload))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-ObserveID-Signature", signature)
+			req.Header.Set("X-ObserveID-Event", params.EventType)
+			req.Header.Set("X-ObserveID-JTI", eventJTI)
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Printf("[CAEP] webhook delivery failed: %v", err)
+				s.pgPool.Exec(ctx, `UPDATE caep_events SET delivery_status = 'failed' WHERE event_jti = $1`, eventJTI)
+			} else {
+				resp.Body.Close()
+				status := "delivered"
+				if resp.StatusCode >= 400 {
+					status = "failed"
+				}
+				s.pgPool.Exec(ctx, `UPDATE caep_events SET delivery_status = $1 WHERE event_jti = $2`, status, eventJTI)
+				log.Printf("[CAEP] webhook delivery: status=%d, result=%s", resp.StatusCode, status)
+			}
+		}
+	} else {
+		log.Printf("[CAEP] no CAEP_WEBHOOK_URL configured, event persisted (jti=%s)", eventJTI)
+	}
 
 	activity.RecordHeartbeat(ctx, "caep_broadcasted")
 	return nil
@@ -1311,4 +1375,74 @@ func hmacVerify(message, secret string) bool {
 		return false
 	}
 	return hmac.Equal(actual, expected)
+}
+
+// ─── Access Certification Activities ───────────────────────
+
+type CertificationCampaignInput struct {
+	TenantID     string `json:"tenant_id"`
+	CampaignName string `json:"campaign_name"`
+	CampaignType string `json:"campaign_type"`
+	CreatedBy    string `json:"created_by"`
+}
+
+type CertificationCampaignResult struct {
+	CampaignID   string `json:"campaign_id"`
+	EntriesCount int    `json:"entries_count"`
+}
+
+func (s *ActivityService) CreateCertificationCampaign(ctx context.Context, input CertificationCampaignInput) (CertificationCampaignResult, error) {
+	campaignID := uuid.New().String()
+	now := time.Now()
+	endsAt := now.AddDate(0, 3, 0) // 3 months from now
+
+	_, err := s.pgPool.Exec(ctx, `
+		INSERT INTO certification_campaigns (id, tenant_id, name, campaign_type, status, starts_at, ends_at, created_by)
+		VALUES ($1, $2, $3, $4, 'active', $5, $6, $7)
+	`, campaignID, input.TenantID, input.CampaignName, input.CampaignType, now, endsAt, input.CreatedBy)
+	if err != nil {
+		return CertificationCampaignResult{}, fmt.Errorf("create campaign: %w", err)
+	}
+
+	activity.RecordHeartbeat(ctx, "campaign_created")
+	return CertificationCampaignResult{CampaignID: campaignID}, nil
+}
+
+func (s *ActivityService) PopulateCertificationEntries(ctx context.Context, campaignID string, tenantID string) error {
+	// Query users with access to critical resources
+	rows, err := s.pgPool.Query(ctx, `
+		SELECT DISTINCT i.id, i.display_name, i.email
+		FROM identities i
+		JOIN identity_roles ir ON ir.identity_id = i.id AND ir.is_active = true
+		JOIN roles r ON r.id = ir.role_id
+		WHERE i.tenant_id = $1 AND i.status = 'active'
+		AND (r.name IN ('Administrator', 'Security Reviewer') OR i.risk_score > 0.7)
+		LIMIT 100
+	`, tenantID)
+	if err != nil {
+		return fmt.Errorf("query users: %w", err)
+	}
+	defer rows.Close()
+
+	var count int
+	for rows.Next() {
+		var id, displayName, email string
+		if err := rows.Scan(&id, &displayName, &email); err != nil {
+			continue
+		}
+
+		_, err := s.pgPool.Exec(ctx, `
+			INSERT INTO certification_entries (id, campaign_id, identity_id, status)
+			VALUES ($1, $2, $3, 'pending')
+			ON CONFLICT DO NOTHING
+		`, uuid.New().String(), campaignID, id)
+		if err != nil {
+			log.Printf("[CERT] failed to create entry for %s: %v", id, err)
+			continue
+		}
+		count++
+	}
+
+	activity.RecordHeartbeat(ctx, fmt.Sprintf("populated_%d_entries", count))
+	return nil
 }

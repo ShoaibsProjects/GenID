@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
 // ─── Connector Manager (PG-persistent) ───────────────────────
@@ -724,4 +725,71 @@ func NewConnector(connType ConnectorType) (Connector, error) {
 	default:
 		return nil, fmt.Errorf("unknown connector type: %s", connType)
 	}
+}
+
+// ─── Entity Resolution (Identity Stitching) ─────────────────────
+// Before inserting a new Identity, check for existing identities with the same
+// email or employee_id but different source. If found, create a Persona node
+// in Neo4j and link both identities to it via a RESOLVES_TO relationship.
+
+func (m *Manager) ResolveIdentity(ctx context.Context, tenantID, email, employeeID, source, newIdentityID string, neo4jDriver neo4j.DriverWithContext) (bool, error) {
+	if email == "" && employeeID == "" {
+		return false, nil
+	}
+
+	// Check for existing identities with same email or employee_id but different source
+	var existingID, existingSource string
+	query := `
+		SELECT id, source::text FROM identities
+		WHERE tenant_id = $1 AND (email = $2 OR employee_id = $3) AND id != $4
+		LIMIT 1
+	`
+	args := []any{tenantID, email, employeeID, newIdentityID}
+	if email == "" {
+		query = `
+			SELECT id, source::text FROM identities
+			WHERE tenant_id = $1 AND employee_id = $2 AND id != $3
+			LIMIT 1
+		`
+		args = []any{tenantID, employeeID, newIdentityID}
+	}
+
+	err := m.pgPool.QueryRow(ctx, query, args...).Scan(&existingID, &existingSource)
+	if err != nil {
+		// No existing identity found - this is a new unique identity
+		return false, nil
+	}
+
+	// Found a match - create Persona node in Neo4j and link both identities
+	if neo4jDriver != nil {
+		session := neo4jDriver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+		defer session.Close(ctx)
+
+		personaID := uuid.New().String()
+
+		// Create or match Persona node and link both identities
+		_, err := session.Run(ctx, `
+			MERGE (p:Persona {id: $personaId})
+			ON CREATE SET p.created_at = timestamp(), p.email = $email, p.employee_id = $employeeId
+			WITH p
+			MATCH (i1:Identity {uuid: $existingId})
+			MATCH (i2:Identity {uuid: $newId})
+			MERGE (i1)-[:RESOLVES_TO]->(p)
+			MERGE (i2)-[:RESOLVES_TO]->(p)
+		`, map[string]any{
+			"personaId":  personaID,
+			"email":      email,
+			"employeeId": employeeID,
+			"existingId": existingID,
+			"newId":      newIdentityID,
+		})
+		if err != nil {
+			log.Printf("[ENTITY_RES] neo4j stitch failed: %v", err)
+		} else {
+			log.Printf("[ENTITY_RES] stitched identity %s with %s via Persona %s", newIdentityID, existingID, personaID)
+		}
+	}
+
+	// Return true to indicate this identity was stitched (caller should not create new PG row)
+	return true, nil
 }

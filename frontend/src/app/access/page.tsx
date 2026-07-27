@@ -68,14 +68,13 @@ export default function AccessPage() {
   const tabs = [
     { id: "check", label: "Check Access" },
     { id: "jit", label: "Just-In-Time Access" },
-    { id: "grant", label: "Grant / Revoke" },
   ]
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Access Control"
-        description="Check, request, grant, and revoke access across the identity fabric"
+        description="Check and request JIT access across the identity fabric"
       />
 
       <Card>
@@ -86,7 +85,6 @@ export default function AccessPage() {
 
       {tab === "check" && <CheckAccessTab />}
       {tab === "jit" && <JITAccessTab />}
-      {tab === "grant" && <GrantRevokeTab />}
     </div>
   )
 }
@@ -373,61 +371,6 @@ function JITAccessTab() {
           </CardBody>
         </Card>
       </div>
-    </div>
-  )
-}
-
-// ── Grant / Revoke Tab ──────────────────────────────────────
-
-function GrantRevokeTab() {
-  const [tab, setTab] = useState<"grant" | "revoke">("grant")
-
-  return (
-    <div className="grid grid-cols-2 gap-6">
-      <Card variant={tab === "grant" ? "accent" : "default"}>
-        <CardHeader>
-          <button
-            className="w-full text-left"
-            onClick={() => setTab("grant")}
-          >
-            <h2 className="text-sm font-semibold text-primary">Grant Access</h2>
-            <p className="text-xs text-secondary mt-0.5">Permanently grant a role or entitlement to an identity</p>
-          </button>
-        </CardHeader>
-        <CardBody>
-          <code className="block p-3 rounded bg-white/[0.02] border border-border text-xs font-mono text-secondary">
-            POST /api/v1/access/grant{"\n"}
-            {"{"}
-              "identity_id": "...",
-              "resource_id": "...",
-              "role_id": "...",
-              "reason": "..."
-            {"}"}
-          </code>
-        </CardBody>
-      </Card>
-
-      <Card variant={tab === "revoke" ? "accent" : "default"}>
-        <CardHeader>
-          <button
-            className="w-full text-left"
-            onClick={() => setTab("revoke")}
-          >
-            <h2 className="text-sm font-semibold text-primary">Revoke Access</h2>
-            <p className="text-xs text-secondary mt-0.5">Immediately revoke access and trigger cascade revocation</p>
-          </button>
-        </CardHeader>
-        <CardBody>
-          <code className="block p-3 rounded bg-white/[0.02] border border-border text-xs font-mono text-secondary">
-            POST /api/v1/access/revoke{"\n"}
-            {"{"}
-              "identity_id": "...",
-              "entitlement_id": "...",
-              "reason": "..."
-            {"}"}
-          </code>
-        </CardBody>
-      </Card>
     </div>
   )
 }

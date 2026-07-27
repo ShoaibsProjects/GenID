@@ -6,6 +6,7 @@ import { fetchAgents, Agent } from "@/lib/api"
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
+  const [killing, setKilling] = useState<string | null>(null)
 
   useEffect(() => {
     fetchAgents()
@@ -13,6 +14,19 @@ export default function AgentsPage() {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  async function handleKillSwitch(agentId: string) {
+    if (!confirm("Kill this agent? All active sessions will be revoked immediately.")) return
+    setKilling(agentId)
+    try {
+      await fetch(`/api/v1/agents/${agentId}/kill-switch`, { method: "POST" })
+      setAgents(prev => prev.map(a => a.id === agentId ? { ...a, status: "revoked" } : a))
+    } catch {
+      alert("Kill switch failed")
+    } finally {
+      setKilling(null)
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -68,7 +82,13 @@ export default function AgentsPage() {
                   </td>
                   <td className="py-3 px-4 text-right">
                     <button className="btn-ghost text-xs">View</button>
-                    <button className="btn-ghost text-xs text-rose-400 hover:text-rose-300">Kill</button>
+                    <button
+                      className="btn-ghost text-xs text-rose-400 hover:text-rose-300"
+                      onClick={() => handleKillSwitch(a.id)}
+                      disabled={killing === a.id || a.status === "revoked"}
+                    >
+                      {killing === a.id ? "Killing..." : "Kill Switch"}
+                    </button>
                   </td>
                 </tr>
               ))}

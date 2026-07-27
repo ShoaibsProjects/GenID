@@ -7,39 +7,38 @@ const NAV = [
   {
     group: "Overview",
     items: [
-      { href: "/dashboard",     label: "Dashboard",     icon: "◈" },
-      { href: "/audit",         label: "Access Logs",   icon: "⊞" },
+      { href: "/dashboard",       label: "Dashboard",       icon: "◈" },
     ]
   },
   {
     group: "Identities",
     items: [
-      { href: "/identities",    label: "People",        icon: "⊙" },
-      { href: "/agents",        label: "Machines",      icon: "◇" },
+      { href: "/identities",      label: "Identities",      icon: "⊙" },
+      { href: "/agents",          label: "AI Agents (NHI)", icon: "◇" },
     ]
   },
   {
     group: "Governance",
     items: [
-      { href: "/connectors",    label: "Directories",   icon: "◉" },
-      { href: "/groups",        label: "Roles & Groups",icon: "▣" },
-      { href: "/access",        label: "Access Control",icon: "◈" },
-      { href: "/policies",      label: "Policies",      icon: "⊡" },
+      { href: "/access",          label: "Access Control",  icon: "◈" },
+      { href: "/connectors",      label: "Connectors",      icon: "◉" },
+      { href: "/groups",          label: "Roles & Groups",  icon: "▣" },
+      { href: "/policies",        label: "Policies",        icon: "⊡" },
     ]
   },
   {
     group: "Compliance",
     items: [
-      { href: "/certifications",label: "Reviews",       icon: "◎" },
-      { href: "/sod",           label: "SoD Guard",     icon: "▲" },
+      { href: "/certifications",  label: "Certifications",  icon: "◎" },
     ]
   },
   {
     group: "System",
     items: [
-      { href: "/vault",         label: "Vault",         icon: "◬" },
-      { href: "/idp",           label: "IDP / OIDC",    icon: "⊛" },
-      { href: "/settings",      label: "Settings",      icon: "⚙" },
+      { href: "/audit",           label: "Audit Logs",      icon: "⊞" },
+      { href: "/vault",           label: "Vault",           icon: "◬" },
+      { href: "/idp",             label: "IDP / OIDC",      icon: "⊛" },
+      { href: "/settings",        label: "Settings",        icon: "⚙" },
     ]
   },
 ]

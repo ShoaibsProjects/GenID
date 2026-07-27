@@ -33,6 +33,7 @@ import (
 
 	"github.com/observeid/identity-platform/internal/activities"
 	"github.com/observeid/identity-platform/internal/audit"
+	"github.com/observeid/identity-platform/internal/eventbus"
 	"github.com/observeid/identity-platform/internal/graphql"
 	"github.com/observeid/identity-platform/internal/middleware"
 	"github.com/observeid/identity-platform/internal/outbox"
@@ -170,9 +171,23 @@ func main() {
 	log.Info().Msg("Outbox processor started (500ms poll, batch 100)")
 	defer outboxProc.Stop()
 
+	// ─── Initialize NATS Event Bus ────────────────────────
+	natsBus, err := eventbus.NewNatsBus(getEnv("NATS_URL", "nats://localhost:4222"))
+	if err != nil {
+		log.Warn().Err(err).Msg("NATS not available, proceeding without event bus")
+	} else {
+		outboxProc.WithNatsBus(natsBus)
+		defer natsBus.Close()
+		log.Info().Msg("NATS JetStream connected")
+	}
+
 	// ─── Initialize Security Middleware ────────────────────
 	rateLimiter := middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200
-	apiKeyAuth := middleware.NewAPIKeyAuth(loadAPIKeys(), "/health", "/ready", "/healthz", "/")
+	jwtAuth := middleware.NewJWTAuth(
+		getEnv("JWKS_URL", "http://localhost:8080/.well-known/jwks.json"),
+		loadAPIKeys(),
+		"/health", "/ready", "/healthz", "/metrics", "/",
+	)
 	requestValidation := middleware.NewRequestValidation()
 	workflowGuard := middleware.NewWorkflowGuard(cfg.MasterKey)
 
@@ -183,7 +198,7 @@ func main() {
 	r.Use(otelhttp.NewMiddleware("observeid-api"))
 	r.Use(rateLimiter.Middleware)
 	r.Use(requestValidation.Middleware)
-	r.Use(apiKeyAuth.Middleware)
+	r.Use(jwtAuth.Middleware)
 	r.Use(audit.LoggingMiddleware(auditLogStore))
 
 	// Serve static frontend from the frontend/out directory
@@ -791,7 +806,7 @@ func corsMiddleware(allowedOrigin string) func(http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, QUERY, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Master-Key, X-User-Role, X-User-ID, X-Requested-With")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Master-Key, X-Requested-With")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 			if allowedOrigin != "" && allowedOrigin != "*" {
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -820,6 +835,8 @@ type Config struct {
 	CORSOrigin        string
 	QdrantAddr        string
 	MasterKey         string
+	NATSURL           string
+	JWKSURL           string
 }
 
 func loadConfig() *Config {
@@ -836,6 +853,8 @@ func loadConfig() *Config {
 		CORSOrigin:       getEnv("CORS_ORIGIN", ""),
 		QdrantAddr:       getEnv("QDRANT_ADDR", "localhost:6333"),
 		MasterKey:        getEnv("MASTER_KEY", ""),
+		NATSURL:          getEnv("NATS_URL", "nats://localhost:4222"),
+		JWKSURL:          getEnv("JWKS_URL", "http://localhost:8080/.well-known/jwks.json"),
 	}
 }
 

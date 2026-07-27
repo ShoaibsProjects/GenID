@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/observeid/identity-platform/internal/eventbus"
 	"github.com/observeid/identity-platform/pkg/telemetry"
 )
 
@@ -36,6 +37,7 @@ type Processor struct {
 	config  ProcessorConfig
 	outbox  *Outbox
 	neo4j   neo4j.DriverWithContext
+	natsBus *eventbus.NatsBus
 	running atomic.Bool
 }
 
@@ -46,6 +48,12 @@ func NewProcessor(outbox *Outbox, neo4jDriver neo4j.DriverWithContext, config Pr
 		outbox:  outbox,
 		neo4j:   neo4jDriver,
 	}
+}
+
+// WithNatsBus sets the NATS event bus for post-sync event publishing.
+func (p *Processor) WithNatsBus(bus *eventbus.NatsBus) *Processor {
+	p.natsBus = bus
+	return p
 }
 
 // Start begins the background processing loop.
@@ -118,6 +126,18 @@ func (p *Processor) processBatch(ctx context.Context) {
 			telemetry.OutboxProcessingLatency.
 				WithLabelValues(event.EventType).
 				Observe(float64(time.Since(eventStart).Milliseconds()))
+
+			// Publish to NATS as secondary notification (non-blocking)
+			if p.natsBus != nil {
+				natsEvent := eventbus.Event{
+					ID:          event.ID,
+					EventType:   event.EventType,
+					AggregateID: event.AggregateID,
+					Payload:     event.Payload,
+					Timestamp:   event.CreatedAt,
+				}
+				_ = p.natsBus.Publish(ctx, natsEvent)
+			}
 		}
 	}
 

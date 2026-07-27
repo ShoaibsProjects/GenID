@@ -692,3 +692,121 @@ CREATE INDEX idx_outbox_retry ON outbox_events (processed, retry_count, created_
     WHERE processed = FALSE AND retry_count > 0;
 CREATE INDEX idx_outbox_expires ON outbox_events (expires_at)
     WHERE processed = FALSE;
+
+-- ─── Row Level Security (RLS) ──────────────────────────────────
+-- Tenant isolation for multi-tenant deployments
+
+-- Enable RLS on tenant-scoped tables
+ALTER TABLE identities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE non_human_identities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE entitlements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE resources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE identity_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE role_entitlements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE direct_entitlements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE delegation_chains ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE caep_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cedar_policies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE certification_campaigns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE certification_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sod_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE emergency_access ENABLE ROW LEVEL SECURITY;
+ALTER TABLE connectors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE connector_identities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE connector_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE connector_entitlements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE connector_resources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE oidc_clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE oidc_auth_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE oidc_refresh_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE oidc_device_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE outbox_events ENABLE ROW LEVEL SECURITY;
+
+-- Create tenant isolation policies
+CREATE POLICY tenant_isolation_identities ON identities
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_nhi ON non_human_identities
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_roles ON roles
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_entitlements ON entitlements
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_resources ON resources
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_identity_roles ON identity_roles
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_role_entitlements ON role_entitlements
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_direct_entitlements ON direct_entitlements
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_delegation_chains ON delegation_chains
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_sessions ON sessions
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_audit_log ON audit_log
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_caep_events ON caep_events
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_cedar_policies ON cedar_policies
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_agent_cards ON agent_cards
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_certification_campaigns ON certification_campaigns
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_certification_entries ON certification_entries
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_sod_rules ON sod_rules
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_emergency_access ON emergency_access
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_connectors ON connectors
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_connector_identities ON connector_identities
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_connector_groups ON connector_groups
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_connector_entitlements ON connector_entitlements
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_connector_resources ON connector_resources
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_oidc_clients ON oidc_clients
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_oidc_auth_codes ON oidc_auth_codes
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_oidc_refresh_tokens ON oidc_refresh_tokens
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_oidc_device_codes ON oidc_device_codes
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);
+
+CREATE POLICY tenant_isolation_outbox_events ON outbox_events
+    USING (tenant_id = current_setting('app.current_tenant')::uuid);

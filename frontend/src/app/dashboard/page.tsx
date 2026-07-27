@@ -31,10 +31,10 @@ export default function DashboardPage() {
   const services = health?.checks ? Object.entries(health.checks).map(([name, status]) => ({ name, ok: status === "ok" })) : []
 
   const statCards = [
-    { label: "Identities", value: identityStats?.total ?? "—", color: "#FBBF24", accent: "rgba(245,158,11,0.15)", sub: `Identity Fabric` },
-    { label: "Connectors", value: connectorStats?.total_connectors ?? "—", color: "#60A5FA", accent: "rgba(59,130,246,0.15)", sub: `${connectorStats?.connected_count ?? 0} active` },
-    { label: "Synced Users", value: connectorStats?.total_identities ?? "—", color: "#34D399", accent: "rgba(52,211,153,0.12)", sub: `from ${connectorStats?.total_groups ?? 0} groups` },
-    { label: "Audit Events", value: auditStats?.total ?? "—", color: "#A78BFA", accent: "rgba(167,139,250,0.12)", sub: `buffer ${auditStats?.usage_pct ? Math.round(auditStats.usage_pct) + '%' : '—'}` },
+    { label: "Total Identities", value: identityStats?.total ?? "—", color: "#FBBF24", accent: "rgba(245,158,11,0.15)", sub: "People & Machines" },
+    { label: "Total Agents", value: connectorStats?.total_identities ?? "—", color: "#A78BFA", accent: "rgba(167,139,250,0.12)", sub: "Non-Human Identities" },
+    { label: "Active JIT Sessions", value: auditStats?.active_jit ?? "—", color: "#34D399", accent: "rgba(52,211,153,0.12)", sub: "Time-bounded access" },
+    { label: "Critical Revocations", value: auditStats?.critical_revocations ?? "—", color: "#EF4444", accent: "rgba(239,68,68,0.12)", sub: "Last 24 hours" },
   ]
 
   return (

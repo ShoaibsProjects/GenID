@@ -1,0 +1,239 @@
+<svg width="1200" height="1450" viewBox="0 0 1200 1450" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <linearGradient id="bg-grad" x1="0" y1="0" x2="0" y2="1450" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#09090B"/>
+      <stop offset="100%" stop-color="#0F0F13"/>
+    </linearGradient>
+    <linearGradient id="glass-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="edge-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#F38020" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#F38020" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="api-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="svc-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="async-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#EC4899" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#EC4899" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="data-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22C55E" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#22C55E" stop-opacity="0.02"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#717D96" />
+    </marker>
+  </defs>
+
+  <rect width="1200" height="1450" fill="url(#bg-grad)"/>
+
+  <g id="Header">
+    <text x="60" y="60" font-family="Inter, sans-serif" font-size="24" font-weight="700" fill="#FAFAFA">ObserveID Architecture</text>
+    <text x="60" y="85" font-family="Inter, sans-serif" font-size="14" font-weight="400" fill="#717D96">The Agentic Identity Fabric · v2.0.0</text>
+    <line x1="60" y1="100" x2="1140" y2="100" stroke="#27272A" stroke-width="1"/>
+  </g>
+
+  <g id="Layer-1-Edge">
+    <rect x="60" y="120" width="1080" height="120" rx="12" fill="url(#edge-grad)" stroke="#F38020" stroke-opacity="0.3" stroke-width="1"/>
+    <text x="80" y="145" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#F38020" letter-spacing="1">EDGE NETWORK (CLOUDFLARE)</text>
+    <g filter="url(#shadow)">
+      <rect x="100" y="165" width="240" height="60" rx="8" fill="url(#glass-grad)" stroke="#F38020" stroke-opacity="0.4"/>
+      <path d="M 120 195 Q 120 180 135 180 Q 140 170 155 175 Q 165 165 180 175 Q 200 170 200 190 Q 210 195 205 205 L 125 205 Q 115 205 120 195 Z" fill="#F38020" fill-opacity="0.8"/>
+      <text x="215" y="195" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#FAFAFA">Cloudflare Pages</text>
+      <text x="215" y="210" font-family="Inter, sans-serif" font-size="10" fill="#717D96">Next.js Frontend</text>
+    </g>
+    <g filter="url(#shadow)">
+      <rect x="380" y="165" width="240" height="60" rx="8" fill="url(#glass-grad)" stroke="#F38020" stroke-opacity="0.4"/>
+      <circle cx="410" cy="195" r="12" fill="#F38020" fill-opacity="0.2"/>
+      <path d="M 404 195 L 416 195 M 410 189 L 410 201" stroke="#F38020" stroke-width="2"/>
+      <text x="435" y="195" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#FAFAFA">Tunnel &amp; WAF</text>
+      <text x="435" y="210" font-family="Inter, sans-serif" font-size="10" fill="#717D96">HTTPS → ALB :443</text>
+    </g>
+  </g>
+
+  <path d="M 500 225 L 500 250 L 500 280" stroke="#717D96" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <g id="Layer-2-Gateway">
+    <rect x="60" y="280" width="1080" height="140" rx="12" fill="url(#api-grad)" stroke="#3B82F6" stroke-opacity="0.3" stroke-width="1"/>
+    <text x="80" y="305" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#3B82F6" letter-spacing="1">API GATEWAY &amp; SECURITY (GO 1.23)</text>
+    <g filter="url(#shadow)">
+      <rect x="350" y="325" width="500" height="80" rx="8" fill="url(#glass-grad)" stroke="#3B82F6" stroke-opacity="0.5"/>
+      <rect x="370" y="345" width="40" height="40" rx="4" fill="#3B82F6" fill-opacity="0.1"/>
+      <path d="M 375 365 L 385 355 L 375 365 L 385 375 M 405 365 L 395 355 L 405 365 L 395 375" stroke="#3B82F6" stroke-width="2" fill="none"/>
+      <text x="425" y="355" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#FAFAFA">Modular Monolith API</text>
+      <text x="425" y="375" font-family="JetBrains Mono, monospace" font-size="10" fill="#717D96">gorilla/mux · SCIM 2.0 · GraphQL</text>
+      <rect x="425" y="382" width="100" height="18" rx="9" fill="#22C55E" fill-opacity="0.15"/>
+      <text x="475" y="395" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="#4ADE80" text-anchor="middle">JWT / JWKS</text>
+      <rect x="535" y="382" width="80" height="18" rx="9" fill="#F59E0B" fill-opacity="0.15"/>
+      <text x="575" y="395" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="#FBBF24" text-anchor="middle">RateLimit</text>
+    </g>
+  </g>
+
+  <path d="M 600 405 L 600 440" stroke="#717D96" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <g id="Layer-3-Services">
+    <rect x="60" y="460" width="1080" height="320" rx="12" fill="url(#svc-grad)" stroke="#8B5CF6" stroke-opacity="0.3" stroke-width="1"/>
+    <text x="80" y="485" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#8B5CF6" letter-spacing="1">APPLICATION SERVICES &amp; IDENTITY ENGINE</text>
+
+    <g filter="url(#shadow)">
+      <rect x="100" y="510" width="220" height="80" rx="8" fill="url(#glass-grad)" stroke="#8B5CF6" stroke-opacity="0.4"/>
+      <circle cx="125" cy="535" r="8" fill="#8B5CF6" fill-opacity="0.2"/>
+      <path d="M 125 530 A 5 5 0 1 1 125 540 A 5 5 0 1 1 125 530 M 122 530 L 122 525 L 128 525 L 128 530" stroke="#8B5CF6" stroke-width="1.5" fill="none"/>
+      <text x="145" y="540" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Identity Service</text>
+      <text x="115" y="565" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">PG + Neo4j Dual-Write</text>
+      <text x="115" y="578" font-family="JetBrains Mono, monospace" font-size="9" fill="#22C55E">Entity Resolution</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="340" y="510" width="220" height="80" rx="8" fill="url(#glass-grad)" stroke="#8B5CF6" stroke-opacity="0.4"/>
+      <rect x="355" y="530" width="20" height="14" rx="2" fill="#8B5CF6" fill-opacity="0.2"/>
+      <path d="M 358 530 L 358 526 A 7 7 0 0 1 372 526 L 372 530" stroke="#8B5CF6" stroke-width="1.5" fill="none"/>
+      <text x="385" y="540" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Access Service</text>
+      <text x="355" y="565" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">RBAC / ABAC / ReBAC</text>
+      <text x="355" y="578" font-family="JetBrains Mono, monospace" font-size="9" fill="#22C55E">JIT Token Minting</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="580" y="510" width="220" height="80" rx="8" fill="url(#glass-grad)" stroke="#8B5CF6" stroke-opacity="0.4"/>
+      <path d="M 590 530 L 600 530 L 605 540 L 600 550 L 590 550 L 585 540 Z" fill="#8B5CF6" fill-opacity="0.2" stroke="#8B5CF6" stroke-width="1"/>
+      <text x="615" y="540" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Cedar Engine</text>
+      <text x="595" y="565" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">Policy-as-Code</text>
+      <text x="595" y="578" font-family="JetBrains Mono, monospace" font-size="9" fill="#22C55E">Dynamic Scope Narrowing</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="820" y="510" width="220" height="80" rx="8" fill="url(#glass-grad)" stroke="#8B5CF6" stroke-opacity="0.4"/>
+      <circle cx="840" cy="540" r="10" fill="none" stroke="#8B5CF6" stroke-width="1.5"/>
+      <path d="M 835 540 L 845 540 M 840 535 L 840 545" stroke="#8B5CF6" stroke-width="1.5"/>
+      <text x="860" y="540" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">GraphRAG Copilot</text>
+      <text x="835" y="565" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">LLM Function Calling</text>
+      <text x="835" y="578" font-family="JetBrains Mono, monospace" font-size="9" fill="#22C55E">No Qdrant</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="100" y="610" width="480" height="80" rx="8" fill="url(#glass-grad)" stroke="#6366F1" stroke-opacity="0.4"/>
+      <rect x="115" y="630" width="40" height="40" rx="4" fill="#6366F1" fill-opacity="0.1"/>
+      <path d="M 125 650 H 145 M 125 640 H 145 M 125 660 H 145" stroke="#6366F1" stroke-width="1.5"/>
+      <text x="165" y="640" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Connector Framework</text>
+      <text x="115" y="665" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">Entra ID · LDAP · SCIM 2.0 · CSV</text>
+      <text x="115" y="678" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">Inbound Provisioning</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="600" y="610" width="220" height="80" rx="8" fill="url(#glass-grad)" stroke="#6366F1" stroke-opacity="0.4"/>
+      <rect x="615" y="630" width="40" height="40" rx="4" fill="#6366F1" fill-opacity="0.1"/>
+      <path d="M 625 640 H 645 V 660 H 625 Z" fill="none" stroke="#6366F1" stroke-width="1.5"/>
+      <text x="665" y="640" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">IGA Compliance</text>
+      <text x="615" y="665" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">Access Certifications</text>
+      <text x="615" y="678" font-family="JetBrains Mono, monospace" font-size="9" fill="#22C55E">Break-Glass &amp; SOC-2</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="840" y="610" width="200" height="80" rx="8" fill="url(#glass-grad)" stroke="#14B8A6" stroke-opacity="0.4"/>
+      <circle cx="860" cy="650" r="12" fill="#14B8A6" fill-opacity="0.1"/>
+      <path d="M 855 650 L 865 650 M 860 645 L 860 655" stroke="#14B8A6" stroke-width="2"/>
+      <text x="880" y="640" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">Agentic Passports</text>
+      <text x="855" y="665" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">JIT JWTs (5-min scoped)</text>
+      <text x="855" y="678" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">Kill Switch &amp; CAEP</text>
+    </g>
+  </g>
+
+  <path d="M 600 780 L 600 820" stroke="#717D96" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <g id="Layer-4-Async">
+    <rect x="60" y="840" width="1080" height="160" rx="12" fill="url(#async-grad)" stroke="#EC4899" stroke-opacity="0.3" stroke-width="1"/>
+    <text x="80" y="865" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#EC4899" letter-spacing="1">ASYNC PLANE &amp; DURABLE ORCHESTRATION</text>
+
+    <g filter="url(#shadow)">
+      <rect x="100" y="890" width="400" height="90" rx="8" fill="url(#glass-grad)" stroke="#EC4899" stroke-opacity="0.4"/>
+      <path d="M 120 930 Q 120 910 140 910 Q 160 910 160 930 Q 160 950 140 950 Q 120 950 120 930 Z M 160 930 Q 160 910 180 910 Q 200 910 200 930 Q 200 950 180 950 Q 160 950 160 930 Z" fill="none" stroke="#EC4899" stroke-width="1.5"/>
+      <text x="215" y="925" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#FAFAFA">Temporal.io v1.25</text>
+      <text x="215" y="945" font-family="JetBrains Mono, monospace" font-size="10" fill="#717D96">Worker &amp; Server</text>
+      <text x="120" y="965" font-family="JetBrains Mono, monospace" font-size="9" fill="#22C55E">Offboard · Cascade Revoke · JIT Workflows</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="540" y="890" width="300" height="90" rx="8" fill="url(#glass-grad)" stroke="#EC4899" stroke-opacity="0.4"/>
+      <path d="M 560 925 L 570 915 L 580 925 L 590 915 L 600 925" fill="none" stroke="#EC4899" stroke-width="1.5"/>
+      <text x="615" y="925" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#FAFAFA">NATS JetStream</text>
+      <text x="615" y="945" font-family="JetBrains Mono, monospace" font-size="10" fill="#717D96">Go-native Event Fabric</text>
+      <text x="560" y="965" font-family="JetBrains Mono, monospace" font-size="9" fill="#22C55E">Replaces Kafka (15MB RAM)</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="880" y="890" width="160" height="90" rx="8" fill="url(#glass-grad)" stroke="#EC4899" stroke-opacity="0.4"/>
+      <rect x="900" y="915" width="20" height="20" rx="2" fill="none" stroke="#EC4899" stroke-width="1.5"/>
+      <path d="M 905 915 V 910 A 5 5 0 0 1 915 910 V 915" stroke="#EC4899" stroke-width="1.5" fill="none"/>
+      <text x="930" y="925" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#FAFAFA">Outbox</text>
+      <text x="900" y="955" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">PG → NATS Sync</text>
+    </g>
+  </g>
+
+  <path d="M 600 1000 L 600 1040" stroke="#717D96" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <g id="Layer-5-Data">
+    <rect x="60" y="1060" width="1080" height="200" rx="12" fill="url(#data-grad)" stroke="#22C55E" stroke-opacity="0.3" stroke-width="1"/>
+    <text x="80" y="1085" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#22C55E" letter-spacing="1">DATA TIER &amp; STATE</text>
+
+    <g filter="url(#shadow)">
+      <rect x="100" y="1110" width="300" height="120" rx="8" fill="url(#glass-grad)" stroke="#22C55E" stroke-opacity="0.4"/>
+      <ellipse cx="130" cy="1130" rx="12" ry="4" fill="#22C55E" fill-opacity="0.2" stroke="#22C55E"/>
+      <path d="M 118 1130 V 1160 Q 118 1164 130 1164 Q 142 1164 142 1160 V 1130" fill="#22C55E" fill-opacity="0.2" stroke="#22C55E"/>
+      <ellipse cx="130" cy="1130" rx="12" ry="4" fill="none" stroke="#22C55E"/>
+      <text x="155" y="1135" font-family="Inter, sans-serif" font-size="15" font-weight="700" fill="#FAFAFA">PostgreSQL 16</text>
+      <text x="120" y="1165" font-family="JetBrains Mono, monospace" font-size="10" fill="#717D96">30 Tables · Full-Text Search</text>
+      <text x="120" y="1180" font-family="JetBrains Mono, monospace" font-size="10" fill="#717D96">Identities · Audit · Outbox</text>
+      <text x="120" y="1200" font-family="JetBrains Mono, monospace" font-size="10" fill="#22C55E" font-weight="700">Strict RLS Multi-Tenancy</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="420" y="1110" width="300" height="120" rx="8" fill="url(#glass-grad)" stroke="#22C55E" stroke-opacity="0.4"/>
+      <circle cx="450" cy="1130" r="4" fill="#22C55E" fill-opacity="0.8"/>
+      <circle cx="440" cy="1145" r="4" fill="#22C55E" fill-opacity="0.8"/>
+      <circle cx="460" cy="1155" r="4" fill="#22C55E" fill-opacity="0.8"/>
+      <path d="M 450 1130 L 440 1145 M 450 1130 L 460 1155 M 440 1145 L 460 1155" stroke="#22C55E" stroke-width="1"/>
+      <text x="475" y="1135" font-family="Inter, sans-serif" font-size="15" font-weight="700" fill="#FAFAFA">Neo4j 5 Enterprise</text>
+      <text x="440" y="1165" font-family="JetBrains Mono, monospace" font-size="10" fill="#717D96">Blast Radius · Graph Relationships</text>
+      <text x="440" y="1180" font-family="JetBrains Mono, monospace" font-size="10" fill="#717D96">8 Labels · 7 Relationships</text>
+      <text x="440" y="1200" font-family="JetBrains Mono, monospace" font-size="10" fill="#22C55E" font-weight="700">Native Vector Search (No Qdrant)</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <rect x="740" y="1110" width="300" height="120" rx="8" fill="url(#glass-grad)" stroke="#22C55E" stroke-opacity="0.4"/>
+      <rect x="755" y="1125" width="24" height="14" rx="2" fill="#22C55E" fill-opacity="0.2" stroke="#22C55E"/>
+      <rect x="758" y="1122" width="18" height="14" rx="2" fill="#22C55E" fill-opacity="0.2" stroke="#22C55E"/>
+      <text x="790" y="1135" font-family="Inter, sans-serif" font-size="15" font-weight="700" fill="#FAFAFA">Redis 7</text>
+      <text x="760" y="1165" font-family="JetBrains Mono, monospace" font-size="10" fill="#717D96">In-Memory Cache</text>
+      <text x="760" y="1180" font-family="JetBrains Mono, monospace" font-size="10" fill="#717D96">Distributed Locks (Fence Tokens)</text>
+      <text x="760" y="1200" font-family="JetBrains Mono, monospace" font-size="10" fill="#22C55E" font-weight="700">JIT Token TTL &amp; Revocation</text>
+    </g>
+  </g>
+
+  <g id="Footer-Deployment">
+    <rect x="60" y="1300" width="1080" height="120" rx="12" fill="#16171E" stroke="#27272A" stroke-width="1"/>
+    <text x="80" y="1325" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#717D96" letter-spacing="1">DEPLOYMENT &amp; VISION</text>
+    
+    <rect x="80" y="1340" width="320" height="60" rx="8" fill="#0F172A" stroke="#3B82F6" stroke-opacity="0.3"/>
+    <text x="95" y="1360" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#93C5FD">Lean Docker Compose</text>
+    <text x="95" y="1380" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">NATS embedded · No Kafka · $0 Dev Cost</text>
+
+    <rect x="420" y="1340" width="320" height="60" rx="8" fill="#0F172A" stroke="#3B82F6" stroke-opacity="0.3"/>
+    <text x="435" y="1360" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#93C5FD">Kubernetes (EKS/GKE)</text>
+    <text x="435" y="1380" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">3 Binaries: gateway · worker · graph-api</text>
+
+    <rect x="760" y="1340" width="360" height="60" rx="8" fill="#0F172A" stroke="#14B8A6" stroke-opacity="0.3"/>
+    <text x="775" y="1360" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#5EEAD4">Zero-Standing Privilege (ZSP)</text>
+    <text x="775" y="1380" font-family="JetBrains Mono, monospace" font-size="9" fill="#717D96">JIT JWT Passports (V1) · SPIFFE/SVID (V2)</text>
+  </g>
+</svg>

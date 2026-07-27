@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -51,4 +52,29 @@ func NewPostgresPool(databaseURL string) (*pgxpool.Pool, error) {
 	}
 
 	return pool, nil
+}
+
+// SetTenantContext sets the PostgreSQL session variable for Row Level Security.
+// Must be called at the start of every transaction when RLS is enabled.
+func SetTenantContext(ctx context.Context, pool *pgxpool.Pool, tenantID string) error {
+	if tenantID == "" {
+		return nil
+	}
+	_, err := pool.Exec(ctx, fmt.Sprintf("SET app.current_tenant = '%s'", tenantID))
+	return err
+}
+
+// BeginTxWithTenant starts a transaction and sets the tenant context for RLS.
+func BeginTxWithTenant(ctx context.Context, pool *pgxpool.Pool, tenantID string) (pgx.Tx, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if tenantID != "" {
+		if _, err := tx.Exec(ctx, fmt.Sprintf("SET app.current_tenant = '%s'", tenantID)); err != nil {
+			tx.Rollback(ctx)
+			return nil, err
+		}
+	}
+	return tx, nil
 }

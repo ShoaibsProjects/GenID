@@ -885,3 +885,62 @@ func executeRevocationWithRetry(ctx workflow.Context, input OffboardInput, e act
 		TenantID:      input.TenantID,
 	}).Get(ctx, nil)
 }
+
+// ─── AccessCertificationWorkflow ──────────────────────────
+// Queries PG for users with access to critical resources, creates a certification
+// campaign entry, and logs campaign creation.
+
+type AccessCertificationInput struct {
+	TenantID    string `json:"tenant_id"`
+	CampaignName string `json:"campaign_name"`
+	CampaignType string `json:"campaign_type"` // quarterly, triggered, emergency
+	CreatedBy   string `json:"created_by"`
+}
+
+type AccessCertificationResult struct {
+	CampaignID   string `json:"campaign_id"`
+	EntriesCount int    `json:"entries_count"`
+	Status       string `json:"status"`
+}
+
+func AccessCertificationWorkflow(ctx workflow.Context, input AccessCertificationInput) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Access Certification Workflow started",
+		"tenant_id", input.TenantID,
+		"campaign_type", input.CampaignType,
+	)
+
+	if input.CampaignType == "" {
+		input.CampaignType = "quarterly"
+	}
+	if input.CampaignName == "" {
+		input.CampaignName = fmt.Sprintf("Access Review - %s", time.Now().Format("2006-Q1"))
+	}
+
+	// Step 1: Create certification campaign in PG
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 2},
+	}
+	actCtx := workflow.WithActivityOptions(ctx, ao)
+
+	var campaignResult AccessCertificationResult
+	if err := workflow.ExecuteActivity(actCtx, "CreateCertificationCampaign", input).Get(ctx, &campaignResult); err != nil {
+		return fmt.Errorf("create campaign failed: %w", err)
+	}
+
+	logger.Info("Certification campaign created",
+		"campaign_id", campaignResult.CampaignID,
+		"entries_count", campaignResult.EntriesCount,
+	)
+
+	// Step 2: Query users with critical resource access and create entries
+	if err := workflow.ExecuteActivity(actCtx, "PopulateCertificationEntries", campaignResult.CampaignID, input.TenantID).Get(ctx, nil); err != nil {
+		logger.Warn("populate entries failed", "error", err)
+	}
+
+	logger.Info("Access certification workflow completed",
+		"campaign_id", campaignResult.CampaignID,
+	)
+	return nil
+}

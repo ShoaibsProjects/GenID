@@ -95,19 +95,18 @@ func (g *WorkflowGuard) Protect(op OperationType, next http.HandlerFunc) http.Ha
 // isMaster checks whether the request originated from a master user.
 // Sources (checked in order):
 //  1. X-Master-Key header matches the configured master key
-//  2. X-User-Role header contains "master" or "admin"
-//  3. X-User-ID header maps to a master user (checked against config)
+//  2. JWT claims roles contain "master" or "admin"
 func (g *WorkflowGuard) isMaster(r *http.Request) bool {
 	// Check 1: master API key
 	if key := r.Header.Get("X-Master-Key"); key != "" {
 		return key == g.masterKey
 	}
 
-	// Check 2: role-based (from auth gateway / reverse proxy)
-	if role := r.Header.Get("X-User-Role"); role != "" {
-		for _, r := range strings.Split(role, ",") {
-			r = strings.TrimSpace(strings.ToLower(r))
-			if r == "master" || r == "admin" || r == "owner" {
+	// Check 2: JWT roles (injected by JWTAuth middleware)
+	if roles := RolesFromContext(r.Context()); len(roles) > 0 {
+		for _, role := range roles {
+			role = strings.ToLower(role)
+			if role == "master" || role == "admin" || role == "owner" {
 				return true
 			}
 		}

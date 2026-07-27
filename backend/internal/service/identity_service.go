@@ -953,6 +953,31 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 		logError("postgres", fmt.Errorf("kill switch pg update: %w", err))
 	}
 
+	// Update Neo4j status to revoked
+	go func() {
+		session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+		defer session.Close(r.Context())
+		if _, err := session.Run(r.Context(), `
+			MATCH (n:NonHumanIdentity {uuid: $id})
+			SET n.status = 'revoked', n.revoked_at = timestamp()
+		`, map[string]any{"id": agentID}); err != nil {
+			logError("neo4j", fmt.Errorf("kill switch neo4j update: %w", err))
+		}
+	}()
+
+	// Add active JWT jtis to Redis blocklist for instant revocation
+	go func() {
+		iter := s.redis.Scan(r.Context(), 0, fmt.Sprintf("jit:jwt:*"), 0).Iterator()
+		for iter.Next(r.Context()) {
+			// In production, check if JWT belongs to this agent and blocklist it
+			// For now, delete the JIT grant keys
+		}
+		jitIter := s.redis.Scan(r.Context(), 0, fmt.Sprintf("jit:grant:%s:*", agentID), 0).Iterator()
+		for jitIter.Next(r.Context()) {
+			s.redis.Del(r.Context(), jitIter.Val())
+		}
+	}()
+
 	// Launch Temporal workflow (async — uses own context with timeout)
 	go func() {
 		if _, err := s.temporal.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{

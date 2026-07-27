@@ -16,9 +16,9 @@ networks:
 volumes:
   postgres-data:
   neo4j-data:
-  qdrant-data:
   temporal-db:
   redis-data:
+  nats-data:
 
 services:
   # ─── PostgreSQL ────────────────────────────────────────────
@@ -90,83 +90,23 @@ services:
       retries: 5
     logging: *default-logging
 
-  # ─── Kafka + Schema Registry ───────────────────────────────
-  kafka:
-    image: confluentinc/cp-kafka:7.6.1
-    container_name: observeid-kafka
-    depends_on:
-      kafka-zookeeper:
-        condition: service_started
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: kafka-zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_LOG_RETENTION_HOURS: 168
-      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+  # ─── NATS JetStream ────────────────────────────────────────
+  nats:
+    image: nats:2.10-alpine
+    container_name: observeid-nats
+    command: ["-js"]
     ports:
-      - "9092:9092"
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
     networks:
       - observeid-net
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-    logging: *default-logging
-
-  kafka-zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.1
-    container_name: observeid-zookeeper
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    ports:
-      - "2181:2181"
-    networks:
-      - observeid-net
-    logging: *default-logging
-
-  schema-registry:
-    image: confluentinc/cp-schema-registry:7.6.1
-    container_name: observeid-schema-registry
-    depends_on:
-      kafka:
-        condition: service_healthy
-    environment:
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
-      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
-    ports:
-      - "8081:8081"
-    networks:
-      - observeid-net
-    logging: *default-logging
-
-  kafka-init:
-    image: confluentinc/cp-kafka:7.6.1
-    container_name: observeid-kafka-init
-    depends_on:
-      kafka:
-        condition: service_healthy
-    entrypoint: ["/bin/bash", "-c"]
-    command: |
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic identity.events --partitions 12 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic access.events --partitions 12 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic policy.events --partitions 6 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic audit.events --partitions 6 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic agent.events --partitions 6 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic caep.events --partitions 6 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic identity.events.dlq --partitions 3 --replication-factor 1
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic access.events.dlq --partitions 3 --replication-factor 1
-      echo "Topics created."
-    networks:
-      - observeid-net
+      test: ["CMD", "nats-server", "--signal", "ldm=nats"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     logging: *default-logging
 
   # ─── Temporal Server ───────────────────────────────────────
@@ -221,24 +161,6 @@ services:
       "
     networks:
       - observeid-net
-    logging: *default-logging
-
-  # ─── Qdrant (Vector DB) ────────────────────────────────────
-  qdrant:
-    image: qdrant/qdrant:v1.10.1
-    container_name: observeid-qdrant
-    ports:
-      - "6333:6333"  # gRPC
-      - "6334:6334"  # REST
-    volumes:
-      - qdrant-data:/qdrant/storage
-    networks:
-      - observeid-net
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --no-verbose -O- http://localhost:6333/health 2>/dev/null || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     logging: *default-logging
 
   # ─── OpenTelemetry Collector ───────────────────────────────
