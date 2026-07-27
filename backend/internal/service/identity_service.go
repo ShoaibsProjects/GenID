@@ -965,16 +965,23 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 		}
 	}()
 
-	// Add active JWT jtis to Redis blocklist for instant revocation
+	// Instant revocation: delete all active JIT JWTs and grant entries for this agent.
+	// Uses the reverse index jit:identity:<id> -> [jti,...] to find tokens to blocklist.
 	go func() {
-		iter := s.redis.Scan(r.Context(), 0, fmt.Sprintf("jit:jwt:*"), 0).Iterator()
-		for iter.Next(r.Context()) {
-			// In production, check if JWT belongs to this agent and blocklist it
-			// For now, delete the JIT grant keys
+		bgCtx := context.Background()
+
+		// 1. Blocklist every active JWT jti for this agent (instant fail on token check)
+		jtis, _ := s.redis.SMembers(bgCtx, fmt.Sprintf("jit:identity:%s", agentID)).Result()
+		for _, jti := range jtis {
+			s.redis.Del(bgCtx, fmt.Sprintf("jit:jwt:%s", jti))
+			s.redis.Set(bgCtx, fmt.Sprintf("jit:blocked:%s", jti), "1", 24*time.Hour)
 		}
-		jitIter := s.redis.Scan(r.Context(), 0, fmt.Sprintf("jit:grant:%s:*", agentID), 0).Iterator()
-		for jitIter.Next(r.Context()) {
-			s.redis.Del(r.Context(), jitIter.Val())
+		s.redis.Del(bgCtx, fmt.Sprintf("jit:identity:%s", agentID))
+
+		// 2. Also delete all grant entries (covers pre-OIDC keys)
+		jitIter := s.redis.Scan(bgCtx, 0, fmt.Sprintf("jit:grant:%s:*", agentID), 0).Iterator()
+		for jitIter.Next(bgCtx) {
+			s.redis.Del(bgCtx, jitIter.Val())
 		}
 	}()
 

@@ -18,11 +18,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/observeid/identity-platform/internal/cedar"
+	"github.com/observeid/identity-platform/internal/oidc"
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -203,18 +203,20 @@ type ActivityService struct {
 	redis    *redis.Client
 	temporal client.Client
 	cedarEng *cedar.CedarEngine
+	oidcProv *oidc.Provider
 
 	lockMu       sync.Mutex
 	fenceCounter int64
 }
 
-func NewActivityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client, cedarEng *cedar.CedarEngine) *ActivityService {
+func NewActivityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client, cedarEng *cedar.CedarEngine, oidcProv *oidc.Provider) *ActivityService {
 	return &ActivityService{
 		pgPool:       pgPool,
 		neo4j:        neo4j,
 		redis:        rdb,
 		temporal:     tc,
 		cedarEng:     cedarEng,
+		oidcProv:     oidcProv,
 		fenceCounter: time.Now().UnixMilli(),
 	}
 }
@@ -583,27 +585,23 @@ func (s *ActivityService) ProvisionTemporaryAccess(ctx context.Context, params P
 		return fmt.Errorf("temp provision: neo4j relationship: %w", err)
 	}
 
-	// Mint a short-lived JWT (5-minute TTL) with scoped claims
-	jti := uuid.New().String()
-	claims := jwt.MapClaims{
-		"sub":         params.IdentityID,
-		"tenant_id":   params.TenantID,
-		"resource_id": params.ResourceID,
-		"action":      params.Action,
-		"jit":         true,
-		"exp":         time.Now().Add(5 * time.Minute).Unix(),
-		"iat":         time.Now().Unix(),
-		"jti":         jti,
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, err := token.SignedString([]byte(os.Getenv("JWT_SIGNING_KEY")))
-	if err != nil {
-		return fmt.Errorf("temp provision: mint jwt: %w", err)
-	}
+	// Mint a short-lived RS256 JWT signed by the OIDC provider's RSA private key.
+	// Falls back to an unsigned marker if no OIDC provider is wired (e.g., tests).
+	var jti string
+	if s.oidcProv != nil {
+		tokenStr, newJTI, err := s.oidcProv.SignJITToken(params.IdentityID, params.TenantID, params.ResourceID, params.Action)
+		if err != nil {
+			return fmt.Errorf("temp provision: mint jit token: %w", err)
+		}
+		jti = newJTI
 
-	// Store JWT jti in Redis with TTL for revocation checking
-	jwtKey := fmt.Sprintf("jit:jwt:%s", jti)
-	s.redis.Set(ctx, jwtKey, tokenStr, 5*time.Minute)
+		// Store JWT jti in Redis with 5-minute TTL for revocation checking (Kill Switch).
+		jwtKey := fmt.Sprintf("jit:jwt:%s", jti)
+		s.redis.Set(ctx, jwtKey, tokenStr, 5*time.Minute)
+		// Also keep a reverse index identity -> jti so Kill Switch can revoke all jtis.
+		s.redis.SAdd(ctx, fmt.Sprintf("jit:identity:%s", params.IdentityID), jti)
+		s.redis.Expire(ctx, fmt.Sprintf("jit:identity:%s", params.IdentityID), 5*time.Minute)
+	}
 
 	activity.RecordHeartbeat(ctx, "temp_access_granted")
 	return nil

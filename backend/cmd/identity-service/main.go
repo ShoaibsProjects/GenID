@@ -152,7 +152,7 @@ func main() {
 	w.RegisterWorkflow(workflow.CascadeRevokeWorkflow)
 	w.RegisterWorkflow(workflow.RevokeAccessChildWorkflow)
 
-	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient, svc.CedarEngine())
+	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient, svc.CedarEngine(), svc.OIDCProvider())
 	w.RegisterActivity(act)
 
 	if err := w.Start(); err != nil {

@@ -81,3 +81,4 @@ media/*.png
 
 # OpenCode config (personal)
 **/.opencode/
+.git-credentials

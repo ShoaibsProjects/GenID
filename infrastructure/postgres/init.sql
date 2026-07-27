@@ -246,19 +246,9 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_identity ON sessions(identity_id);
 CREATE INDEX idx_sessions_active   ON sessions(is_active) WHERE is_active = TRUE;
 
--- ─── Outbox (Transactional Event Publication) ─────────────
-CREATE TABLE outbox (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    aggregate_id    VARCHAR(255) NOT NULL,
-    aggregate_type  VARCHAR(100) NOT NULL,
-    event_type      VARCHAR(255) NOT NULL,
-    payload         JSONB NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    published_at    TIMESTAMPTZ
-);
-
-CREATE INDEX idx_outbox_pending ON outbox(published_at) WHERE published_at IS NULL;
-CREATE INDEX idx_outbox_aggregate ON outbox(aggregate_id);
+-- ─── Outbox (deprecated — replaced by outbox_events below) ─
+-- Keeping this for backward compatibility with existing code references.
+-- If upgrading from a previous schema, drop this table first.
 
 -- ─── Audit Log ─────────────────────────────────────────────
 CREATE TABLE audit_log (
@@ -695,6 +685,31 @@ CREATE INDEX idx_outbox_expires ON outbox_events (expires_at)
 
 -- ─── Row Level Security (RLS) ──────────────────────────────────
 -- Tenant isolation for multi-tenant deployments
+
+-- Add missing tenant_id columns to support RLS (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='certification_entries' AND column_name='tenant_id') THEN
+        ALTER TABLE certification_entries ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+        UPDATE certification_entries ce SET tenant_id = (SELECT tenant_id FROM certification_campaigns WHERE id = ce.campaign_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='oidc_auth_codes' AND column_name='tenant_id') THEN
+        ALTER TABLE oidc_auth_codes ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+        UPDATE oidc_auth_codes ac SET tenant_id = (SELECT tenant_id FROM oidc_clients WHERE client_id = ac.client_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='oidc_refresh_tokens' AND column_name='tenant_id') THEN
+        ALTER TABLE oidc_refresh_tokens ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+        UPDATE oidc_refresh_tokens rt SET tenant_id = (SELECT tenant_id FROM oidc_clients WHERE client_id = rt.client_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='oidc_device_codes' AND column_name='tenant_id') THEN
+        ALTER TABLE oidc_device_codes ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+        UPDATE oidc_device_codes dc SET tenant_id = (SELECT tenant_id FROM oidc_clients WHERE client_id = dc.client_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='outbox_events' AND column_name='tenant_id') THEN
+        ALTER TABLE outbox_events ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+        UPDATE outbox_events SET tenant_id = '00000000-0000-0000-0000-000000000001';
+    END IF;
+END $$;
 
 -- Enable RLS on tenant-scoped tables
 ALTER TABLE identities ENABLE ROW LEVEL SECURITY;

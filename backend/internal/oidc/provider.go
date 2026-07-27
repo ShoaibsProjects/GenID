@@ -79,6 +79,33 @@ func (p *Provider) SignAccessToken(userID, clientID, scope string) (string, erro
 	return token.SignedString(p.signingKey)
 }
 
+// SignJITToken mints a short-lived (5-minute) RS256 JWT for a Just-In-Time access grant.
+// Returns the signed token string and the jti so callers can store it in Redis for revocation.
+// The token carries scoped claims: resource_id, action, and a "jit": true marker.
+func (p *Provider) SignJITToken(identityID, tenantID, resourceID, action string) (tokenStr string, jti string, err error) {
+	now := time.Now()
+	jti = generateTokenID()
+	claims := jwt.MapClaims{
+		"iss":         p.issuer,
+		"sub":         identityID,
+		"tenant_id":   tenantID,
+		"resource_id": resourceID,
+		"action":      action,
+		"jit":         true,
+		"iat":         now.Unix(),
+		"exp":         now.Add(5 * time.Minute).Unix(),
+		"jti":         jti,
+		"typ":         "JIT",
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = p.keyID
+	tokenStr, err = token.SignedString(p.signingKey)
+	if err != nil {
+		return "", "", fmt.Errorf("oidc: sign jit token: %w", err)
+	}
+	return tokenStr, jti, nil
+}
+
 // SignIDToken creates a signed OIDC ID token.
 func (p *Provider) SignIDToken(userID, clientID, nonce string, claims map[string]any) (string, error) {
 	now := time.Now()
