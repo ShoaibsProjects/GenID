@@ -449,7 +449,7 @@ func (s *IdentityService) ScimDeleteUser(w http.ResponseWriter, r *http.Request)
 	// Trigger offboarding workflow
 	we, err := s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
 		ID:        fmt.Sprintf("offboard-%s", id),
-		TaskQueue: "critical_offboarding",
+		TaskQueue: "critical-offboarding",
 	}, workflow.OffboardIdentityWorkflow, workflow.OffboardInput{
 		IdentityID: id,
 		Reason:     "SCIM deprovisioning",
@@ -953,11 +953,13 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 		logError("postgres", fmt.Errorf("kill switch pg update: %w", err))
 	}
 
-	// Update Neo4j status to revoked
+	// Update Neo4j status to revoked (use background context — request ctx gets cancelled)
 	go func() {
-		session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-		defer session.Close(r.Context())
-		if _, err := session.Run(r.Context(), `
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		session := s.neo4j.NewSession(bgCtx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+		defer session.Close(bgCtx)
+		if _, err := session.Run(bgCtx, `
 			MATCH (n:NonHumanIdentity {uuid: $id})
 			SET n.status = 'revoked', n.revoked_at = timestamp()
 		`, map[string]any{"id": agentID}); err != nil {
@@ -989,7 +991,7 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 	go func() {
 		if _, err := s.temporal.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
 			ID:        fmt.Sprintf("kill-agent-%s", agentID),
-			TaskQueue: "critical_offboarding",
+			TaskQueue: "critical-offboarding",
 		}, workflow.RevokeAccessWorkflow, workflow.RevokeAccessInput{
 			IdentityID:  agentID,
 			Reason:      reason,
@@ -1000,12 +1002,14 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 		}
 	}()
 
-	// Find and cascade-revoke delegated agents using request context for query
+	// Find and cascade-revoke delegated agents using background context
 	go func() {
-		session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
-		defer session.Close(r.Context())
+		bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		session := s.neo4j.NewSession(bgCtx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+		defer session.Close(bgCtx)
 
-		result, err := session.Run(r.Context(), `
+		result, err := session.Run(bgCtx, `
 			MATCH (:NonHumanIdentity {uuid: $id})-[:DELEGATED_FROM*1..3]->(child:NonHumanIdentity)
 			WHERE child.status = 'active'
 			RETURN child.uuid AS child_id
@@ -1015,7 +1019,7 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		for result.Next(r.Context()) {
+		for result.Next(bgCtx) {
 			childIDRaw, _ := result.Record().Get("child_id")
 			childIDStr, ok := childIDRaw.(string)
 			if !ok || childIDStr == "" {
@@ -1023,7 +1027,7 @@ func (s *IdentityService) AgentKillSwitch(w http.ResponseWriter, r *http.Request
 			}
 			if _, err := s.temporal.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
 				ID:        fmt.Sprintf("cascade-kill-%s", childIDStr),
-				TaskQueue: "critical_offboarding",
+				TaskQueue: "critical-offboarding",
 			}, workflow.RevokeAccessWorkflow, workflow.RevokeAccessInput{
 				IdentityID:  childIDStr,
 				Reason:      "parent_revoked",
@@ -1310,7 +1314,7 @@ func (s *IdentityService) GrantAccess(w http.ResponseWriter, r *http.Request) {
 	workflowID := fmt.Sprintf("grant-access-%s-%s", req.IdentityID, uuid.New().String()[:8])
 	we, err := s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
 		ID:        workflowID,
-		TaskQueue: "critical_offboarding",
+		TaskQueue: "critical-offboarding",
 	}, workflow.GrantAccessWorkflow, req)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to start grant workflow")
@@ -1329,7 +1333,7 @@ func (s *IdentityService) StartJustInTimeWorkflow(ctx context.Context, input wor
 	workflowID := fmt.Sprintf("jit-access-%s-%s", input.IdentityID, uuid.New().String()[:8])
 	_, err := s.temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        workflowID,
-		TaskQueue: "critical_offboarding",
+		TaskQueue: "critical-offboarding",
 	}, workflow.JustInTimeAccessWorkflow, input)
 	if err != nil {
 		return "", fmt.Errorf("start jit workflow: %w", err)
@@ -1365,7 +1369,7 @@ func (s *IdentityService) RevokeAccess(w http.ResponseWriter, r *http.Request) {
 	workflowID := fmt.Sprintf("revoke-access-%s-%s", req.IdentityID, uuid.New().String()[:8])
 	we, err := s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
 		ID:        workflowID,
-		TaskQueue: "critical_offboarding",
+		TaskQueue: "critical-offboarding",
 	}, workflow.RevokeAccessWorkflow, req)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to start revocation workflow")
