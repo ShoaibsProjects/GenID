@@ -149,10 +149,10 @@ services:
       sh -c "
       echo 'Waiting for Temporal...';
       sleep 10;
-      temporal operator namespace create --namespace critical-offboarding --description 'Critical offboarding workflows' --retention 30;
-      temporal operator namespace create --namespace provisioning --description 'Standard provisioning' --retention 14;
-      temporal operator namespace create --namespace reconciliation --description 'Reconciliation workflows' --retention 7;
-      temporal operator namespace create --namespace analysis --description 'Analysis and cron workflows' --retention 7;
+      temporal --address temporal:7233 operator namespace create --namespace critical-offboarding --description 'Critical offboarding workflows' --retention 720h || true;
+      temporal --address temporal:7233 operator namespace create --namespace provisioning --description 'Standard provisioning' --retention 336h || true;
+      temporal --address temporal:7233 operator namespace create --namespace reconciliation --description 'Reconciliation workflows' --retention 168h || true;
+      temporal --address temporal:7233 operator namespace create --namespace analysis --description 'Analysis and cron workflows' --retention 168h || true;
       echo 'Namespaces created.';
       tail -f /dev/null
       "

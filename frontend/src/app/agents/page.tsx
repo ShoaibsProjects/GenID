@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { fetchAgents, Agent } from "@/lib/api"
+import { fetchAgents, Agent, getAuthToken } from "@/lib/api"
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [killing, setKilling] = useState<string | null>(null)
+  const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
     fetchAgents()
@@ -15,11 +16,17 @@ export default function AgentsPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  async function handleKillSwitch(agentId: string) {
-    if (!confirm("Kill this agent? All active sessions will be revoked immediately.")) return
+  const handleKillSwitch = async (agentId: string, name: string) => {
+    if (!confirm("Kill " + name + "?")) return
     setKilling(agentId)
     try {
-      await fetch(`/api/v1/agents/${agentId}/kill-switch`, { method: "POST" })
+      const headers: Record<string, string> = {}
+      const token = getAuthToken()
+      if (token) headers["Authorization"] = "Bearer " + token
+      await fetch("/api/v1/agents/" + agentId + "/kill-switch", {
+        method: "POST",
+        headers,
+      })
       setAgents(prev => prev.map(a => a.id === agentId ? { ...a, status: "revoked" } : a))
     } catch {
       alert("Kill switch failed")
@@ -28,92 +35,81 @@ export default function AgentsPage() {
     }
   }
 
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">AI Agents & NHI</h1>
-          <p className="text-sm text-gray-400 mt-1">{agents.length} non-human identities registered</p>
-        </div>
-        <button className="btn-primary text-sm">Register Agent</button>
-      </div>
+  const onAgentRegistered = (agent: Agent) => {
+    setAgents(prev => [agent, ...prev])
+    setShowModal(false)
+  }
 
-      <div className="glass-card overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-gray-500">Loading agents...</div>
-        ) : agents.length === 0 ? (
-          <div className="p-12 text-center text-gray-500">No agents registered. Use POST /api/v1/agents to register one.</div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Agent</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Type</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Owner</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Risk</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Governed</th>
-                <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800/50">
-              {agents.map((a) => (
-                <tr key={a.id} className="hover:bg-surface-100/50 transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center text-xs font-medium text-violet-400 border border-violet-500/30">
-                        {(a.name || "?").charAt(0).toUpperCase()}
-                      </div>
-                      <span className="text-sm font-medium text-white">{a.name}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-400 capitalize">{a.type?.replace("_", " ")}</td>
-                  <td className="py-3 px-4 text-sm text-gray-400">{a.owner_name || "-"}</td>
-                  <td className="py-3 px-4">
-                    <StatusBadge status={a.status} />
-                  </td>
-                  <td className="py-3 px-4">
-                    <RiskBadge score={a.risk_score ?? 0} />
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={a.is_governed ? "badge-success" : "badge-danger"}>
-                      {a.is_governed ? "Governed" : "Shadow"}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <button className="btn-ghost text-xs">View</button>
-                    <button
-                      className="btn-ghost text-xs text-rose-400 hover:text-rose-300"
-                      onClick={() => handleKillSwitch(a.id)}
-                      disabled={killing === a.id || a.status === "revoked"}
-                    >
-                      {killing === a.id ? "Killing..." : "Kill Switch"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+  return (
+    <div>
+      <div>
+        <h1>AI Agents & NHI</h1>
+        <p>{agents.length} registered</p>
     </div>
+      <button onClick={() => setShowModal(true)}>+ Register Agent</button>
+      <div>
+        {loading ? (
+          <p>Loading</p>
+        ) : agents.length === 0 ? (
+          <p>No agents registered</p>
+        ) : (
+          <ul>
+            {agents.map((a) => (
+              <li key={a.id}>
+                {a.name} ({a.status}) - <button onClick={() => handleKillSwitch(a.id, a.name)} disabled={killing === a.id}>Kill</button>
+          </li>
+            ))}
+       </ul>
+        )}
+   </div>
+      {showModal && (
+        <RegisterAgentModal
+          onClose={() => setShowModal(false)}
+          onCreated={onAgentRegistered}
+        />
+      )}
+ </div>
   )
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { class: string; label: string }> = {
-    active: { class: "badge-success", label: "Active" },
-    inactive: { class: "badge-neutral", label: "Inactive" },
-    suspended: { class: "badge-warning", label: "Suspended" },
-    terminated: { class: "badge-danger", label: "Terminated" },
-    revoked: { class: "badge-danger", label: "Revoked" },
-  }
-  const c = config[status] || { class: "badge-neutral", label: status }
-  return <span className={c.class}>{c.label}</span>
-}
+function RegisterAgentModal({ onClose, onCreated }: { onClose: () => void; onCreated: (a: Agent) => void }) {
+  const [name, setName] = useState("")
+  const [type, setType] = useState("service_account")
+  const [submitting, setSubmitting] = useState(false)
 
-function RiskBadge({ score }: { score: number }) {
-  if (score >= 0.7) return <span className="badge-danger">Critical ({Math.round(score * 100)}%)</span>
-  if (score >= 0.4) return <span className="badge-warning">Elevated ({Math.round(score * 100)}%)</span>
-  return <span className="badge-success">Low ({Math.round(score * 100)}%)</span>
+  const submit = async () => {
+    if (!name.trim()) return
+    setSubmitting(true)
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" }
+      const token = getAuthToken()
+      if (token) headers["Authorization"] = "Bearer " + token
+      const res = await fetch("/api/v1/agents", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name, type }),
+      })
+      const agent = await res.json()
+      onCreated(agent.agent || agent)
+    } catch {
+      alert("failed")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}>
+        <h2>Register AI Agent</h2>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" />
+        <select value={type} onChange={(e) => setType(e.target.value)}>
+          <option value="service_account">Service Account</option>
+          <option value="ai_agent">AI Agent</option>
+       </select>
+        <button onClick={onClose}>Cancel</button>
+        <button onClick={submit} disabled={submitting}>{submitting ? "..." : "Register"}</button>
+  </div>
+ </div>
+  )
 }

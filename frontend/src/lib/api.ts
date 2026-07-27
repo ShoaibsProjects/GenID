@@ -35,6 +35,55 @@ export function getApiUrl(): string {
   return ""
 }
 
+// ─── Auth Token Management ─────────────────────────────────────
+// Token persisted in localStorage. Auto-attached as Authorization: Bearer to every request.
+
+const TOKEN_KEY = "observeid_access_token"
+const USER_KEY  = "observeid_user_email"
+
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setAuthToken(token: string, userEmail: string): void {
+  if (typeof window === "undefined") return
+  localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(USER_KEY, userEmail)
+}
+
+export function clearAuthToken(): void {
+  if (typeof window === "undefined") return
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+}
+
+export function getStoredUserEmail(): string | null {
+  if (typeof window === "undefined") return null
+  return localStorage.getItem(USER_KEY)
+}
+
+export function isLoggedIn(): boolean {
+  return !!getAuthToken()
+}
+
+// Login via the dev login endpoint. Returns true on success.
+export async function devLogin(username: string, password: string): Promise<{ token: string; user_id: string } | null> {
+  const base = getApiBase()
+  const res = await fetch(`${base}/api/v1/dev/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  })
+  if (!res.ok) return null
+  const data = await res.json()
+  if (data.access_token) {
+    setAuthToken(data.access_token, username)
+    return { token: data.access_token, user_id: data.user_id }
+  }
+  return null
+}
+
 interface RequestOptions {
   method?: string
   body?: any
@@ -45,10 +94,18 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
   const { method = "GET", body, headers = {} } = options
   const base = getApiBase()
 
+  // Auto-attach Authorization header if token present
+  const authHeaders: Record<string, string> = {}
+  const token = getAuthToken()
+  if (token) {
+    authHeaders["Authorization"] = `Bearer ${token}`
+  }
+
   const res = await fetch(`${base}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders,
       ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -329,9 +386,19 @@ async function gqlRequest<T>(
   variables?: Record<string, any>,
 ): Promise<T> {
   const base = getApiBase()
+
+  const authHeaders: Record<string, string> = {}
+  const token = getAuthToken()
+  if (token) {
+    authHeaders["Authorization"] = `Bearer ${token}`
+  }
+
   const res = await fetch(`${base}${GQL_ENDPOINT}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+    },
     body: JSON.stringify({ query, variables }),
   })
 

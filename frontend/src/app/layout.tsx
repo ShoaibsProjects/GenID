@@ -2,45 +2,16 @@
 import { usePathname } from "next/navigation"
 import "@/styles/globals.css"
 
-/* ─── Navigation ──────────────────────────────────────────── */
+/* ─── Navigation (strict 8 items per Master Build Plan 2.1) ── */
 const NAV = [
-  {
-    group: "Overview",
-    items: [
-      { href: "/dashboard",       label: "Dashboard",       icon: "◈" },
-    ]
-  },
-  {
-    group: "Identities",
-    items: [
-      { href: "/identities",      label: "Identities",      icon: "⊙" },
-      { href: "/agents",          label: "AI Agents (NHI)", icon: "◇" },
-    ]
-  },
-  {
-    group: "Governance",
-    items: [
-      { href: "/access",          label: "Access Control",  icon: "◈" },
-      { href: "/connectors",      label: "Connectors",      icon: "◉" },
-      { href: "/groups",          label: "Roles & Groups",  icon: "▣" },
-      { href: "/policies",        label: "Policies",        icon: "⊡" },
-    ]
-  },
-  {
-    group: "Compliance",
-    items: [
-      { href: "/certifications",  label: "Certifications",  icon: "◎" },
-    ]
-  },
-  {
-    group: "System",
-    items: [
-      { href: "/audit",           label: "Audit Logs",      icon: "⊞" },
-      { href: "/vault",           label: "Vault",           icon: "◬" },
-      { href: "/idp",             label: "IDP / OIDC",      icon: "⊛" },
-      { href: "/settings",        label: "Settings",        icon: "⚙" },
-    ]
-  },
+  { href: "/dashboard",      label: "Dashboard",      icon: "◈" },
+  { href: "/identities",     label: "Identities",     icon: "⊙" },
+  { href: "/agents",         label: "AI Agents",      icon: "◇" },
+  { href: "/access",         label: "Access Control", icon: "◈" },
+  { href: "/connectors",     label: "Connectors",     icon: "◉" },
+  { href: "/certifications", label: "Compliance",     icon: "◎" },
+  { href: "/audit",          label: "Audit Logs",     icon: "⊞" },
+  { href: "/settings",       label: "Settings",       icon: "⚙" },
 ]
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -79,18 +50,13 @@ function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-5 space-y-6">
-        {NAV.map((group) => (
-          <div key={group.group}>
-            <p className="px-3 mb-2 text-[0.55rem] font-bold uppercase tracking-[0.15em]" style={{ color: '#5C5C62' }}>{group.group}</p>
-            <div className="space-y-0.5">
-              {group.items.map((item) => (
-                <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} />
-              ))}
-            </div>
-          </div>
-        ))}
-      </nav>
+      <nav className="flex-1 overflow-y-auto px-3 py-5">
+        <div className="space-y-0.5">
+          {NAV.map((item) => (
+            <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} />
+          ))}
+     </div>
+   </nav>
 
       {/* Footer */}
       <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.04)' }}>

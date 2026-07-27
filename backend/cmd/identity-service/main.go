@@ -187,6 +187,15 @@ func main() {
 		getEnv("JWKS_URL", "http://localhost:8080/.well-known/jwks.json"),
 		loadAPIKeys(),
 		"/health", "/ready", "/healthz", "/metrics", "/",
+		"/api/v1/dev/login",
+		"/api/v1/connectors/stats",
+		"/api/v1/audit/stats",
+		"/.well-known/openid-configuration",
+		"/.well-known/jwks.json",
+		"/oauth/token", "/token",
+		"/authorize", "/userinfo", "/introspect", "/revoke",
+		"/device_authorization", "/device",
+		"/ui", "/ui/",
 	)
 	requestValidation := middleware.NewRequestValidation()
 	workflowGuard := middleware.NewWorkflowGuard(cfg.MasterKey)
@@ -200,6 +209,44 @@ func main() {
 	r.Use(requestValidation.Middleware)
 	r.Use(jwtAuth.Middleware)
 	r.Use(audit.LoggingMiddleware(auditLogStore))
+
+	// Dev Login (unauthenticated) — mint a JWT for the local frontend dev experience.
+	// POST /api/v1/dev/login { username, password } -> { access_token, ... }
+	// Disabled in production. Active when DEV_LOGIN_ENABLED=true or no API keys are configured.
+	devLoginEnabled := getEnv("DEV_LOGIN_ENABLED", "true") == "true"
+	if devLoginEnabled {
+		r.HandleFunc("/api/v1/dev/login", func(w http.ResponseWriter, r *http.Request) {
+			var req struct {
+				Username string `json:"username"`
+				Password string `json:"password"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid_request"}`, http.StatusBadRequest)
+				return
+			}
+
+			userID, err := svc.OIDCProvider().AuthenticatePassword(r.Context(), req.Username, req.Password)
+			if err != nil {
+				http.Error(w, `{"error":"invalid_credentials"}`, http.StatusUnauthorized)
+				return
+			}
+
+			token, err := svc.OIDCProvider().SignAccessToken(userID, "observeid-frontend", "openid profile email api")
+			if err != nil {
+				http.Error(w, `{"error":"token_sign_failed"}`, http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"access_token": token,
+				"token_type":   "Bearer",
+				"expires_in":   300,
+				"user_id":      userID,
+			})
+		}).Methods("POST", "OPTIONS")
+		log.Info().Msg("Dev login endpoint enabled at POST /api/v1/dev/login")
+	}
 
 	// Serve static frontend from the frontend/out directory
 	frontendDir := getEnv("FRONTEND_DIR", "")
