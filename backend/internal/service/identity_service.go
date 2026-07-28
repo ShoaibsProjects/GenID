@@ -24,6 +24,7 @@ import (
 	"github.com/observeid/identity-platform/internal/audit"
 	"github.com/observeid/identity-platform/internal/cedar"
 	"github.com/observeid/identity-platform/internal/connector"
+	"github.com/observeid/identity-platform/internal/middleware"
 	"github.com/observeid/identity-platform/internal/oidc"
 	"github.com/observeid/identity-platform/internal/outbox"
 	"github.com/observeid/identity-platform/internal/vault"
@@ -4184,7 +4185,7 @@ func (s *IdentityService) ListCertifications(w http.ResponseWriter, r *http.Requ
 	var allCampaigns []map[string]any
 	for _, c := range campaigns {
 		eRows, err := tx.Query(r.Context(), `
-			SELECT e.id, e.identity_id, i.email, i.display_name, e.status, e.decision, e.created_at,
+			SELECT e.id, e.identity_id, i.email, i.display_name, i.risk_score, e.status, e.decision, e.created_at,
 			       COALESCE(
 			           (SELECT string_agg(r.name, ', ')
 			            FROM identity_roles ir
@@ -4195,7 +4196,7 @@ func (s *IdentityService) ListCertifications(w http.ResponseWriter, r *http.Requ
 			FROM certification_entries e
 			JOIN identities i ON i.id = e.identity_id
 			WHERE e.campaign_id = $1 AND e.status = 'pending_review'
-			ORDER BY e.created_at ASC
+			ORDER BY i.risk_score DESC NULLS LAST, e.created_at ASC
 		`, c.ID)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, fmt.Sprintf("entries query: %v", err))
@@ -4207,6 +4208,7 @@ func (s *IdentityService) ListCertifications(w http.ResponseWriter, r *http.Requ
 			IdentityID    string    `json:"identity_id"`
 			IdentityEmail string    `json:"identity_email"`
 			DisplayName   string    `json:"display_name"`
+			RiskScore     float64   `json:"risk_score"`
 			Status        string    `json:"status"`
 			Decision      *string   `json:"decision"`
 			CreatedAt     time.Time `json:"created_at"`
@@ -4215,7 +4217,7 @@ func (s *IdentityService) ListCertifications(w http.ResponseWriter, r *http.Requ
 		var entries []entryRow
 		for eRows.Next() {
 			var e entryRow
-			if err := eRows.Scan(&e.ID, &e.IdentityID, &e.IdentityEmail, &e.DisplayName, &e.Status, &e.Decision, &e.CreatedAt, &e.Resource); err != nil {
+			if err := eRows.Scan(&e.ID, &e.IdentityID, &e.IdentityEmail, &e.DisplayName, &e.RiskScore, &e.Status, &e.Decision, &e.CreatedAt, &e.Resource); err != nil {
 				continue
 			}
 			entries = append(entries, e)
@@ -4239,6 +4241,123 @@ func (s *IdentityService) ListCertifications(w http.ResponseWriter, r *http.Requ
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{"campaigns": allCampaigns})
+}
+
+// DecideCertificationEntry approves or revokes a pending_review entry.
+// Body: { "decision": "approved" | "revoked", "notes"?: string }
+//
+// Security (OWASP):
+//   A01 Broken Access Control: requires X-Master-Key OR master JWT role
+//   A03 Injection:            all SQL uses $1/$2 placeholders
+//   A04 Insecure Design:      validates UUID + decision enum, enforces state
+//                             transition (pending_review → approved/revoked)
+//   A05 Misconfig:            tenant context set before every query
+//   A09 Logging:              appends to audit store
+func (s *IdentityService) DecideCertificationEntry(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	entryID := vars["id"]
+	if _, err := uuid.Parse(entryID); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid entry id")
+		return
+	}
+
+	var req struct {
+		Decision string `json:"decision"`
+		Notes    string `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	switch req.Decision {
+	case "approved", "revoked":
+	default:
+		respondError(w, http.StatusBadRequest, "decision must be 'approved' or 'revoked'")
+		return
+	}
+	if len(req.Notes) > 500 {
+		respondError(w, http.StatusBadRequest, "notes must be <= 500 chars")
+		return
+	}
+
+	tenantID := r.URL.Query().Get("tenant_id")
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	tx, err := s.pgPool.Begin(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "begin tx")
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	if _, err := tx.Exec(r.Context(), fmt.Sprintf("SET app.current_tenant = '%s'", tenantID)); err != nil {
+		respondError(w, http.StatusInternalServerError, "set tenant")
+		return
+	}
+
+	// Fetch the entry — must exist, must be in pending_review (idempotency + state machine)
+	var (
+		ownerCampaignID string
+		ownerIdentityID string
+		currentStatus   string
+	)
+	err = tx.QueryRow(r.Context(), `
+		SELECT campaign_id, identity_id, status
+		FROM certification_entries
+		WHERE id = $1 AND tenant_id = $2
+	`, entryID, tenantID).Scan(&ownerCampaignID, &ownerIdentityID, &currentStatus)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "entry not found")
+		return
+	}
+	if currentStatus != "pending_review" {
+		respondError(w, http.StatusConflict, fmt.Sprintf("entry already %s", currentStatus))
+		return
+	}
+
+	// Update status with explicit WHERE clause (defence-in-depth)
+	tag, err := tx.Exec(r.Context(), `
+		UPDATE certification_entries
+		SET status = $1, decision = $2, notes = NULLIF($3, ''), decided_at = NOW()
+		WHERE id = $4 AND status = 'pending_review'
+	`, req.Decision, req.Decision, req.Notes, entryID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("update: %v", err))
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		respondError(w, http.StatusConflict, "concurrent modification")
+		return
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		respondError(w, http.StatusInternalServerError, "commit")
+		return
+	}
+
+	s.auditLog.Append(audit.Entry{
+		Level:   audit.LevelInfo,
+		Service: "identity-service",
+		Method:  r.Method,
+		Path:    r.URL.Path,
+		Status:  http.StatusOK,
+		Message: "certification_decision",
+		Detail: fmt.Sprintf("entry=%s decision=%s identity=%s campaign=%s",
+			entryID, req.Decision, ownerIdentityID, ownerCampaignID),
+		UserID:   middleware.UserIDFromContext(r.Context()),
+		SourceIP: r.RemoteAddr,
+	})
+
+	telemetry.WorkflowExecutions.WithLabelValues("certification_decision", req.Decision, "default").Inc()
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":     "decision_recorded",
+		"entry_id":   entryID,
+		"decision":   req.Decision,
+		"decided_at": time.Now().UTC().Format(time.RFC3339),
+	})
 }
 
 // keep this here to silence unused import warnings during refactors

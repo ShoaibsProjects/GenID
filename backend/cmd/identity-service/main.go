@@ -702,6 +702,7 @@ func main() {
 	// ─── Access Certifications (IGA Compliance) ───
 	api.HandleFunc("/certifications/generate", workflowGuard.Protect(middleware.OpExecuteLCM, svc.GenerateCertification)).Methods("POST")
 	api.HandleFunc("/certifications", svc.ListCertifications).Methods("GET")
+	api.HandleFunc("/certifications/entries/{id}/decide", workflowGuard.Protect(middleware.OpExecuteLCM, svc.DecideCertificationEntry)).Methods("POST")
 
 	// ─── Identity CRUD ─────────────────────────────
 	api.HandleFunc("/identities", svc.CreateIdentityRecord).Methods("POST")

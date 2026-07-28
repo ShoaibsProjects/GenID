@@ -198,6 +198,7 @@ export interface CertificationEntry {
   identity_email: string
   display_name: string
   resource: string
+  risk_score: number
   status: string
   decision: string | null
   created_at: string
@@ -230,6 +231,17 @@ export function generateCertification(data: {
   return apiRequest<{ status: string; workflow_id: string; run_id: string }>(
     "/api/v1/certifications/generate",
     { method: "POST", body: data },
+  )
+}
+
+export function decideCertificationEntry(
+  entryId: string,
+  decision: "approved" | "revoked",
+  notes = "",
+): Promise<{ status: string; entry_id: string; decision: string; decided_at: string }> {
+  return apiRequest<{ status: string; entry_id: string; decision: string; decided_at: string }>(
+    `/api/v1/certifications/entries/${encodeURIComponent(entryId)}/decide`,
+    { method: "POST", body: { decision, notes } },
   )
 }
 
