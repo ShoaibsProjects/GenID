@@ -190,6 +190,49 @@ export function deleteIdentity(id: string): Promise<any> {
   return apiRequest<any>(`/api/v1/identities/${id}`, { method: "DELETE" })
 }
 
+// ─── Access Certifications ────────────────────────────────
+
+export interface CertificationEntry {
+  id: string
+  identity_id: string
+  identity_email: string
+  display_name: string
+  resource: string
+  status: string
+  decision: string | null
+  created_at: string
+}
+
+export interface CertificationCampaign {
+  id: string
+  name: string
+  campaign_type: string
+  status: string
+  starts_at: string
+  ends_at: string
+  pending_count: number
+  entries: CertificationEntry[]
+}
+
+export interface CertificationsResponse {
+  campaigns: CertificationCampaign[]
+}
+
+export function fetchCertifications(): Promise<CertificationsResponse> {
+  return apiRequest<CertificationsResponse>("/api/v1/certifications")
+}
+
+export function generateCertification(data: {
+  campaign_name?: string
+  campaign_type?: string
+  created_by?: string
+}): Promise<{ status: string; workflow_id: string; run_id: string }> {
+  return apiRequest<{ status: string; workflow_id: string; run_id: string }>(
+    "/api/v1/certifications/generate",
+    { method: "POST", body: data },
+  )
+}
+
 // ─── Connectors ───────────────────────────────────────────
 
 export interface ConnectorConfig {

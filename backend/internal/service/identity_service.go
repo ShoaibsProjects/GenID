@@ -4059,6 +4059,190 @@ func (s *IdentityService) GetAuditLogStats(w http.ResponseWriter, r *http.Reques
 	respondJSON(w, http.StatusOK, s.auditLog.Stats())
 }
 
+// ─── Access Certification ─────────────────────────────────
+
+// GenerateCertification triggers the Temporal AccessCertificationWorkflow which
+// scans PostgreSQL for identities with critical access, creates a campaign row,
+// and inserts one certification_entries row (status='pending_review') per identity.
+//
+// POST /api/v1/certifications/generate
+// Body: { campaign_name?: string, campaign_type?: "quarterly"|"triggered"|"emergency" }
+func (s *IdentityService) GenerateCertification(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CampaignName string `json:"campaign_name"`
+		CampaignType string `json:"campaign_type"`
+		CreatedBy    string `json:"created_by"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	if req.CampaignType == "" {
+		req.CampaignType = "quarterly"
+	}
+	if req.CreatedBy == "" {
+		req.CreatedBy = "00000000-0000-0000-0000-000000000002"
+	}
+
+	workflowID := fmt.Sprintf("certify-%s", uuid.New().String())
+	we, err := s.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: "critical-offboarding",
+	}, workflow.AccessCertificationWorkflow, workflow.AccessCertificationInput{
+		TenantID:     "00000000-0000-0000-0000-000000000001",
+		CampaignName: req.CampaignName,
+		CampaignType: req.CampaignType,
+		CreatedBy:    req.CreatedBy,
+	})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("start workflow: %v", err))
+		return
+	}
+
+	telemetry.WorkflowExecutions.WithLabelValues("access_certification", "started", "default").Inc()
+
+	respondJSON(w, http.StatusAccepted, map[string]any{
+		"status":      "campaign_initiated",
+		"workflow_id": we.GetID(),
+		"run_id":      we.GetRunID(),
+	})
+}
+
+// ListCertifications returns active campaigns with their pending_review entries.
+//
+// GET /api/v1/certifications
+//
+// Response:
+//
+//	{
+//	  "campaigns": [
+//	    {
+//	      "id": "...", "name": "...", "campaign_type": "quarterly",
+//	      "status": "active", "starts_at": "...", "ends_at": "...",
+//	      "pending_count": 5,
+//	      "entries": [
+//	        { "id":"...", "identity_id":"...", "identity_email":"...", "display_name":"...",
+//	          "status":"pending_review", "decision":null, "created_at":"..." }
+//	      ]
+//	    }
+//	  ]
+//	}
+func (s *IdentityService) ListCertifications(w http.ResponseWriter, r *http.Request) {
+	tenantID := r.URL.Query().Get("tenant_id")
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	tx, err := s.pgPool.Begin(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("begin tx: %v", err))
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	if _, err := tx.Exec(r.Context(), fmt.Sprintf("SET app.current_tenant = '%s'", tenantID)); err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("set tenant: %v", err))
+		return
+	}
+
+	rows, err := tx.Query(r.Context(), `
+		SELECT c.id, c.name, c.campaign_type, c.status, c.starts_at, c.ends_at,
+		       COUNT(e.id) FILTER (WHERE e.status = 'pending_review') AS pending_count
+		FROM certification_campaigns c
+		LEFT JOIN certification_entries e ON e.campaign_id = c.id
+		WHERE c.tenant_id = $1 AND c.status IN ('draft','active')
+		GROUP BY c.id
+		ORDER BY c.starts_at DESC
+		LIMIT 50
+	`, tenantID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("campaign query: %v", err))
+		return
+	}
+	defer rows.Close()
+
+	type campaignRow struct {
+		ID           string    `json:"id"`
+		Name         string    `json:"name"`
+		CampaignType string    `json:"campaign_type"`
+		Status       string    `json:"status"`
+		StartsAt     time.Time `json:"starts_at"`
+		EndsAt       time.Time `json:"ends_at"`
+		PendingCount int       `json:"pending_count"`
+	}
+	var campaigns []campaignRow
+	for rows.Next() {
+		var c campaignRow
+		if err := rows.Scan(&c.ID, &c.Name, &c.CampaignType, &c.Status, &c.StartsAt, &c.EndsAt, &c.PendingCount); err != nil {
+			continue
+		}
+		campaigns = append(campaigns, c)
+	}
+	rows.Close()
+
+	// Fetch pending_review entries for those campaigns
+	var allCampaigns []map[string]any
+	for _, c := range campaigns {
+		eRows, err := tx.Query(r.Context(), `
+			SELECT e.id, e.identity_id, i.email, i.display_name, e.status, e.decision, e.created_at,
+			       COALESCE(
+			           (SELECT string_agg(r.name, ', ')
+			            FROM identity_roles ir
+			            JOIN roles r ON r.id = ir.role_id
+			            WHERE ir.identity_id = e.identity_id AND ir.is_active = TRUE),
+			           'High-Risk Identity'
+			       ) AS resources
+			FROM certification_entries e
+			JOIN identities i ON i.id = e.identity_id
+			WHERE e.campaign_id = $1 AND e.status = 'pending_review'
+			ORDER BY e.created_at ASC
+		`, c.ID)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, fmt.Sprintf("entries query: %v", err))
+			return
+		}
+
+		type entryRow struct {
+			ID            string    `json:"id"`
+			IdentityID    string    `json:"identity_id"`
+			IdentityEmail string    `json:"identity_email"`
+			DisplayName   string    `json:"display_name"`
+			Status        string    `json:"status"`
+			Decision      *string   `json:"decision"`
+			CreatedAt     time.Time `json:"created_at"`
+			Resource      string    `json:"resource"`
+		}
+		var entries []entryRow
+		for eRows.Next() {
+			var e entryRow
+			if err := eRows.Scan(&e.ID, &e.IdentityID, &e.IdentityEmail, &e.DisplayName, &e.Status, &e.Decision, &e.CreatedAt, &e.Resource); err != nil {
+				continue
+			}
+			entries = append(entries, e)
+		}
+		eRows.Close()
+
+		allCampaigns = append(allCampaigns, map[string]any{
+			"id":            c.ID,
+			"name":          c.Name,
+			"campaign_type": c.CampaignType,
+			"status":        c.Status,
+			"starts_at":     c.StartsAt,
+			"ends_at":       c.EndsAt,
+			"pending_count": c.PendingCount,
+			"entries":       entries,
+		})
+	}
+
+	if allCampaigns == nil {
+		allCampaigns = []map[string]any{}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{"campaigns": allCampaigns})
+}
+
+// keep this here to silence unused import warnings during refactors
+
 // ─── Helpers ──────────────────────────────────────────────
 
 func respondJSON(w http.ResponseWriter, status int, data any) {

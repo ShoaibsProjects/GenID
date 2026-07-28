@@ -151,6 +151,7 @@ func main() {
 	w.RegisterWorkflow(workflow.DetectSoDViolationsWorkflow)
 	w.RegisterWorkflow(workflow.CascadeRevokeWorkflow)
 	w.RegisterWorkflow(workflow.RevokeAccessChildWorkflow)
+	w.RegisterWorkflow(workflow.AccessCertificationWorkflow)
 
 	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient, svc.CedarEngine(), svc.OIDCProvider())
 	w.RegisterActivity(act)
@@ -187,6 +188,9 @@ func main() {
 		getEnv("JWKS_URL", "http://localhost:8080/.well-known/jwks.json"),
 		loadAPIKeys(),
 		"/health", "/ready", "/healthz", "/metrics", "/",
+		"/dashboard", "/identities", "/agents", "/connectors", "/groups",
+		"/access", "/policies", "/audit", "/certifications", "/sod",
+		"/vault", "/settings", "/idp", "/csv",
 		"/api/v1/dev/login",
 		"/api/v1/connectors/stats",
 		"/api/v1/audit/stats",
@@ -694,6 +698,10 @@ func main() {
 	// ─── IAM Lifecycle Management (LCM) ────────────
 	api.HandleFunc("/lcm", workflowGuard.Protect(middleware.OpExecuteLCM, svc.ExecuteLCM)).Methods("POST")
 	api.HandleFunc("/lcm/history", svc.GetLCMHistory).Methods("GET")
+
+	// ─── Access Certifications (IGA Compliance) ───
+	api.HandleFunc("/certifications/generate", workflowGuard.Protect(middleware.OpExecuteLCM, svc.GenerateCertification)).Methods("POST")
+	api.HandleFunc("/certifications", svc.ListCertifications).Methods("GET")
 
 	// ─── Identity CRUD ─────────────────────────────
 	api.HandleFunc("/identities", svc.CreateIdentityRecord).Methods("POST")

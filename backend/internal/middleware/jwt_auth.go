@@ -83,6 +83,11 @@ func (j *JWTAuth) Middleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Skip auth for Next.js static asset paths
+		if strings.HasPrefix(r.URL.Path, "/_next/") || strings.HasPrefix(r.URL.Path, "/static/") {
+			next.ServeHTTP(w, r)
+			return
+		}
 
 		authHeader := r.Header.Get("Authorization")
 

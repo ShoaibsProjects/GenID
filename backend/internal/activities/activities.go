@@ -1394,7 +1394,19 @@ func (s *ActivityService) CreateCertificationCampaign(ctx context.Context, input
 	now := time.Now()
 	endsAt := now.AddDate(0, 3, 0) // 3 months from now
 
-	_, err := s.pgPool.Exec(ctx, `
+	tx, err := s.pgPool.Begin(ctx)
+	if err != nil {
+		return CertificationCampaignResult{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if input.TenantID != "" {
+		if _, err := tx.Exec(ctx, fmt.Sprintf("SET app.current_tenant = '%s'", input.TenantID)); err != nil {
+			return CertificationCampaignResult{}, fmt.Errorf("set tenant: %w", err)
+		}
+	}
+
+	_, err = tx.Exec(ctx, `
 		INSERT INTO certification_campaigns (id, tenant_id, name, campaign_type, status, starts_at, ends_at, created_by)
 		VALUES ($1, $2, $3, $4, 'active', $5, $6, $7)
 	`, campaignID, input.TenantID, input.CampaignName, input.CampaignType, now, endsAt, input.CreatedBy)
@@ -1402,43 +1414,52 @@ func (s *ActivityService) CreateCertificationCampaign(ctx context.Context, input
 		return CertificationCampaignResult{}, fmt.Errorf("create campaign: %w", err)
 	}
 
+	if err := tx.Commit(ctx); err != nil {
+		return CertificationCampaignResult{}, fmt.Errorf("commit: %w", err)
+	}
+
 	activity.RecordHeartbeat(ctx, "campaign_created")
 	return CertificationCampaignResult{CampaignID: campaignID}, nil
 }
 
 func (s *ActivityService) PopulateCertificationEntries(ctx context.Context, campaignID string, tenantID string) error {
-	// Query users with access to critical resources
-	rows, err := s.pgPool.Query(ctx, `
-		SELECT DISTINCT i.id, i.display_name, i.email
-		FROM identities i
-		JOIN identity_roles ir ON ir.identity_id = i.id AND ir.is_active = true
-		JOIN roles r ON r.id = ir.role_id
-		WHERE i.tenant_id = $1 AND i.status = 'active'
-		AND (r.name IN ('Administrator', 'Security Reviewer') OR i.risk_score > 0.7)
-		LIMIT 100
-	`, tenantID)
+	tx, err := s.pgPool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("query users: %w", err)
+		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer rows.Close()
+	defer tx.Rollback(ctx)
 
-	var count int
-	for rows.Next() {
-		var id, displayName, email string
-		if err := rows.Scan(&id, &displayName, &email); err != nil {
-			continue
+	if tenantID != "" {
+		if _, err := tx.Exec(ctx, fmt.Sprintf("SET app.current_tenant = '%s'", tenantID)); err != nil {
+			return fmt.Errorf("set tenant: %w", err)
 		}
+	}
 
-		_, err := s.pgPool.Exec(ctx, `
-			INSERT INTO certification_entries (id, campaign_id, identity_id, status)
-			VALUES ($1, $2, $3, 'pending')
-			ON CONFLICT DO NOTHING
-		`, uuid.New().String(), campaignID, id)
-		if err != nil {
-			log.Printf("[CERT] failed to create entry for %s: %v", id, err)
-			continue
-		}
-		count++
+	// Single statement: INSERT ... SELECT from the qualifying identities, ON CONFLICT skip duplicates.
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO certification_entries (id, campaign_id, identity_id, status, tenant_id)
+		SELECT gen_random_uuid(), $1, i.id, 'pending_review', i.tenant_id
+		FROM identities i
+		WHERE i.tenant_id = $2 AND i.status = 'active'
+		  AND (
+		      EXISTS (
+		          SELECT 1 FROM identity_roles ir
+		          JOIN roles r ON r.id = ir.role_id
+		          WHERE ir.identity_id = i.id AND ir.is_active = TRUE
+		            AND r.name IN ('Administrator', 'Security Reviewer')
+		      )
+		      OR i.risk_score > 0.7
+		  )
+		ON CONFLICT DO NOTHING
+	`, campaignID, tenantID)
+	if err != nil {
+		return fmt.Errorf("populate entries: %w", err)
+	}
+
+	count := int(tag.RowsAffected())
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
 	}
 
 	activity.RecordHeartbeat(ctx, fmt.Sprintf("populated_%d_entries", count))
