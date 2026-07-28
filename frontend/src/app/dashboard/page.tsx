@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
+import { authFetch } from "@/lib/api"
 
 export default function DashboardPage() {
   const [identityStats, setIdentityStats] = useState<any>(null)
@@ -12,11 +13,11 @@ export default function DashboardPage() {
     async function load() {
       try {
         const [conn, audit, h] = await Promise.all([
-          fetch("/api/v1/connectors/stats").then(r => r.json()).catch(() => null),
-          fetch("/api/v1/audit/stats").then(r => r.json()).catch(() => null),
+          authFetch("/api/v1/connectors/stats").then(r => r.json()).catch(() => null),
+          authFetch("/api/v1/audit/stats").then(r => r.json()).catch(() => null),
           fetch("/healthz").then(r => r.json()).catch(() => null),
         ])
-        const idRes = await fetch("/api/v1/identities?limit=1").then(r => r.json()).catch(() => null)
+        const idRes = await authFetch("/api/v1/identities?limit=1").then(r => r.json()).catch(() => null)
         setIdentityStats(idRes)
         setConnectorStats(conn)
         setAuditStats(audit)

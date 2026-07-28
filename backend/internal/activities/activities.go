@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/observeid/identity-platform/internal/audit"
 	"github.com/observeid/identity-platform/internal/cedar"
 	"github.com/observeid/identity-platform/internal/oidc"
 	"github.com/redis/go-redis/v9"
@@ -204,13 +205,14 @@ type ActivityService struct {
 	temporal client.Client
 	cedarEng *cedar.CedarEngine
 	oidcProv *oidc.Provider
+	chain    *audit.Chain
 
 	lockMu       sync.Mutex
 	fenceCounter int64
 }
 
-func NewActivityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client, cedarEng *cedar.CedarEngine, oidcProv *oidc.Provider) *ActivityService {
-	return &ActivityService{
+func NewActivityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb *redis.Client, tc client.Client, cedarEng *cedar.CedarEngine, oidcProv *oidc.Provider, chain ...*audit.Chain) *ActivityService {
+	svc := &ActivityService{
 		pgPool:       pgPool,
 		neo4j:        neo4j,
 		redis:        rdb,
@@ -219,20 +221,35 @@ func NewActivityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 		oidcProv:     oidcProv,
 		fenceCounter: time.Now().UnixMilli(),
 	}
+	if len(chain) > 0 {
+		svc.chain = chain[0]
+	}
+	return svc
+}
+
+// auditChained writes one tamper-evident audit row via the shared chain.
+// All workflow audit events flow through here so the ledger is complete.
+func (s *ActivityService) auditChained(ctx context.Context, e audit.ChainEntry) error {
+	if s.chain == nil {
+		return nil
+	}
+	_, _, err := s.chain.Append(ctx, e)
+	return err
 }
 
 // ─── Audit Activities ──────────────────────────────────────
 
 func (s *ActivityService) InitiateAuditTrail(ctx context.Context, params AuditTrailParams) (AuditTrailResult, error) {
-	auditID := uuid.New().String()
-
-	_, err := s.pgPool.Exec(ctx, `
-		INSERT INTO audit_log (id, tenant_id, event_type, actor_id, actor_type, action, resource, details, ip_address, created_at)
-		VALUES ($1, $2, 'workflow_started', $3, $4, $5, $6, $7, 'internal', NOW())`,
-		auditID, params.TenantID, params.IdentityID, params.IdentityType,
-		params.Operation, "identity:"+params.IdentityID,
-		json.RawMessage(fmt.Sprintf(`{"reason":"%s","requested_by":"%s"}`, params.Reason, params.RequestedBy)),
-	)
+	auditID, _, err := s.chain.Append(ctx, audit.ChainEntry{
+		TenantID:  params.TenantID,
+		EventType: "workflow_started",
+		ActorID:   params.IdentityID,
+		ActorType: params.IdentityType,
+		Action:    params.Operation,
+		Resource:  "identity:" + params.IdentityID,
+		Details:   json.RawMessage(fmt.Sprintf(`{"reason":%q,"requested_by":%q}`, params.Reason, params.RequestedBy)),
+		IPAddress: "internal",
+	})
 	if err != nil {
 		return AuditTrailResult{}, fmt.Errorf("audit trail insert: %w", err)
 	}
@@ -460,16 +477,17 @@ func (s *ActivityService) RevokeTargetAccess(ctx context.Context, params Revocat
 		params.ExternalID = extID
 	}
 
-	// Record revocation in PostgreSQL
-	_, err := s.pgPool.Exec(ctx, `
-		INSERT INTO audit_log (id, tenant_id, event_type, actor_id, action, resource, details, ip_address, created_at)
-		VALUES ($1, $2, 'entitlement_revoked', $3, 'revoke', $4,
-		        jsonb_build_object('connector_id', $5, 'external_id', $6, 'reason', $7, 'is_emergency', $8), 'internal', NOW())`,
-		uuid.New().String(), params.TenantID, params.IdentityID,
-		"entitlement:"+params.EntitlementID, params.ConnectorID, params.ExternalID,
-		params.Reason, params.IsEmergency,
-	)
-	if err != nil {
+	// Record revocation in the tamper-evident ledger
+	details, _ := json.Marshal(map[string]any{
+		"connector_id": params.ConnectorID, "external_id": params.ExternalID,
+		"reason": params.Reason, "is_emergency": params.IsEmergency,
+	})
+	if err := s.auditChained(ctx, audit.ChainEntry{
+		TenantID: params.TenantID, EventType: "entitlement_revoked",
+		ActorID: params.IdentityID, Action: "revoke",
+		Resource: "entitlement:" + params.EntitlementID,
+		Details: details, IPAddress: "internal",
+	}); err != nil {
 		return fmt.Errorf("revoke: audit log: %w", err)
 	}
 
@@ -488,16 +506,18 @@ func (s *ActivityService) RevokeTargetAccess(ctx context.Context, params Revocat
 }
 
 func (s *ActivityService) ProvisionAccess(ctx context.Context, params ProvisionParams) error {
-	// Write provisioning record
-	_, err := s.pgPool.Exec(ctx, `
-		INSERT INTO audit_log (id, tenant_id, event_type, actor_id, action, resource, details, ip_address, created_at)
-		VALUES ($1, $2, 'access_provisioned', $3, 'provision', $4,
-		        jsonb_build_object('resource_id', $5, 'role_id', $6, 'duration_minutes', $7, 'reason', $8, 'granted_by', $9), 'internal', NOW())`,
-		uuid.New().String(), params.TenantID, params.IdentityID,
-		"resource:"+params.ResourceID, params.ResourceID, params.RoleID,
-		params.DurationMinutes, params.Reason, params.GrantedBy,
-	)
-	if err != nil {
+	// Write provisioning record to the tamper-evident ledger
+	details, _ := json.Marshal(map[string]any{
+		"resource_id": params.ResourceID, "role_id": params.RoleID,
+		"duration_minutes": params.DurationMinutes,
+		"reason": params.Reason, "granted_by": params.GrantedBy,
+	})
+	if err := s.auditChained(ctx, audit.ChainEntry{
+		TenantID: params.TenantID, EventType: "access_provisioned",
+		ActorID: params.IdentityID, Action: "provision",
+		Resource: "resource:" + params.ResourceID,
+		Details: details, IPAddress: "internal",
+	}); err != nil {
 		return fmt.Errorf("provision: audit log: %w", err)
 	}
 
@@ -556,15 +576,17 @@ func (s *ActivityService) ProvisionTemporaryAccess(ctx context.Context, params P
 
 	expiresAt := time.Now().Add(time.Duration(params.DurationMinutes) * time.Minute)
 
-	_, err := s.pgPool.Exec(ctx, `
-		INSERT INTO audit_log (id, tenant_id, event_type, actor_id, action, resource, details, ip_address, created_at)
-		VALUES ($1, $2, 'temporary_access_granted', $3, 'jit_provision', $4,
-		        jsonb_build_object('resource_id', $5, 'duration_minutes', $6, 'expires_at', $7, 'granted_by', $8, 'reason', $9), 'internal', NOW())`,
-		uuid.New().String(), params.TenantID, params.IdentityID,
-		"resource:"+params.ResourceID, params.ResourceID, params.DurationMinutes,
-		expiresAt.Format(time.RFC3339), params.GrantedBy, params.Reason,
-	)
-	if err != nil {
+	details, _ := json.Marshal(map[string]any{
+		"resource_id": params.ResourceID, "duration_minutes": params.DurationMinutes,
+		"expires_at": expiresAt.Format(time.RFC3339),
+		"granted_by": params.GrantedBy, "reason": params.Reason,
+	})
+	if err := s.auditChained(ctx, audit.ChainEntry{
+		TenantID: params.TenantID, EventType: "temporary_access_granted",
+		ActorID: params.IdentityID, Action: "jit_provision",
+		Resource: "resource:" + params.ResourceID,
+		Details: details, IPAddress: "internal",
+	}); err != nil {
 		return fmt.Errorf("temp provision: audit log: %w", err)
 	}
 
@@ -642,12 +664,12 @@ func (s *ActivityService) RevokeTemporaryAccess(ctx context.Context, params map[
 		}
 	}
 
-	// Audit log — audit failure should not block the operation
-	if _, err := s.pgPool.Exec(ctx, `
-		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, created_at)
-		VALUES ($1, 'temporary_access_revoked', $2, 'jit_revoke', $3,
-		        jsonb_build_object('reason', 'expired'), NOW())`,
-		uuid.New().String(), identityID, "resource:"+resourceID); err != nil {
+	// Audit — failure should not block the operation
+	if err := s.auditChained(ctx, audit.ChainEntry{
+		EventType: "temporary_access_revoked", ActorID: identityID,
+		Action: "jit_revoke", Resource: "resource:" + resourceID,
+		Details: json.RawMessage(`{"reason":"expired"}`), IPAddress: "internal",
+	}); err != nil {
 		activity.RecordHeartbeat(ctx, "temp_access_audit_write_failed", err.Error())
 	}
 
@@ -660,13 +682,12 @@ func (s *ActivityService) RevokeTemporaryAccess(ctx context.Context, params map[
 func (s *ActivityService) RevokeSPIFFESVID(ctx context.Context, params map[string]any) error {
 	agentID, _ := params["agent_id"].(string)
 
-	// Record SPIFFE revocation intent
-	_, err := s.pgPool.Exec(ctx, `
-		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, ip_address, created_at)
-		VALUES ($1, 'spiffe_svid_revoked', $2, 'revoke_spiffe', $3,
-		        jsonb_build_object('method', 'spire_entry_deletion'), 'internal', NOW())`,
-		uuid.New().String(), agentID, "agent:"+agentID)
-	if err != nil {
+	// Record SPIFFE revocation intent in the ledger
+	if err := s.auditChained(ctx, audit.ChainEntry{
+		EventType: "spiffe_svid_revoked", ActorID: agentID,
+		Action: "revoke_spiffe", Resource: "agent:" + agentID,
+		Details: json.RawMessage(`{"method":"spire_entry_deletion"}`), IPAddress: "internal",
+	}); err != nil {
 		return fmt.Errorf("revoke SVID: audit log: %w", err)
 	}
 
@@ -687,12 +708,12 @@ func (s *ActivityService) RevokeOAuthTokens(ctx context.Context, params map[stri
 	// Clear active sessions
 	s.redis.Del(ctx, fmt.Sprintf("session:active:%s", agentID))
 
-	// Audit log — best-effort, don't block revocation on audit failure
-	if _, err := s.pgPool.Exec(ctx, `
-		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, ip_address, created_at)
-		VALUES ($1, 'oauth_tokens_revoked', $2, 'revoke_oauth', $3,
-		        jsonb_build_object('method', 'token_invalidation'), 'internal', NOW())`,
-		uuid.New().String(), agentID, "agent:"+agentID); err != nil {
+	// Audit — best-effort, don't block revocation on audit failure
+	if err := s.auditChained(ctx, audit.ChainEntry{
+		EventType: "oauth_tokens_revoked", ActorID: agentID,
+		Action: "revoke_oauth", Resource: "agent:" + agentID,
+		Details: json.RawMessage(`{"method":"token_invalidation"}`), IPAddress: "internal",
+	}); err != nil {
 		activity.RecordHeartbeat(ctx, "oauth_audit_write_failed", err.Error())
 	}
 
@@ -713,12 +734,12 @@ func (s *ActivityService) RevokeAPIKeys(ctx context.Context, params map[string]a
 	// Invalidate in Redis
 	s.redis.Del(ctx, fmt.Sprintf("apikey:hash:%s:*", agentID))
 
-	// Audit log — best-effort
-	if _, err := s.pgPool.Exec(ctx, `
-		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, ip_address, created_at)
-		VALUES ($1, 'api_keys_revoked', $2, 'revoke_apikeys', $3,
-		        jsonb_build_object('method', 'key_rotation'), 'internal', NOW())`,
-		uuid.New().String(), agentID, "agent:"+agentID); err != nil {
+	// Audit — best-effort
+	if err := s.auditChained(ctx, audit.ChainEntry{
+		EventType: "api_keys_revoked", ActorID: agentID,
+		Action: "revoke_apikeys", Resource: "agent:" + agentID,
+		Details: json.RawMessage(`{"method":"key_rotation"}`), IPAddress: "internal",
+	}); err != nil {
 		activity.RecordHeartbeat(ctx, "apikeys_audit_write_failed", err.Error())
 	}
 
@@ -869,14 +890,15 @@ func (s *ActivityService) AssignRoleToIdentity(ctx context.Context, params Assig
 		return fmt.Errorf("assign role: neo4j: %w", err)
 	}
 
-	// Audit log — best-effort, don't block role assignment
-	if _, err := s.pgPool.Exec(ctx, `
-		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, ip_address, created_at)
-		VALUES ($1, 'role_assigned', $2, 'assign_role', $3,
-		        jsonb_build_object('role_name', $4, 'role_id', $5), 'internal', NOW())`,
-		uuid.New().String(), params.IdentityID, "role:"+params.RoleID,
-		params.RoleName, params.RoleID); err != nil {
-		// Non-critical — log and continue
+	// Audit — best-effort, don't block role assignment
+	roleDetails, _ := json.Marshal(map[string]any{
+		"role_name": params.RoleName, "role_id": params.RoleID,
+	})
+	if err := s.auditChained(ctx, audit.ChainEntry{
+		EventType: "role_assigned", ActorID: params.IdentityID,
+		Action: "assign_role", Resource: "role:" + params.RoleID,
+		Details: roleDetails, IPAddress: "internal",
+	}); err != nil {
 		activity.RecordHeartbeat(ctx, "role_assignment_audit_write_failed", err.Error())
 	}
 
@@ -1311,12 +1333,13 @@ func (s *ActivityService) RotateCredentials(ctx context.Context, params map[stri
 	// Revoke old credentials in Redis
 	s.redis.Del(ctx, fmt.Sprintf("cred:%s:%s", credType, identityID))
 
-	// Audit
-	_, _ = s.pgPool.Exec(ctx, `
-		INSERT INTO audit_log (id, event_type, actor_id, action, resource, details, created_at)
-		VALUES ($1, 'credential_rotated', $2, 'rotate_credential', $3,
-		        jsonb_build_object('credential_type', $4), NOW())`,
-		uuid.New().String(), identityID, "identity:"+identityID, credType)
+	// Audit — best-effort, rotation already succeeded
+	credDetails, _ := json.Marshal(map[string]any{"credential_type": credType})
+	_ = s.auditChained(ctx, audit.ChainEntry{
+		EventType: "credential_rotated", ActorID: identityID,
+		Action: "rotate_credential", Resource: "identity:" + identityID,
+		Details: credDetails, IPAddress: "internal",
+	})
 
 	activity.RecordHeartbeat(ctx, "credential_rotated")
 	return result, nil

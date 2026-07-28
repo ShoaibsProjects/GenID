@@ -1,5 +1,7 @@
 "use client"
+import { useEffect } from "react"
 import { usePathname } from "next/navigation"
+import { isLoggedIn, devLogin } from "@/lib/api"
 import "@/styles/globals.css"
 
 /* ─── Navigation — grouped per 5-Plane Architecture ──
@@ -46,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body>
+        <AuthBootstrap />
         <div className="flex h-screen overflow-hidden">
           <Sidebar />
           <main className="flex-1 overflow-y-auto relative z-10">
@@ -57,6 +60,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </body>
     </html>
   )
+}
+
+// AuthBootstrap silently mints a dev JWT on first load when the backend
+// runs with DEV_LOGIN_ENABLED=true. In production the endpoint is absent
+// and this no-ops (pages surface their own auth errors).
+function AuthBootstrap() {
+  useEffect(() => {
+    if (!isLoggedIn()) {
+      devLogin("admin@observeid.io", "dev-login").then((ok) => {
+        if (ok) window.location.reload()
+      }).catch(() => {})
+    }
+  }, [])
+  return null
 }
 
 function Sidebar() {

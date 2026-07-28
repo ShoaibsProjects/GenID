@@ -153,7 +153,7 @@ func main() {
 	w.RegisterWorkflow(workflow.RevokeAccessChildWorkflow)
 	w.RegisterWorkflow(workflow.AccessCertificationWorkflow)
 
-	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient, svc.CedarEngine(), svc.OIDCProvider())
+	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient, svc.CedarEngine(), svc.OIDCProvider(), svc.AuditChain())
 	w.RegisterActivity(act)
 
 	if err := w.Start(); err != nil {
@@ -171,6 +171,14 @@ func main() {
 	go outboxProc.Start(context.Background())
 	log.Info().Msg("Outbox processor started (500ms poll, batch 100)")
 	defer outboxProc.Stop()
+
+	// ─── Backfill Tamper-Evident Audit Chain ────────────
+	// Computes SHA-256 chain hashes for any legacy audit rows (hash IS NULL).
+	if n, err := svc.AuditChain().Backfill(context.Background()); err != nil {
+		log.Warn().Err(err).Msg("Audit chain backfill failed")
+	} else if n > 0 {
+		log.Info().Int("rows", n).Msg("Audit chain backfilled legacy rows")
+	}
 
 	// ─── Initialize NATS Event Bus ────────────────────────
 	natsBus, err := eventbus.NewNatsBus(getEnv("NATS_URL", "nats://localhost:4222"))
@@ -212,7 +220,7 @@ func main() {
 	r.Use(rateLimiter.Middleware)
 	r.Use(requestValidation.Middleware)
 	r.Use(jwtAuth.Middleware)
-	r.Use(audit.LoggingMiddleware(auditLogStore))
+	r.Use(audit.LoggingMiddleware(auditLogStore, svc.AuditChain()))
 
 	// Dev Login (unauthenticated) — mint a JWT for the local frontend dev experience.
 	// POST /api/v1/dev/login { username, password } -> { access_token, ... }
@@ -803,6 +811,7 @@ func main() {
 	api.HandleFunc("/audit/logs", svc.ListAuditLogs).Methods("GET")
 	api.HandleFunc("/audit/logs/{id}", svc.GetAuditLog).Methods("GET")
 	api.HandleFunc("/audit/stats", svc.GetAuditLogStats).Methods("GET")
+	api.HandleFunc("/audit/verify", svc.VerifyAuditChain).Methods("GET")
 
 	// Metrics
 	r.Handle("/metrics", telemetry.MetricsHandler()).Methods("GET")

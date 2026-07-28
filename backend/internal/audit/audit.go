@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/observeid/identity-platform/internal/middleware"
 )
 
 type Level string
@@ -46,6 +48,9 @@ type Entry struct {
 	SourceIP  string    `json:"source_ip,omitempty"`
 	Tags      []string  `json:"tags,omitempty"`
 	Raw       json.RawMessage `json:"raw,omitempty"`
+	// Hash is the SHA-256 chain hash assigned when this entry was
+	// persisted to the tamper-evident ledger (audit_log).
+	Hash      string    `json:"hash,omitempty"`
 }
 
 type Store struct {
@@ -172,7 +177,10 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
-func LoggingMiddleware(store *Store) func(http.Handler) http.Handler {
+// LoggingMiddleware records every HTTP request into the in-memory ring
+// buffer (fast UI reads) and, when chain is non-nil, persists it to the
+// tamper-evident ledger. Chain errors never block the request path.
+func LoggingMiddleware(store *Store, chain *Chain) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -203,7 +211,7 @@ func LoggingMiddleware(store *Store) func(http.Handler) http.Handler {
 				tags = append(tags, "error")
 			}
 
-			store.Append(Entry{
+			entry := Entry{
 				Level:     level,
 				Service:   "observeid-api",
 				Method:    r.Method,
@@ -213,10 +221,44 @@ func LoggingMiddleware(store *Store) func(http.Handler) http.Handler {
 				Message:   msg,
 				Detail:    detail,
 				SourceIP:  r.RemoteAddr,
-		Tags:      tags,
-			})
+				Tags:      tags,
+			}
+
+			// Tamper-evident ledger write (post-response, ~1ms local).
+			// The assigned chain hash rides along on the in-memory entry
+			// so the UI can display it.
+			if chain != nil {
+				details, _ := json.Marshal(map[string]any{
+					"method": r.Method, "path": r.URL.Path,
+					"status": rw.status, "latency": entry.Latency,
+				})
+				_, hash, err := chain.Append(r.Context(), ChainEntry{
+					EventType: "http_request",
+					ActorID:   actorFromRequest(r),
+					ActorType: "http",
+					Action:    r.Method + " " + r.URL.Path,
+					Resource:  r.URL.Path,
+					Details:   details,
+					IPAddress: r.RemoteAddr,
+				})
+				if err != nil {
+					fmt.Printf("[WARN] audit chain append failed: %v\n", err)
+				} else {
+					entry.Hash = hash
+				}
+			}
+
+			store.Append(entry)
 		})
 	}
+}
+
+// actorFromRequest extracts the authenticated user id from context if present.
+func actorFromRequest(r *http.Request) string {
+	if id := middleware.UserIDFromContext(r.Context()); id != "" {
+		return id
+	}
+	return "anonymous"
 }
 
 type StoreStats struct {

@@ -43,6 +43,7 @@ type IdentityService struct {
 	provisionEng *connector.ProvisioningEngine
 	vault        *vault.Vault
 	auditLog     *audit.Store
+	auditChain   *audit.Chain
 	oidcProvider *oidc.Provider
 	cedarEngine  *cedar.CedarEngine
 	outbox       *outbox.Outbox
@@ -60,6 +61,7 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 		vlt, _ = vault.NewVault("default-insecure-key-do-not-use-in-production-32chars-min", "")
 	}
 	alog := audit.NewStore(10000)
+	achain := audit.NewChain(pgPool)
 	oidcProv, err := oidc.NewProvider(pgPool, "http://localhost:8080")
 	if err != nil {
 		log.Printf("[IDENTITY] OIDC provider initialization failed: %v", err)
@@ -80,6 +82,7 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 		provisionEng: connector.NewProvisioningEngine(connMgr),
 		vault:        vlt,
 		auditLog:     alog,
+		auditChain:   achain,
 		oidcProvider: oidcProv,
 		cedarEngine:  cedarEng,
 		outbox:       outboxEng,
@@ -87,6 +90,7 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 }
 
 func (s *IdentityService) AuditStore() *audit.Store { return s.auditLog }
+func (s *IdentityService) AuditChain() *audit.Chain { return s.auditChain }
 func (s *IdentityService) SaveVault() error         { return s.vault.Save() }
 func (s *IdentityService) ConnectorManager() *connector.Manager { return s.connMgr }
 func (s *IdentityService) Pool() *pgxpool.Pool                 { return s.pgPool }
@@ -4079,6 +4083,23 @@ func (s *IdentityService) GetAuditLog(w http.ResponseWriter, r *http.Request) {
 
 func (s *IdentityService) GetAuditLogStats(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, s.auditLog.Stats())
+}
+
+// VerifyAuditChain replays the entire tamper-evident ledger and recomputes
+// every SHA-256 chain hash. Returns {"status":"intact"} or
+// {"status":"tampered","broken_at":"<row_id>"}.
+//
+// GET /api/v1/audit/verify
+func (s *IdentityService) VerifyAuditChain(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	result, err := s.auditChain.Verify(ctx)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "chain verification failed: "+err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, result)
 }
 
 // ─── Access Certification ─────────────────────────────────

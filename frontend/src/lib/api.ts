@@ -90,6 +90,31 @@ interface RequestOptions {
   headers?: Record<string, string>
 }
 
+// authFetch is a drop-in replacement for fetch() that attaches the JWT
+// to same-origin API calls. Use for all /api/*, /scim/*, /graphql calls.
+export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const token = getAuthToken()
+  const headers = new Headers(init.headers || {})
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`)
+  }
+  return fetch(input, { ...init, headers })
+}
+
+// ─── Audit Chain Verification ────────────────────────────
+
+export interface AuditVerifyResult {
+  status: "intact" | "tampered"
+  checked: number
+  broken_at?: string
+  reason?: string
+  verified_at: string
+}
+
+export function fetchAuditVerify(): Promise<AuditVerifyResult> {
+  return apiRequest<AuditVerifyResult>("/api/v1/audit/verify")
+}
+
 async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, headers = {} } = options
   const base = getApiBase()

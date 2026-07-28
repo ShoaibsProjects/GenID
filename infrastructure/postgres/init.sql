@@ -266,6 +266,12 @@ CREATE TABLE audit_log (
     user_agent      TEXT,
     correlation_id  VARCHAR(255),
     trace_id        VARCHAR(255),
+    -- Tamper-evident hash chain (SHA-256). prev_hash links each row to the
+    -- previous entry; hash covers immutable fields only (created_at,
+    -- tenant_id, event_type, actor_id, action, resource) so legitimate
+    -- post-hoc updates to `details` do not break the chain.
+    prev_hash       VARCHAR(64),
+    hash            VARCHAR(64),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -274,6 +280,7 @@ CREATE INDEX idx_audit_event_type   ON audit_log(event_type);
 CREATE INDEX idx_audit_actor        ON audit_log(actor_id);
 CREATE INDEX idx_audit_created_at   ON audit_log(created_at DESC);
 CREATE INDEX idx_audit_correlation  ON audit_log(correlation_id);
+CREATE INDEX idx_audit_hash         ON audit_log(hash);
 -- Partition by month for retention
 
 -- ─── CAEP Events ───────────────────────────────────────────

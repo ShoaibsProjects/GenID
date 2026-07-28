@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { authFetch, fetchAuditVerify, AuditVerifyResult } from "@/lib/api"
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -17,6 +18,7 @@ interface LogEntry {
   detail?: string
   source_ip?: string
   tags?: string[]
+  hash?: string
 }
 
 interface LogStats {
@@ -213,6 +215,7 @@ export default function AuditPage() {
   const [stats, setStats] = useState<LogStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [integrity, setIntegrity] = useState<AuditVerifyResult | null>(null)
 
   // Filters
   const [filterLevel, setFilterLevel] = useState("")
@@ -259,7 +262,7 @@ export default function AuditPage() {
   const fetchLogs = useCallback(async () => {
     try {
       const url = `/api/v1/audit/logs?${buildParams()}`
-      const res = await fetch(url)
+      const res = await authFetch(url)
       const data = await res.json()
       setEntries(data.entries || [])
       setStats(data.stats || null)
@@ -269,6 +272,8 @@ export default function AuditPage() {
     } finally {
       setLoading(false)
     }
+    // Chain integrity check (non-blocking — pill updates independently)
+    fetchAuditVerify().then(setIntegrity).catch(() => {})
   }, [filterLevel, filterMethod, filterStatus, filterPath, filterSourceIP, filterTimePreset, pageSize, page])
 
   // Polling
@@ -312,6 +317,29 @@ export default function AuditPage() {
           <h1 className="text-2xl font-bold text-white">Access Logs</h1>
           <p className="text-sm text-gray-400 mt-1">Real-time request/response audit trail with full traceability</p>
         </div>
+        {/* Cryptographic integrity pill — live from /api/v1/audit/verify */}
+        {integrity ? (
+          integrity.status === "intact" ? (
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+              title={`${integrity.checked} chained rows verified at ${integrity.verified_at}`}
+            >
+              <span className="dot-live" />
+              Cryptographic Integrity: Verified ({integrity.checked})
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/30"
+              title={integrity.reason || "chain broken"}
+            >
+              ⚠ TAMPERED at {integrity.broken_at?.substring(0, 8)}…
+            </span>
+          )
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-500/10 text-gray-400 border border-gray-500/30">
+            Integrity: checking…
+          </span>
+        )}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <div className={`w-2 h-2 rounded-full ${autoRefresh ? "bg-emerald-500 animate-pulse" : "bg-gray-600"}`} />
@@ -647,6 +675,7 @@ export default function AuditPage() {
                   <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500 uppercase">Path / Message</th>
                   <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500 uppercase w-36">Source IP</th>
                   <th className="text-right py-2.5 px-3 text-xs font-medium text-gray-500 uppercase w-20">Latency</th>
+                  <th className="text-left py-2.5 px-3 text-xs font-medium text-gray-500 uppercase w-24">Hash</th>
                   <th className="text-right py-2.5 px-3 text-xs font-medium text-gray-500 uppercase w-16">Detail</th>
                 </tr>
               </thead>
@@ -679,6 +708,15 @@ export default function AuditPage() {
                       {e.source_ip || "-"}
                     </td>
                     <td className="py-2 px-3 text-xs text-gray-400 font-mono text-right">{e.latency || "-"}</td>
+                    <td className="py-2 px-3">
+                      {e.hash ? (
+                        <span className="text-xs font-mono text-emerald-400/80" title={`SHA-256 chain hash: ${e.hash}`}>
+                          {e.hash.substring(0, 8)}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-600">—</span>
+                      )}
+                    </td>
                     <td className="py-2 px-3 text-right">
                       {e.detail ? (
                         <span

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { authFetch } from "@/lib/api"
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -133,7 +134,7 @@ export default function IdentitiesPage() {
     setLoading(true)
     setError("")
     try {
-      const res = await fetch(`/api/v1/identities?${buildParams()}`)
+      const res = await authFetch(`/api/v1/identities?${buildParams()}`)
       const data = await res.json()
       setIdentities(data.identities || [])
       setTotal(data.total || 0)
@@ -182,9 +183,9 @@ export default function IdentitiesPage() {
     setDetailLoading(true)
     try {
       const [ident, ent, blast] = await Promise.all([
-        fetch(`/api/v1/identities/${id.id}`).then(r => r.json()).catch(() => null),
-        fetch(`/api/v1/identities/${id.id}/entitlements`).then(r => r.json()).catch(() => null),
-        fetch(`/api/v1/identities/${id.id}/blast-radius`).then(r => r.json()).catch(() => null),
+        authFetch(`/api/v1/identities/${id.id}`).then(r => r.json()).catch(() => null),
+        authFetch(`/api/v1/identities/${id.id}/entitlements`).then(r => r.json()).catch(() => null),
+        authFetch(`/api/v1/identities/${id.id}/blast-radius`).then(r => r.json()).catch(() => null),
       ])
       setDetailData({ identity: ident, entitlements: ent, blast_radius: blast })
     } catch (_) {
@@ -197,7 +198,7 @@ export default function IdentitiesPage() {
   // ── Add identity ─────────────────────────────────────
   async function handleAdd() {
     try {
-      const res = await fetch("/api/v1/identities", {
+      const res = await authFetch("/api/v1/identities", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(addForm),
@@ -214,7 +215,7 @@ export default function IdentitiesPage() {
   async function handleDelete(id: string) {
     if (!confirm("Terminate this identity?")) return
     try {
-      await fetch(`/api/v1/identities/${id}`, { method: "DELETE" })
+      await authFetch(`/api/v1/identities/${id}`, { method: "DELETE" })
       fetchIdentities()
     } catch (e: any) {
       alert("Delete failed: " + e.message)
@@ -226,7 +227,7 @@ export default function IdentitiesPage() {
   async function handleBlastRadius(identityId: string, name: string) {
     setBlastLoading(identityId)
     try {
-      const res = await fetch(`/api/v1/identities/${identityId}/blast-radius`)
+      const res = await authFetch(`/api/v1/identities/${identityId}/blast-radius`)
       const data = await res.json()
       console.log(`Blast radius graph for ${name}:`, data)
     } catch (e: any) {
