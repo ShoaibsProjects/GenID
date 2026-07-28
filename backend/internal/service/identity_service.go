@@ -815,7 +815,7 @@ func (s *IdentityService) ListAgents(w http.ResponseWriter, r *http.Request) {
 		OPTIONAL MATCH (n)-[:OWNED_BY]->(owner:Identity)
 		RETURN n.uuid AS uuid, n.name AS name, n.type AS type, n.status AS status,
 			   n.risk_score AS risk_score, n.is_governed AS is_governed,
-			   owner.display_name AS owner_name
+			   COALESCE(owner.display_name, n.owner_name) AS owner_name
 		ORDER BY n.risk_score DESC
 		SKIP $offset LIMIT $limit
 	`, map[string]any{"offset": offset, "limit": limit})
@@ -827,13 +827,15 @@ func (s *IdentityService) ListAgents(w http.ResponseWriter, r *http.Request) {
 	var agents []map[string]any
 	for result.Next(r.Context()) {
 		rec := result.Record()
+		id := getRecordVal(rec, "uuid")
 		agents = append(agents, map[string]any{
-			"uuid":        getRecordVal(rec, "uuid"),
+			"id":          id,
+			"uuid":        id,
 			"name":        getRecordVal(rec, "name"),
 			"type":        getRecordVal(rec, "type"),
 			"status":      getRecordVal(rec, "status"),
-			"risk_score":  getRecordVal(rec, "risk_score"),
-			"is_governed": getRecordVal(rec, "is_governed"),
+			"risk_score":  getRecordFloat(rec, "risk_score"),
+			"is_governed": getRecordBool(rec, "is_governed"),
 			"owner_name":  getRecordVal(rec, "owner_name"),
 		})
 	}
@@ -848,8 +850,10 @@ func (s *IdentityService) RegisterAgent(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		Name         string   `json:"name"`
 		AgentType    string   `json:"agent_type"`
+		Type         string   `json:"type"` // alias for agent_type (frontend compatibility)
 		Protocols    []string `json:"protocols"`
 		OwnerID      string   `json:"owner_id"`
+		OwnerName    string   `json:"owner_name"` // display-only when owner_id unknown
 		TeamID       string   `json:"team_id"`
 		Env          string   `json:"deployment_environment"`
 		Capabilities []string `json:"requested_capabilities"`
@@ -859,6 +863,19 @@ func (s *IdentityService) RegisterAgent(w http.ResponseWriter, r *http.Request) 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "Invalid request")
 		return
+	}
+	if req.Name == "" {
+		respondError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if req.AgentType == "" {
+		req.AgentType = req.Type
+	}
+	if req.AgentType == "" {
+		req.AgentType = "ai_agent"
+	}
+	if req.TenantID == "" {
+		req.TenantID = "00000000-0000-0000-0000-000000000001"
 	}
 
 	agentID := uuid.New().String()
@@ -872,18 +889,22 @@ func (s *IdentityService) RegisterAgent(w http.ResponseWriter, r *http.Request) 
 		CREATE (n:NonHumanIdentity {
 			uuid: $uuid, tenant_id: $tenant_id, name: $name, type: $type,
 			status: 'active', agent_card_id: $card_id, protocols: $protocols,
-			owner_id: $owner_id, team_id: $team_id, capabilities: $capabilities,
+			owner_id: $owner_id, owner_name: $owner_name, team_id: $team_id,
+			capabilities: $capabilities,
 			deployment_environment: $env, is_governed: true,
 			risk_score: 0.3, created_at: datetime()
 		})
 		WITH n
-		MATCH (owner:Identity {uuid: $owner_id})
-		CREATE (n)-[:OWNED_BY {ownership_type: 'primary'}]->(owner)
+		OPTIONAL MATCH (owner:Identity {uuid: $owner_id})
+		FOREACH (_ IN CASE WHEN owner IS NULL THEN [] ELSE [1] END |
+			CREATE (n)-[:OWNED_BY {ownership_type: 'primary'}]->(owner)
+		)
 	`, map[string]any{
 		"uuid": agentID, "tenant_id": req.TenantID, "name": req.Name,
 		"type": req.AgentType, "card_id": agentCardID, "protocols": req.Protocols,
-		"owner_id": req.OwnerID, "team_id": req.TeamID, "capabilities": req.Capabilities,
-		"env": req.Env,
+		"owner_id": req.OwnerID, "owner_name": req.OwnerName, "team_id": req.TeamID,
+		"capabilities": req.Capabilities,
+		"env":          req.Env,
 	})
 	if err != nil {
 		logError("neo4j", err)
@@ -4424,7 +4445,7 @@ func getRecordStrings(record *neo4j.Record, key string) []string {
 
 func getRecordVal(record *neo4j.Record, key string) string {
 	val, ok := record.Get(key)
-	if !ok {
+	if !ok || val == nil {
 		return ""
 	}
 	switch v := val.(type) {
@@ -4432,6 +4453,42 @@ func getRecordVal(record *neo4j.Record, key string) string {
 		return v
 	default:
 		return fmt.Sprintf("%v", v)
+	}
+}
+
+// getRecordFloat extracts a numeric Neo4j value as float64 (0 when absent).
+func getRecordFloat(record *neo4j.Record, key string) float64 {
+	val, ok := record.Get(key)
+	if !ok || val == nil {
+		return 0
+	}
+	switch v := val.(type) {
+	case float64:
+		return v
+	case int64:
+		return float64(v)
+	case string:
+		var f float64
+		fmt.Sscanf(v, "%g", &f)
+		return f
+	default:
+		return 0
+	}
+}
+
+// getRecordBool extracts a boolean Neo4j value (also accepts "true"/"false" strings).
+func getRecordBool(record *neo4j.Record, key string) bool {
+	val, ok := record.Get(key)
+	if !ok || val == nil {
+		return false
+	}
+	switch v := val.(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true"
+	default:
+		return false
 	}
 }
 

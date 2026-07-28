@@ -63,6 +63,13 @@ func (p *Provider) KeyID() string { return p.keyID }
 
 // SignAccessToken creates a signed JWT access token.
 func (p *Provider) SignAccessToken(userID, clientID, scope string) (string, error) {
+	return p.SignAccessTokenWithRoles(userID, clientID, scope, nil)
+}
+
+// SignAccessTokenWithRoles creates a signed JWT access token that carries a
+// roles claim. Used by the dev-login endpoint so the local admin user can
+// invoke master-guarded workflow operations (kill switch, grant/revoke, LCM).
+func (p *Provider) SignAccessTokenWithRoles(userID, clientID, scope string, roles []string) (string, error) {
 	now := time.Now()
 	claims := jwt.MapClaims{
 		"iss":   p.issuer,
@@ -73,6 +80,9 @@ func (p *Provider) SignAccessToken(userID, clientID, scope string) (string, erro
 		"jti":   generateTokenID(),
 		"scope": scope,
 		"typ":   "Bearer",
+	}
+	if len(roles) > 0 {
+		claims["roles"] = roles
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = p.keyID

@@ -221,6 +221,21 @@ export default function IdentitiesPage() {
     }
   }
 
+  // ── Blast Radius (per-row action) ─────────────────────
+  const [blastLoading, setBlastLoading] = useState<string | null>(null)
+  async function handleBlastRadius(identityId: string, name: string) {
+    setBlastLoading(identityId)
+    try {
+      const res = await fetch(`/api/v1/identities/${identityId}/blast-radius`)
+      const data = await res.json()
+      console.log(`Blast radius graph for ${name}:`, data)
+    } catch (e: any) {
+      console.error(`Blast radius fetch failed for ${name}:`, e.message)
+    } finally {
+      setBlastLoading(null)
+    }
+  }
+
   // ── Render ────────────────────────────────────────────
   return (
     <div className="space-y-4">
@@ -456,7 +471,7 @@ export default function IdentitiesPage() {
                     onClick={() => toggleSort("created_at")}>
                     Created {sortIcon("created_at")}
                   </th>
-                  <th className="text-right py-2.5 px-3 text-xs font-medium text-gray-500 uppercase w-20">Actions</th>
+                  <th className="text-right py-2.5 px-3 text-xs font-medium text-gray-500 uppercase w-28">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800/50">
@@ -508,7 +523,15 @@ export default function IdentitiesPage() {
                       <td className="py-2 px-3 text-xs text-gray-400 font-mono whitespace-nowrap">
                         {id.created_at ? new Date(id.created_at).toLocaleDateString() : "-"}
                       </td>
-                      <td className="py-2 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-2 px-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="text-xs text-brand-400 hover:text-brand-300 px-2 py-0.5"
+                          onClick={() => handleBlastRadius(id.id, id.display_name || id.email)}
+                          title="Fetch blast radius graph (logged to console)"
+                          disabled={blastLoading === id.id}
+                        >
+                          {blastLoading === id.id ? "…" : "Blast"}
+                        </button>
                         <button
                           className="text-xs text-red-400 hover:text-red-300 px-2 py-0.5"
                           onClick={() => handleDelete(id.id)}

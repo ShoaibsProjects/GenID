@@ -32,6 +32,23 @@ const config: Config = {
           3: "rgba(255, 255, 255, 0.06)",
           4: "rgba(255, 255, 255, 0.08)",
         },
+        /* Legacy aliases used across existing pages (brand-* = amber) */
+        brand: {
+          300: "#FCD34D",
+          400: "#FBBF24",
+          500: "#F59E0B",
+          600: "#D97706",
+        },
+        /* Semantic text/border tokens used by components/ui + pages */
+        primary: "#F0EFEC",
+        secondary: "#9C9CA0",
+        muted: "#5C5C62",
+        border: "rgba(255, 255, 255, 0.06)",
+        surface: {
+          DEFAULT: "#0C0C10",
+          100: "rgba(255, 255, 255, 0.04)",
+          200: "rgba(255, 255, 255, 0.06)",
+        },
       },
       fontFamily: {
         sans: ["Plus Jakarta Sans", "system-ui", "sans-serif"],

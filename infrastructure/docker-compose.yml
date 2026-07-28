@@ -207,5 +207,58 @@ services:
     logging: *default-logging
 
   # ─── Identity Service (Go) ─────────────────────────────────
-  # Disabled: run separately with `make backend` or `go run ./cmd/identity-service`
-  # Build context issues when running from infrastructure/ dir
+  # Build context is the repo root (one level up from infrastructure/).
+  # For local dev you can still use `make backend` instead.
+  identity-service:
+    build:
+      context: ..
+      dockerfile: docker/identity-service.Dockerfile
+    container_name: observeid-identity-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      temporal-admin:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://observeid:observeid@postgres:5432/observeid?sslmode=disable
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: observeid123
+      REDIS_ADDR: redis:6379
+      TEMPORAL_HOST: temporal:7233
+      TEMPORAL_NAMESPACE: critical-offboarding
+      NATS_URL: nats://nats:4222
+      JWKS_URL: http://localhost:8080/.well-known/jwks.json
+      API_KEYS: admin-key:admin-secret-key-please-change
+      MASTER_KEY: dev-only-master-key-32-bytes-long-x
+      JWT_SIGNING_KEY: dev-only-hs256-signing-key-replaced-by-rsa
+      DEV_LOGIN_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    networks:
+      - observeid-net
+    logging: *default-logging
+    restart: unless-stopped
+
+  # ─── Frontend (Next.js static export via nginx) ────────────
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend.Dockerfile
+    container_name: observeid-frontend
+    depends_on:
+      - identity-service
+    ports:
+      - "3001:3000"
+    networks:
+      - observeid-net
+    logging: *default-logging
+    restart: unless-stopped

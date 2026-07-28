@@ -2,16 +2,44 @@
 import { usePathname } from "next/navigation"
 import "@/styles/globals.css"
 
-/* ─── Navigation (strict 8 items per Master Build Plan 2.1) ── */
-const NAV = [
-  { href: "/dashboard",      label: "Dashboard",      icon: "◈" },
-  { href: "/identities",     label: "Identities",     icon: "⊙" },
-  { href: "/agents",         label: "AI Agents",      icon: "◇" },
-  { href: "/access",         label: "Access Control", icon: "◈" },
-  { href: "/connectors",     label: "Connectors",     icon: "◉" },
-  { href: "/certifications", label: "Compliance",     icon: "◎" },
-  { href: "/audit",          label: "Audit Logs",     icon: "⊞" },
-  { href: "/settings",       label: "Settings",       icon: "⚙" },
+/* ─── Navigation — grouped per 5-Plane Architecture ──
+   /sod, /csv, /groups, /vault, /idp intentionally excluded
+   (remain reachable by direct URL as admin tools).        */
+const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: string }[] }[] = [
+  {
+    label: "Command Center",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: "◈" },
+    ],
+  },
+  {
+    label: "Identity & Access",
+    items: [
+      { href: "/identities", label: "Identities", icon: "⊙" },
+      { href: "/agents", label: "AI Agents", icon: "◇" },
+      { href: "/access", label: "Access Control", icon: "◈" },
+    ],
+  },
+  {
+    label: "Compliance",
+    items: [
+      { href: "/certifications", label: "Certifications", icon: "◎" },
+      { href: "/audit", label: "Audit Logs", icon: "⊞" },
+    ],
+  },
+  {
+    label: "Infrastructure",
+    items: [
+      { href: "/connectors", label: "Connectors", icon: "◉" },
+      { href: "/policies", label: "Policy Engine", icon: "▤" },
+    ],
+  },
+  {
+    label: "Settings",
+    items: [
+      { href: "/settings", label: "Settings", icon: "⚙" },
+    ],
+  },
 ]
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -43,25 +71,32 @@ function Sidebar() {
             </svg>
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight leading-none" style={{ background: 'linear-gradient(135deg, #FBBF24, #F59E0B, #D97706)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>ObserveID</h1>
+            <h1 className="text-base font-bold tracking-tight leading-none text-gradient-accent">ObserveID</h1>
             <p className="text-[0.55rem] font-semibold uppercase tracking-[0.15em]" style={{ color: '#5C5C62', marginTop: 2 }}>Fabric v1</p>
           </div>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-5">
-        <div className="space-y-0.5">
-          {NAV.map((item) => (
-            <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} />
-          ))}
-     </div>
-   </nav>
+      {/* Nav — grouped */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label} className="mb-4">
+            <p className="px-3 mb-1.5 text-[0.6rem] font-bold uppercase tracking-[0.14em]" style={{ color: '#5C5C62' }}>
+              {group.label}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
 
       {/* Footer */}
       <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(255, 255, 255, 0.04)' }}>
         <div className="flex items-center gap-2.5">
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34D399', boxShadow: '0 0 8px rgba(52, 211, 153, 0.4)' }} />
+          <span className="dot-live" />
           <span className="text-xs" style={{ color: '#5C5C62' }}>Identity Fabric</span>
           <span className="text-xs" style={{ color: '#34D399' }}>Live</span>
         </div>
@@ -78,18 +113,18 @@ function NavItem({ href, icon, label }: { href: string; icon: string; label: str
       href={href}
       style={{
         display: 'flex', alignItems: 'center', gap: 10,
-        padding: '8px 12px', borderRadius: 8,
+        padding: '7px 12px', borderRadius: 8,
         fontSize: '0.8125rem', fontWeight: isActive ? 600 : 450,
         textDecoration: 'none',
-        color: isActive ? '#FBBF24' : '#5C5C62',
+        color: isActive ? '#FBBF24' : '#9C9CA0',
         background: isActive ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
         borderLeft: isActive ? '2px solid #F59E0B' : '2px solid transparent',
         transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
       }}
       onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = '#F0EFEC'; }}}
-      onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#5C5C62'; }}}
+      onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#9C9CA0'; }}}
     >
-      <span style={{ fontSize: '1rem', opacity: 0.7 }}>{icon}</span>
+      <span style={{ fontSize: '0.95rem', opacity: 0.7 }}>{icon}</span>
       {label}
     </a>
   )

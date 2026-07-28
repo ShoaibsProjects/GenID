@@ -17,19 +17,22 @@ RUN echo 'server { \
     root /usr/share/nginx/html; \
     index index.html; \
     location /api/ { \
-        proxy_pass http://localhost:8080; \
+        proxy_pass http://identity-service:8080; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
     } \
     location /scim/ { \
-        proxy_pass http://localhost:8080; \
+        proxy_pass http://identity-service:8080; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
     } \
     location /graphql { \
-        proxy_pass http://localhost:8080; \
+        proxy_pass http://identity-service:8080; \
         proxy_set_header Host $host; \
         proxy_set_header X-Real-IP $remote_addr; \
+    } \
+    location /health { \
+        proxy_pass http://identity-service:8080; \
     } \
     location / { \
         try_files $uri $uri/ /index.html; \

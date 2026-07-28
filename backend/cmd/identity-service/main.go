@@ -235,7 +235,10 @@ func main() {
 				return
 			}
 
-			token, err := svc.OIDCProvider().SignAccessToken(userID, "observeid-frontend", "openid profile email api")
+			// Dev-login users get the admin role so master-guarded workflow
+			// operations (kill switch, grant/revoke, certifications, LCM)
+			// work from the local UI. Dev-only endpoint — disabled in prod.
+			token, err := svc.OIDCProvider().SignAccessTokenWithRoles(userID, "observeid-frontend", "openid profile email api", []string{"admin"})
 			if err != nil {
 				http.Error(w, `{"error":"token_sign_failed"}`, http.StatusInternalServerError)
 				return
@@ -534,6 +537,13 @@ func main() {
 </body>
 </html>`)
 		}).Methods("GET")
+	}
+
+	// Serve docs (SVG sitemap, etc.)
+	docsDir := "./docs"
+	if fi, err := os.Stat(docsDir); err == nil && fi.IsDir() {
+		r.PathPrefix("/docs/").Handler(http.StripPrefix("/docs/", http.FileServer(http.Dir(docsDir))))
+		log.Info().Msg("Docs directory serving from " + docsDir)
 	}
 
 	// Health check

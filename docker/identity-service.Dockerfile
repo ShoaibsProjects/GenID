@@ -1,5 +1,5 @@
 # ─── ObserveID Reimagined Identity Service (Go) ───────────
-FROM golang:1.26-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache gcc musl-dev protoc
 
@@ -35,7 +35,7 @@ WORKDIR /app
 COPY --from=builder /app/identity-service .
 
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
-    CMD ["/app/identity-service", "health"]
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
 
 EXPOSE 8080 8081 9090
 

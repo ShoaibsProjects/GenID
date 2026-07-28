@@ -82,3 +82,6 @@ media/*.png
 # OpenCode config (personal)
 **/.opencode/
 .git-credentials
+
+# TypeScript incremental build info
+**/*.tsbuildinfo

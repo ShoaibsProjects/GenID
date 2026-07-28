@@ -1,0 +1,602 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1800" height="3200" viewBox="0 0 1800 3200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1800" y2="3200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#09090B"/>
+      <stop offset="100%" stop-color="#0F0F13"/>
+    </linearGradient>
+    <linearGradient id="rootGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.02"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 z" fill="#717D96"/>
+    </marker>
+    <!-- Animated pulse for active nodes -->
+    <style>
+      @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+      .pulse { animation: pulse 2s ease-in-out infinite; }
+      .card { transition: all 0.2s; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="3200" fill="url(#bg)"/>
+
+  <!-- ─── HEADER ─── -->
+  <text x="900" y="45" font-family="Inter, monospace" font-size="22" font-weight="700" fill="#FAFAFA" text-anchor="middle">ObserveID — Visual Sitemap &amp; Tree Diagram</text>
+  <text x="900" y="68" font-family="Inter, monospace" font-size="13" fill="#717D96" text-anchor="middle">All pages mapped to backend logic · OWASP Top 10 controls annotated</text>
+  <text x="900" y="88" font-family="Inter, monospace" font-size="11" fill="#5C5C62" text-anchor="middle">Last updated: 2026-07-28 · Phase 6 complete (Access Certifications)</text>
+
+  <line x1="0" y1="100" x2="1800" y2="100" stroke="#FFFFFF" stroke-opacity="0.04"/>
+
+  <!-- ─── LEGEND ─── -->
+  <g transform="translate(30, 115)">
+    <rect x="0" y="0" width="1740" height="55" rx="8" fill="url(#glass)" stroke="#FFFFFF" stroke-opacity="0.05"/>
+    <text x="20" y="20" font-family="Inter, monospace" font-size="10" font-weight="600" fill="#93C5FD">LEGEND</text>
+    <text x="20" y="42" font-family="Inter, monospace" font-size="10" fill="#717D96">🟢 Built &amp; Tested</text>
+    <text x="180" y="42" font-family="Inter, monospace" font-size="10" fill="#717D96">🟡 Partial</text>
+    <text x="300" y="42" font-family="Inter, monospace" font-size="10" fill="#717D96">🔴 Not Started</text>
+    <text x="440" y="42" font-family="Inter, monospace" font-size="10" fill="#717D96">🔵 Public</text>
+    <text x="540" y="42" font-family="Inter, monospace" font-size="10" fill="#717D96">🟣 Authenticated (JWT)</text>
+    <text x="710" y="42" font-family="Inter, monospace" font-size="10" fill="#717D96">🔴 Master Key (X-Master-Key)</text>
+    <text x="920" y="42" font-family="Inter, monospace" font-size="10" fill="#717D96">⊞ Future Phase</text>
+    <text x="1040" y="42" font-family="Inter, monospace" font-size="10" fill="#F59E0B">OVAL = Modal / Action</text>
+  </g>
+
+  <!-- ─── ROOT NODE ─── -->
+  <g transform="translate(680, 185)">
+    <rect x="0" y="0" width="440" height="70" rx="35" fill="url(#rootGrad)" filter="url(#shadow)"/>
+    <text x="220" y="30" font-family="Inter, monospace" font-size="16" font-weight="700" fill="#FFF" text-anchor="middle">ObserveID Agentic Identity Fabric</text>
+    <text x="220" y="50" font-family="Inter, monospace" font-size="10" fill="#E0E7FF" text-anchor="middle">Next.js 14 (SSG) → Go 1.22 Backend → PostgreSQL / Neo4j / Redis / Temporal</text>
+  </g>
+
+  <!-- Branch lines from root to 6 main hubs -->
+  <path d="M 900 255 L 900 275 L 150 275 L 150 295" stroke="#3B82F6" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 900 255 L 900 275 L 390 275 L 390 295" stroke="#8B5CF6" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 900 255 L 900 275 L 630 275 L 630 295" stroke="#14B8A6" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 900 255 L 900 275 L 870 275 L 870 295" stroke="#F59E0B" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 900 255 L 900 275 L 1110 275 L 1110 295" stroke="#6366F1" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 900 255 L 900 275 L 1350 275 L 1350 295" stroke="#EC4899" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- ════════════════════════════════════════════════════════════
+     TIER 1: 6 MAIN HUBS
+     ════════════════════════════════════════════════════════════ -->
+
+  <!-- 1. Dashboard Hub -->
+  <g transform="translate(40, 295)">
+    <rect x="0" y="0" width="220" height="36" rx="8" fill="#1E3A5F" stroke="#3B82F6" stroke-opacity="0.4"/>
+    <text x="110" y="23" font-family="Inter, monospace" font-size="12" font-weight="700" fill="#93C5FD" text-anchor="middle">1 · Dashboard Hub</text>
+  </g>
+
+  <!-- 2. Identity Hub -->
+  <g transform="translate(280, 295)">
+    <rect x="0" y="0" width="220" height="36" rx="8" fill="#2D1B69" stroke="#8B5CF6" stroke-opacity="0.4"/>
+    <text x="110" y="23" font-family="Inter, monospace" font-size="12" font-weight="700" fill="#C4B5FD" text-anchor="middle">2 · Identity &amp; Agents Hub</text>
+  </g>
+
+  <!-- 3. Access Control Hub -->
+  <g transform="translate(520, 295)">
+    <rect x="0" y="0" width="220" height="36" rx="8" fill="#1A3D3A" stroke="#14B8A6" stroke-opacity="0.4"/>
+    <text x="110" y="23" font-family="Inter, monospace" font-size="12" font-weight="700" fill="#99F6E4" text-anchor="middle">3 · Access Control Hub</text>
+  </g>
+
+  <!-- 4. Compliance Hub -->
+  <g transform="translate(760, 295)">
+    <rect x="0" y="0" width="220" height="36" rx="8" fill="#3D2E00" stroke="#F59E0B" stroke-opacity="0.4"/>
+    <text x="110" y="23" font-family="Inter, monospace" font-size="12" font-weight="700" fill="#FDE68A" text-anchor="middle">4 · Compliance &amp; Audit Hub</text>
+  </g>
+
+  <!-- 5. Integrations Hub -->
+  <g transform="translate(1000, 295)">
+    <rect x="0" y="0" width="220" height="36" rx="8" fill="#1E1B4B" stroke="#6366F1" stroke-opacity="0.4"/>
+    <text x="110" y="23" font-family="Inter, monospace" font-size="12" font-weight="700" fill="#A5B4FC" text-anchor="middle">5 · Integrations Hub</text>
+  </g>
+
+  <!-- 6. Admin Hub -->
+  <g transform="translate(1240, 295)">
+    <rect x="0" y="0" width="220" height="36" rx="8" fill="#3B0A2E" stroke="#EC4899" stroke-opacity="0.4"/>
+    <text x="110" y="23" font-family="Inter, monospace" font-size="12" font-weight="700" fill="#F9A8D4" text-anchor="middle">6 · Admin Hub</text>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+     TIER 2: PAGE CARDS
+     ════════════════════════════════════════════════════════════ -->
+
+  <g id="PAGES">
+    <!-- ─── DASHBOARD PAGES ─── -->
+    <!-- Dashboard -->
+    <g transform="translate(40, 360)">
+      <rect x="0" y="0" width="220" height="130" rx="8" fill="url(#glass)" stroke="#3B82F6" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#3B82F6" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#93C5FD" text-anchor="middle">/dashboard</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">CISO command center</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• 4 stat cards (identities, agents,</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">  active JIT, critical revocations)</text>
+      <text x="10" y="78" font-family="Inter, monospace" font-size="8" fill="#717D96">• System health pills</text>
+      <text x="10" y="90" font-family="Inter, monospace" font-size="8" fill="#717D96">  (PG, Neo4j, Redis, Temporal)</text>
+      <text x="10" y="115" font-family="Inter, monospace" font-size="8" fill="#34D399">🟢 Built · Public</text>
+    </g>
+
+    <!-- ─── IDENTITY PAGES ─── -->
+    <!-- /identities -->
+    <g transform="translate(280, 360)">
+      <rect x="0" y="0" width="220" height="130" rx="8" fill="url(#glass)" stroke="#8B5CF6" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#8B5CF6" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#C4B5FD" text-anchor="middle">/identities</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Unified human directory</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• Searchable paginated table</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• Detail slide-out + entitlements</text>
+      <text x="10" y="78" font-family="Inter, monospace" font-size="8" fill="#717D96">• Blast Radius button (Neo4j Cypher)</text>
+      <text x="10" y="115" font-family="Inter, monospace" font-size="8" fill="#34D399">🟢 Built · Authenticated</text>
+    </g>
+
+    <!-- /agents -->
+    <g transform="translate(280, 505)">
+      <rect x="0" y="0" width="220" height="130" rx="8" fill="url(#glass)" stroke="#8B5CF6" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#8B5CF6" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#C4B5FD" text-anchor="middle">/agents</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">NHI / AI Agent governance</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• Table (name, type, owner, status)</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• Register Agent Modal</text>
+      <text x="10" y="78" font-family="Inter, monospace" font-size="8" fill="#717D96">• 🔴 Kill Switch button (109ms)</text>
+      <text x="10" y="115" font-family="Inter, monospace" font-size="8" fill="#34D399">🟢 Built · Authenticated</text>
+    </g>
+
+    <!-- /groups -->
+    <g transform="translate(280, 650)">
+      <rect x="0" y="0" width="220" height="130" rx="8" fill="url(#glass)" stroke="#8B5CF6" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#8B5CF6" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#C4B5FD" text-anchor="middle">/groups</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Role &amp; Group management</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• List / Create / Delete groups</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• Assign / Remove roles</text>
+      <text x="10" y="78" font-family="Inter, monospace" font-size="8" fill="#717D96">• Link entitlements to roles</text>
+      <text x="10" y="115" font-family="Inter, monospace" font-size="8" fill="#34D399">🟢 Built · Authenticated</text>
+    </g>
+
+    <!-- /csv -->
+    <g transform="translate(280, 795)">
+      <rect x="0" y="0" width="220" height="110" rx="8" fill="url(#glass)" stroke="#8B5CF6" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#8B5CF6" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#C4B5FD" text-anchor="middle">/csv</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Bulk import / export</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• Upload CSV → preview → confirm</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• Export to CSV</text>
+      <text x="10" y="95" font-family="Inter, monospace" font-size="8" fill="#F59E0B">🟡 Partial · Authenticated</text>
+    </g>
+
+    <!-- ─── ACCESS CONTROL PAGES ─── -->
+    <!-- /access -->
+    <g transform="translate(520, 360)">
+      <rect x="0" y="0" width="220" height="130" rx="8" fill="url(#glass)" stroke="#14B8A6" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#14B8A6" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#99F6E4" text-anchor="middle">/access</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Zero-Standing Privilege</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• Request JIT Access form</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">  (user, resource, action, duration)</text>
+      <text x="10" y="78" font-family="Inter, monospace" font-size="8" fill="#717D96">• Active JIT Sessions table</text>
+      <text x="10" y="90" font-family="Inter, monospace" font-size="8" fill="#717D96">• Real-time access check (QUERY)</text>
+      <text x="10" y="115" font-family="Inter, monospace" font-size="8" fill="#34D399">🟢 JIT built · Master Key</text>
+    </g>
+
+    <!-- /policies -->
+    <g transform="translate(520, 505)">
+      <rect x="0" y="0" width="220" height="110" rx="8" fill="url(#glass)" stroke="#14B8A6" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#14B8A6" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#99F6E4" text-anchor="middle">/policies</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Cedar policy engine</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• View / Edit Cedar policies</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• Versioning + hot reload (30s)</text>
+      <text x="10" y="95" font-family="Inter, monospace" font-size="8" fill="#F59E0B">🟡 Partial · Master Key</text>
+    </g>
+
+    <!-- ─── COMPLIANCE PAGES ─── -->
+    <!-- /certifications -->
+    <g transform="translate(760, 360)">
+      <rect x="0" y="0" width="220" height="130" rx="8" fill="url(#glass)" stroke="#F59E0B" stroke-opacity="0.4" filter="url(#shadow)" class="pulse"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#F59E0B" fill-opacity="0.15"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#FDE68A" text-anchor="middle">/certifications</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Access Reviews (IGA)</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• Generate Campaign (Temporal)</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• 4-col table: Identity | Resource</text>
+      <text x="10" y="78" font-family="Inter, monospace" font-size="8" fill="#717D96">  | Risk Score | Approve/Revoke</text>
+      <text x="10" y="90" font-family="Inter, monospace" font-size="8" fill="#717D96">• Decisions written to PG + audit log</text>
+      <text x="10" y="115" font-family="Inter, monospace" font-size="8" fill="#34D399">🟢 Built (Phase 6) · Master Key</text>
+    </g>
+
+    <!-- /audit -->
+    <g transform="translate(760, 505)">
+      <rect x="0" y="0" width="220" height="130" rx="8" fill="url(#glass)" stroke="#F59E0B" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#F59E0B" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#FDE68A" text-anchor="middle">/audit</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Immutable paper trail</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• Chronological event table</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• Filter by tenant, type, severity</text>
+      <text x="10" y="78" font-family="Inter, monospace" font-size="8" fill="#717D96">• Every Temporal phase logs here</text>
+      <text x="10" y="115" font-family="Inter, monospace" font-size="8" fill="#34D399">🟢 Built · Authenticated</text>
+    </g>
+
+    <!-- /sod -->
+    <g transform="translate(760, 650)">
+      <rect x="0" y="0" width="220" height="110" rx="8" fill="url(#glass)" stroke="#F59E0B" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#F59E0B" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#FDE68A" text-anchor="middle">/sod</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Segregation of Duties</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• SoD rules (conflicting entitlements)</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• Temporal cron scan</text>
+      <text x="10" y="95" font-family="Inter, monospace" font-size="8" fill="#F59E0B">🟡 Partial · Authenticated</text>
+    </g>
+
+    <!-- ─── INTEGRATIONS PAGES ─── -->
+    <!-- /connectors -->
+    <g transform="translate(1000, 360)">
+      <rect x="0" y="0" width="220" height="130" rx="8" fill="url(#glass)" stroke="#6366F1" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#6366F1" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#A5B4FC" text-anchor="middle">/connectors</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">External system sync</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• Connector cards (Entra, LDAP, SCIM,</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">  Salesforce, CSV)</text>
+      <text x="10" y="78" font-family="Inter, monospace" font-size="8" fill="#717D96">• Add / Sync / Delta Sync</text>
+      <text x="10" y="90" font-family="Inter, monospace" font-size="8" fill="#717D96">• Credentials encrypted to Vault</text>
+      <text x="10" y="115" font-family="Inter, monospace" font-size="8" fill="#F59E0B">🟡 Partial · Authenticated</text>
+    </g>
+
+    <!-- /idp -->
+    <g transform="translate(1000, 505)">
+      <rect x="0" y="0" width="220" height="110" rx="8" fill="url(#glass)" stroke="#6366F1" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#6366F1" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#A5B4FC" text-anchor="middle">/idp</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">OIDC / OAuth 2.0 Identity Provider</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• Client management</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• JWKS, authorize, token, userinfo</text>
+      <text x="10" y="95" font-family="Inter, monospace" font-size="8" fill="#F59E0B">🟡 Partial · Authenticated</text>
+    </g>
+
+    <!-- ─── ADMIN PAGES ─── -->
+    <!-- /vault -->
+    <g transform="translate(1240, 360)">
+      <rect x="0" y="0" width="220" height="130" rx="8" fill="url(#glass)" stroke="#EC4899" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#EC4899" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#F9A8D4" text-anchor="middle">/vault</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Encrypted secrets store</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• AES-256-GCM encryption</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• List / Store / Retrieve / Delete</text>
+      <text x="10" y="78" font-family="Inter, monospace" font-size="8" fill="#717D96">• Decrypted only during sync</text>
+      <text x="10" y="115" font-family="Inter, monospace" font-size="8" fill="#34D399">🟢 Built · Master Key</text>
+    </g>
+
+    <!-- /settings -->
+    <g transform="translate(1240, 505)">
+      <rect x="0" y="0" width="220" height="110" rx="8" fill="url(#glass)" stroke="#EC4899" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#EC4899" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#F9A8D4" text-anchor="middle">/settings</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">System configuration</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• Tenant management (V2)</text>
+      <text x="10" y="66" font-family="Inter, monospace" font-size="8" fill="#717D96">• OIDC client CRUD</text>
+      <text x="10" y="95" font-family="Inter, monospace" font-size="8" fill="#F59E0B">🟡 Basic · Master Key</text>
+    </g>
+
+    <!-- ─── AUTH PAGES ─── -->
+    <g transform="translate(1240, 650)">
+      <rect x="0" y="0" width="220" height="90" rx="8" fill="url(#glass)" stroke="#EC4899" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="220" height="28" rx="8" fill="#EC4899" fill-opacity="0.1"/>
+      <text x="110" y="18" font-family="Inter, monospace" font-size="11" font-weight="700" fill="#F9A8D4" text-anchor="middle">/signin (API-only)</text>
+      <text x="10" y="42" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">OIDC device auth flow</text>
+      <text x="10" y="54" font-family="Inter, monospace" font-size="8" fill="#717D96">• POST /api/v1/dev/login (dev)</text>
+      <text x="10" y="78" font-family="Inter, monospace" font-size="8" fill="#F59E0B">🟡 Built · Guest-Only</text>
+    </g>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+     TIER 3: SUB-PAGES / DETAIL PAGES
+     ════════════════════════════════════════════════════════════ -->
+
+  <g id="SUBPAGES">
+    <!-- Identity Detail -->
+    <g transform="translate(40, 930)">
+      <rect x="0" y="0" width="220" height="110" rx="6" fill="url(#glass)" stroke="#717D96" stroke-opacity="0.2"/>
+      <rect x="0" y="0" width="220" height="24" rx="6" fill="#717D96" fill-opacity="0.08"/>
+      <text x="110" y="16" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#A1A1AA" text-anchor="middle">/identities/{id}</text>
+      <text x="10" y="36" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Entitlements tab</text>
+      <text x="10" y="48" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Blast Radius (Neo4j variable-path)</text>
+      <text x="10" y="60" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Lifecycle management</text>
+      <text x="10" y="72" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Audit timeline</text>
+      <text x="10" y="96" font-family="Inter, monospace" font-size="7.5" fill="#717D96">🟢 Built · Authenticated</text>
+    </g>
+
+    <!-- Agent Detail -->
+    <g transform="translate(280, 930)">
+      <rect x="0" y="0" width="220" height="110" rx="6" fill="url(#glass)" stroke="#717D96" stroke-opacity="0.2"/>
+      <rect x="0" y="0" width="220" height="24" rx="6" fill="#717D96" fill-opacity="0.08"/>
+      <text x="110" y="16" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#A1A1AA" text-anchor="middle">/agents/{id}</text>
+      <text x="10" y="36" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Agent details + card</text>
+      <text x="10" y="48" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Delegate modal</text>
+      <text x="10" y="60" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Kill Switch confirmation</text>
+      <text x="10" y="72" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Delegation chain viewer</text>
+      <text x="10" y="96" font-family="Inter, monospace" font-size="7.5" fill="#34D399">🟢 Built · Authenticated</text>
+    </g>
+
+    <!-- Connector Detail -->
+    <g transform="translate(520, 930)">
+      <rect x="0" y="0" width="220" height="110" rx="6" fill="url(#glass)" stroke="#717D96" stroke-opacity="0.2"/>
+      <rect x="0" y="0" width="220" height="24" rx="6" fill="#717D96" fill-opacity="0.08"/>
+      <text x="110" y="16" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#A1A1AA" text-anchor="middle">/connectors/{id}</text>
+      <text x="10" y="36" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Test connection</text>
+      <text x="10" y="48" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Full sync / Delta sync</text>
+      <text x="10" y="60" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Users / Identities / Groups</text>
+      <text x="10" y="72" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Entitlements / Resources</text>
+      <text x="10" y="96" font-family="Inter, monospace" font-size="7.5" fill="#F59E0B">🟡 Partial · Authenticated</text>
+    </g>
+
+    <!-- SCIM -->
+    <g transform="translate(760, 930)">
+      <rect x="0" y="0" width="220" height="110" rx="6" fill="url(#glass)" stroke="#717D96" stroke-opacity="0.2"/>
+      <rect x="0" y="0" width="220" height="24" rx="6" fill="#717D96" fill-opacity="0.08"/>
+      <text x="110" y="16" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#A1A1AA" text-anchor="middle">/scim/v2/*</text>
+      <text x="10" y="36" font-family="Inter, monospace" font-size="7.5" fill="#717D96">SCIM 2.0 provisioning</text>
+      <text x="10" y="48" font-family="Inter, monospace" font-size="7.5" fill="#717D96">GET/POST/PATCH /Users</text>
+      <text x="10" y="60" font-family="Inter, monospace" font-size="7.5" fill="#717D96">ServiceProviderConfig</text>
+      <text x="10" y="72" font-family="Inter, monospace" font-size="7.5" fill="#717D96">ResourceTypes</text>
+      <text x="10" y="96" font-family="Inter, monospace" font-size="7.5" fill="#F59E0B">🟡 Partial · API Key</text>
+    </g>
+
+    <!-- OIDC Well-Known -->
+    <g transform="translate(1000, 930)">
+      <rect x="0" y="0" width="220" height="110" rx="6" fill="url(#glass)" stroke="#717D96" stroke-opacity="0.2"/>
+      <rect x="0" y="0" width="220" height="24" rx="6" fill="#717D96" fill-opacity="0.08"/>
+      <text x="110" y="16" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#A1A1AA" text-anchor="middle">/.well-known/*</text>
+      <text x="10" y="36" font-family="Inter, monospace" font-size="7.5" fill="#717D96">OpenID Configuration</text>
+      <text x="10" y="48" font-family="Inter, monospace" font-size="7.5" fill="#717D96">JWKS (RS256 public keys)</text>
+      <text x="10" y="60" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Authorize / Token / UserInfo</text>
+      <text x="10" y="72" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Device authorization flow</text>
+      <text x="10" y="96" font-family="Inter, monospace" font-size="7.5" fill="#34D399">🟢 Built · Public</text>
+    </g>
+
+    <!-- GraphQL -->
+    <g transform="translate(1240, 930)">
+      <rect x="0" y="0" width="220" height="90" rx="6" fill="url(#glass)" stroke="#717D96" stroke-opacity="0.2"/>
+      <rect x="0" y="0" width="220" height="24" rx="6" fill="#717D96" fill-opacity="0.08"/>
+      <text x="110" y="16" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#A1A1AA" text-anchor="middle">/graphql</text>
+      <text x="10" y="36" font-family="Inter, monospace" font-size="7.5" fill="#717D96">GraphQL endpoint</text>
+      <text x="10" y="48" font-family="Inter, monospace" font-size="7.5" fill="#717D96">Agent / Identity queries</text>
+      <text x="10" y="72" font-family="Inter, monospace" font-size="7.5" fill="#717D96">🟡 Partial · Master Key</text>
+    </g>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+     TIER 4: MODALS / ACTIONS (ovals)
+     ════════════════════════════════════════════════════════════ -->
+
+  <g id="MODALS">
+    <!-- Register Agent -->
+    <g transform="translate(40, 1080)">
+      <ellipse cx="110" cy="28" rx="100" ry="28" fill="#1E3A5F" stroke="#3B82F6" stroke-opacity="0.4"/>
+      <text x="110" y="24" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#93C5FD" text-anchor="middle">Register Agent Modal</text>
+      <text x="110" y="38" font-family="Inter, monospace" font-size="7" fill="#717D96" text-anchor="middle">Creates NHI node in Neo4j + PG</text>
+    </g>
+
+    <!-- JIT Access -->
+    <g transform="translate(40, 1155)">
+      <ellipse cx="110" cy="28" rx="100" ry="28" fill="#1E3A5F" stroke="#3B82F6" stroke-opacity="0.4"/>
+      <text x="110" y="24" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#93C5FD" text-anchor="middle">JIT Access Form</text>
+      <text x="110" y="38" font-family="Inter, monospace" font-size="7" fill="#717D96" text-anchor="middle">Cedar eval → RS256 JWT → Redis TTL</text>
+    </g>
+
+    <!-- Add Connector -->
+    <g transform="translate(280, 1080)">
+      <ellipse cx="110" cy="28" rx="100" ry="28" fill="#2D1B69" stroke="#8B5CF6" stroke-opacity="0.4"/>
+      <text x="110" y="24" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#C4B5FD" text-anchor="middle">Add Connector Modal</text>
+      <text x="110" y="38" font-family="Inter, monospace" font-size="7" fill="#717D96" text-anchor="middle">Credentials → Vault (AES-256-GCM)</text>
+    </g>
+
+    <!-- Assign Role -->
+    <g transform="translate(280, 1155)">
+      <ellipse cx="110" cy="28" rx="100" ry="28" fill="#2D1B69" stroke="#8B5CF6" stroke-opacity="0.4"/>
+      <text x="110" y="24" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#C4B5FD" text-anchor="middle">Assign Role Modal</text>
+      <text x="110" y="38" font-family="Inter, monospace" font-size="7" fill="#717D96" text-anchor="middle">WorkflowGuard protected</text>
+    </g>
+
+    <!-- Approve/Revoke -->
+    <g transform="translate(520, 1080)">
+      <ellipse cx="110" cy="28" rx="100" ry="28" fill="#1A3D3A" stroke="#14B8A6" stroke-opacity="0.4"/>
+      <text x="110" y="24" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#99F6E4" text-anchor="middle">Approve/Revoke Decision</text>
+      <text x="110" y="38" font-family="Inter, monospace" font-size="7" fill="#717D96" text-anchor="middle">PG update + audit trail</text>
+    </g>
+
+    <!-- Generate Campaign -->
+    <g transform="translate(760, 1080)">
+      <ellipse cx="110" cy="28" rx="100" ry="28" fill="#3D2E00" stroke="#F59E0B" stroke-opacity="0.5" class="pulse"/>
+      <text x="110" y="24" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#FDE68A" text-anchor="middle">Generate Campaign</text>
+      <text x="110" y="38" font-family="Inter, monospace" font-size="7" fill="#717D96" text-anchor="middle">Triggers Temporal workflow → PG</text>
+    </g>
+
+    <!-- Send CAEP -->
+    <g transform="translate(760, 1155)">
+      <ellipse cx="110" cy="28" rx="100" ry="28" fill="#3D2E00" stroke="#F59E0B" stroke-opacity="0.3"/>
+      <text x="110" y="24" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#FDE68A" text-anchor="middle">Send CAEP Event</text>
+      <text x="110" y="38" font-family="Inter, monospace" font-size="7" fill="#717D96" text-anchor="middle">Sends to configured webhook</text>
+    </g>
+
+    <!-- Sync Connector -->
+    <g transform="translate(1000, 1080)">
+      <ellipse cx="110" cy="28" rx="100" ry="28" fill="#1E1B4B" stroke="#6366F1" stroke-opacity="0.4"/>
+      <text x="110" y="24" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#A5B4FC" text-anchor="middle">Sync Connector Action</text>
+      <text x="110" y="38" font-family="Inter, monospace" font-size="7" fill="#717D96" text-anchor="middle">Outbox → Dual-write to Neo4j</text>
+    </g>
+
+    <!-- Transfer Modal -->
+    <g transform="translate(1240, 1080)">
+      <ellipse cx="110" cy="28" rx="100" ry="28" fill="#3B0A2E" stroke="#EC4899" stroke-opacity="0.4"/>
+      <text x="110" y="24" font-family="Inter, monospace" font-size="9" font-weight="600" fill="#F9A8D4" text-anchor="middle">Copy / Move Data</text>
+      <text x="110" y="38" font-family="Inter, monospace" font-size="7" fill="#717D96" text-anchor="middle">Vault to Vault transfer (V2)</text>
+    </g>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+     BACKEND / INFRASTRUCTURE LAYER
+     ════════════════════════════════════════════════════════════ -->
+
+  <g transform="translate(40, 1220)">
+    <rect x="0" y="0" width="1720" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.03"/>
+    <text x="860" y="21" font-family="Inter, monospace" font-size="13" font-weight="600" fill="#717D96" text-anchor="middle">BACKEND INFRASTRUCTURE LAYER</text>
+  </g>
+
+  <g id="BACKEND">
+    <!-- Temporal Workflows -->
+    <g transform="translate(40, 1270)">
+      <rect x="0" y="0" width="270" height="130" rx="8" fill="url(#glass)" stroke="#34D399" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="270" height="26" rx="8" fill="#34D399" fill-opacity="0.08"/>
+      <text x="135" y="17" font-family="Inter, monospace" font-size="10" font-weight="700" fill="#34D399" text-anchor="middle">Temporal Workflows</text>
+      <text x="10" y="38" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">OffboardIdentityWorkflow ↗ 109ms</text>
+      <text x="10" y="50" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">GrantAccessWorkflow (SoD check)</text>
+      <text x="10" y="62" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">RevokeAccessWorkflow (emergency)</text>
+      <text x="10" y="74" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">JustInTimeAccessWorkflow (JIT)</text>
+      <text x="10" y="86" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">CascadeRevokeWorkflow (NHI)</text>
+      <text x="10" y="98" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">AccessCertificationWorkflow 🆕</text>
+      <text x="10" y="110" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">SoD cron scan (7-day interval)</text>
+      <text x="10" y="122" font-family="Inter, monospace" font-size="8" fill="#F59E0B">Namespace: critical-offboarding</text>
+    </g>
+
+    <!-- PostgreSQL -->
+    <g transform="translate(330, 1270)">
+      <rect x="0" y="0" width="270" height="130" rx="8" fill="url(#glass)" stroke="#3B82F6" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="270" height="26" rx="8" fill="#3B82F6" fill-opacity="0.08"/>
+      <text x="135" y="17" font-family="Inter, monospace" font-size="10" font-weight="700" fill="#93C5FD" text-anchor="middle">PostgreSQL (identities DB)</text>
+      <text x="10" y="38" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">identities, roles, identity_roles</text>
+      <text x="10" y="50" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">entitlements, resources</text>
+      <text x="10" y="62" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">certification_campaigns /_entries</text>
+      <text x="10" y="74" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">connector tables, liquidity outbox</text>
+      <text x="10" y="86" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">OIDC clients, refresh tokens</text>
+      <text x="10" y="98" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">RLS enabled on all tenant tables</text>
+      <text x="10" y="122" font-family="Inter, monospace" font-size="8" fill="#F59E0B">⚠ A01/A04: RLS + parameterized</text>
+      <text x="10" y="122" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ A03: Injection safe</text>
+    </g>
+
+    <!-- Neo4j -->
+    <g transform="translate(620, 1270)">
+      <rect x="0" y="0" width="270" height="130" rx="8" fill="url(#glass)" stroke="#8B5CF6" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="270" height="26" rx="8" fill="#8B5CF6" fill-opacity="0.08"/>
+      <text x="135" y="17" font-family="Inter, monospace" font-size="10" font-weight="700" fill="#C4B5FD" text-anchor="middle">Neo4j Graph Database</text>
+      <text x="10" y="38" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">NonHumanIdentity nodes</text>
+      <text x="10" y="50" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Blast radius (variable-length paths)</text>
+      <text x="10" y="62" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Delegation chains (DELEGATED_FROM)</text>
+      <text x="10" y="74" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">SoD conflict graph traversal</text>
+      <text x="10" y="86" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Agent → Identity → Resource edges</text>
+      <text x="10" y="110" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ A10: No SSRF risk</text>
+    </g>
+
+    <!-- Redis -->
+    <g transform="translate(910, 1270)">
+      <rect x="0" y="0" width="270" height="130" rx="8" fill="url(#glass)" stroke="#EC4899" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="270" height="26" rx="8" fill="#EC4899" fill-opacity="0.08"/>
+      <text x="135" y="17" font-family="Inter, monospace" font-size="10" font-weight="700" fill="#F9A8D4" text-anchor="middle">Redis Cache &amp; TTL Store</text>
+      <text x="10" y="38" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">JIT access tokens (TTL store)</text>
+      <text x="10" y="50" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Kill-switch blocklist (revoked JTIs)</text>
+      <text x="10" y="62" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Session rate limiter (100 req/s)</text>
+      <text x="10" y="74" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Reverse index: identity → tokens</text>
+      <text x="10" y="110" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ A07: token revocation</text>
+    </g>
+
+    <!-- GCP Services -->
+    <g transform="translate(1200, 1270)">
+      <rect x="0" y="0" width="270" height="130" rx="8" fill="url(#glass)" stroke="#F59E0B" stroke-opacity="0.3" filter="url(#shadow)"/>
+      <rect x="0" y="0" width="270" height="26" rx="8" fill="#F59E0B" fill-opacity="0.08"/>
+      <text x="135" y="17" font-family="Inter, monospace" font-size="10" font-weight="700" fill="#FDE68A" text-anchor="middle">GCP &amp; Monitoring</text>
+      <text x="10" y="38" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">NATS JetStream (event bus)</text>
+      <text x="10" y="50" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Temporal Server (workflow engine)</text>
+      <text x="10" y="62" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">OpenTelemetry + Grafana</text>
+      <text x="10" y="74" font-family="Inter, monospace" font-size="8" fill="#A1A1AA">Cedar agent (policy hot-reload)</text>
+      <text x="10" y="110" font-family="Inter, monospace" font-size="8" fill="#F59E0B">⊞ V2: Istio service mesh</text>
+    </g>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+     OWASP TOP 10 LEGEND
+     ════════════════════════════════════════════════════════════ -->
+
+  <g transform="translate(40, 1430)">
+    <rect x="0" y="0" width="1720" height="32" rx="6" fill="#FFFFFF" fill-opacity="0.03"/>
+    <text x="860" y="21" font-family="Inter, monospace" font-size="13" font-weight="600" fill="#F59E0B" text-anchor="middle">OWASP TOP 10 (2021) — Coverage Audit</text>
+  </g>
+
+  <g transform="translate(40, 1475)">
+    <!-- A01 -->
+    <rect x="0" y="0" width="270" height="28" rx="6" fill="#3B0A2E" stroke="#EF4444" stroke-opacity="0.4"/>
+    <text x="10" y="18" font-family="Inter, monospace" font-size="8" font-weight="700" fill="#FCA5A5">A01</text>
+    <text x="40" y="18" font-family="Inter, monospace" font-size="8" fill="#717D96">Broken Access Control</text>
+    <text x="200" y="18" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ Master Key Guard</text>
+
+    <!-- A02 -->
+    <rect x="280" y="0" width="270" height="28" rx="6" fill="#0F172A" stroke="#3B82F6" stroke-opacity="0.4"/>
+    <text x="290" y="18" font-family="Inter, monospace" font-size="8" font-weight="700" fill="#93C5FD">A02</text>
+    <text x="320" y="18" font-family="Inter, monospace" font-size="8" fill="#717D96">Cryptographic Failures</text>
+    <text x="480" y="18" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ AES-256-GCM Vault</text>
+
+    <!-- A03 -->
+    <rect x="560" y="0" width="270" height="28" rx="6" fill="#1E1B4B" stroke="#8B5CF6" stroke-opacity="0.4"/>
+    <text x="570" y="18" font-family="Inter, monospace" font-size="8" font-weight="700" fill="#C4B5FD">A03</text>
+    <text x="600" y="18" font-family="Inter, monospace" font-size="8" fill="#717D96">Injection</text>
+    <text x="760" y="18" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ Parameterized SQL</text>
+
+    <!-- A04 -->
+    <rect x="840" y="0" width="270" height="28" rx="6" fill="#3D2E00" stroke="#F59E0B" stroke-opacity="0.4"/>
+    <text x="850" y="18" font-family="Inter, monospace" font-size="8" font-weight="700" fill="#FDE68A">A04</text>
+    <text x="880" y="18" font-family="Inter, monospace" font-size="8" fill="#717D96">Insecure Design</text>
+    <text x="1040" y="18" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ State machine / UUID epoch</text>
+
+    <!-- A05 -->
+    <rect x="1120" y="0" width="270" height="28" rx="6" fill="#1A3D3A" stroke="#14B8A6" stroke-opacity="0.4"/>
+    <text x="1130" y="18" font-family="Inter, monospace" font-size="8" font-weight="700" fill="#99F6E4">A05</text>
+    <text x="1160" y="18" font-family="Inter, monospace" font-size="8" fill="#717D96">Security Misconfig</text>
+    <text x="1320" y="18" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ Tenant RLS per query</text>
+
+    <!-- A06 -->
+    <rect x="1400" y="0" width="360" height="28" rx="6" fill="#3B0A2E" stroke="#EC4899" stroke-opacity="0.2"/>
+    <text x="1410" y="18" font-family="Inter, monospace" font-size="8" font-weight="700" fill="#F9A8D4">A06</text>
+    <text x="1440" y="18" font-family="Inter, monospace" font-size="8" fill="#717D96">Vulnerable Components</text>
+    <text x="1570" y="18" font-family="Inter, monospace" font-size="8" fill="#F59E0B">Dependabot / SBOM (V2)</text>
+  </g>
+
+  <g transform="translate(40, 1510)">
+    <!-- A07 -->
+    <rect x="0" y="0" width="270" height="28" rx="6" fill="#0F172A" stroke="#06B6D4" stroke-opacity="0.4"/>
+    <text x="10" y="18" font-family="Inter, monospace" font-size="8" font-weight="700" fill="#67E8F9">A07</text>
+    <text x="40" y="18" font-family="Inter, monospace" font-size="8" fill="#717D96">Auth Failures</text>
+    <text x="200" y="18" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ JWT + X-API-Key + Master</text>
+
+    <!-- A08 -->
+    <rect x="280" y="0" width="270" height="28" rx="6" fill="#1A3D3A" stroke="#10B981" stroke-opacity="0.4"/>
+    <text x="290" y="18" font-family="Inter, monospace" font-size="8" font-weight="700" fill="#6EE7B7">A08</text>
+    <text x="320" y="18" font-family="Inter, monospace" font-size="8" fill="#717D96">Data Integrity</text>
+    <text x="480" y="18" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ Outbox pattern / Temporal</text>
+
+    <!-- A09 -->
+    <rect x="560" y="0" width="270" height="28" rx="6" fill="#3D2E00" stroke="#F59E0B" stroke-opacity="0.4"/>
+    <text x="570" y="18" font-family="Inter, monospace" font-size="8" font-weight="700" fill="#FDE68A">A09</text>
+    <text x="600" y="18" font-family="Inter, monospace" font-size="8" fill="#717D96">Security Logging</text>
+    <text x="760" y="18" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ Audit Store + middleware</text>
+
+    <!-- A10 -->
+    <rect x="840" y="0" width="270" height="28" rx="6" fill="#1E1B4B" stroke="#6366F1" stroke-opacity="0.4"/>
+    <text x="850" y="18" font-family="Inter, monospace" font-size="8" font-weight="700" fill="#A5B4FC">A10</text>
+    <text x="880" y="18" font-family="Inter, monospace" font-size="8" fill="#717D96">SSRF</text>
+    <text x="1040" y="18" font-family="Inter, monospace" font-size="8" fill="#34D399">✔ No user-controlled URLs</text>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+     FOOTER
+     ════════════════════════════════════════════════════════════ -->
+
+  <g transform="translate(40, 1560)">
+    <rect x="0" y="0" width="1720" height="40" rx="8" fill="url(#glass)" stroke="#FFFFFF" stroke-opacity="0.04"/>
+    <text x="860" y="16" font-family="Inter, monospace" font-size="9" fill="#5C5C62" text-anchor="middle">ObserveID Agentic Identity Fabric · Copyright © 2026 · Built by Shoaib — Solo Dev ($0 Budget)</text>
+    <text x="860" y="32" font-family="Inter, monospace" font-size="8" fill="#3D3D44" text-anchor="middle">Go 1.22 · Next.js 14 · PostgreSQL 16 · Neo4j 5 · Redis 7 · Temporal 1.24 · NATS 2.10 · Cedar 3.0</text>
+  </g>
+</svg>
