@@ -1,7 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import dynamic from "next/dynamic"
 import { authFetch } from "@/lib/api"
+import type { GraphNode, GraphLink } from "@/components/BlastRadiusGraph"
+
+// Canvas graph touches window — must be client-only.
+const BlastRadiusGraph = dynamic(() => import("@/components/BlastRadiusGraph"), { ssr: false })
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -222,19 +227,10 @@ export default function IdentitiesPage() {
     }
   }
 
-  // ── Blast Radius (per-row action) ─────────────────────
-  const [blastLoading, setBlastLoading] = useState<string | null>(null)
+  // ── Blast Radius (per-row action → graph modal) ───────
+  const [blastModal, setBlastModal] = useState<{ id: string; name: string } | null>(null)
   async function handleBlastRadius(identityId: string, name: string) {
-    setBlastLoading(identityId)
-    try {
-      const res = await authFetch(`/api/v1/identities/${identityId}/blast-radius`)
-      const data = await res.json()
-      console.log(`Blast radius graph for ${name}:`, data)
-    } catch (e: any) {
-      console.error(`Blast radius fetch failed for ${name}:`, e.message)
-    } finally {
-      setBlastLoading(null)
-    }
+    setBlastModal({ id: identityId, name })
   }
 
   // ── Render ────────────────────────────────────────────
@@ -528,10 +524,9 @@ export default function IdentitiesPage() {
                         <button
                           className="text-xs text-brand-400 hover:text-brand-300 px-2 py-0.5"
                           onClick={() => handleBlastRadius(id.id, id.display_name || id.email)}
-                          title="Fetch blast radius graph (logged to console)"
-                          disabled={blastLoading === id.id}
+                          title="Visualize blast radius graph"
                         >
-                          {blastLoading === id.id ? "…" : "Blast"}
+                          Blast
                         </button>
                         <button
                           className="text-xs text-red-400 hover:text-red-300 px-2 py-0.5"
@@ -565,6 +560,15 @@ export default function IdentitiesPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Blast Radius Graph Modal ── */}
+      {blastModal && (
+        <BlastRadiusModal
+          identityId={blastModal.id}
+          name={blastModal.name}
+          onClose={() => setBlastModal(null)}
+        />
+      )}
 
       {/* ── Detail Panel ── */}
       {selected && (
@@ -787,6 +791,102 @@ export default function IdentitiesPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Blast Radius Modal ───────────────────────────────────
+
+const LEGEND: { color: string; label: string }[] = [
+  { color: "#60A5FA", label: "Identity" },
+  { color: "#C084FC", label: "Non-Human Identity" },
+  { color: "#A78BFA", label: "Role" },
+  { color: "#F59E0B", label: "Entitlement" },
+  { color: "#34D399", label: "Resource" },
+  { color: "#EF4444", label: "Critical Resource" },
+]
+
+function BlastRadiusModal({ identityId, name, onClose }: { identityId: string; name: string; onClose: () => void }) {
+  const [graph, setGraph] = useState<{ nodes: GraphNode[]; links: GraphLink[] } | null>(null)
+  const [flatCount, setFlatCount] = useState(0)
+  const [criticalCount, setCriticalCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await authFetch(`/api/v1/identities/${identityId}/blast-radius`)
+        const data = await res.json()
+        if (cancelled) return
+        console.log(`Blast radius graph for ${name}:`, data)
+        const g = data.graph || { nodes: [], links: [] }
+        const flat = data.blast_radius || []
+        setGraph({ nodes: g.nodes || [], links: g.links || [] })
+        setFlatCount(flat.length)
+        setCriticalCount(flat.filter((r: any) => r.criticality === "critical" || r.criticality === "high").length)
+        setError("")
+      } catch (e: any) {
+        if (!cancelled) setError(e.message || "Failed to load blast radius")
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [identityId, name])
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "rgba(5,5,8,0.92)", backdropFilter: "blur(12px)" }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 shrink-0">
+        <div>
+          <h2 className="text-lg font-bold text-white">
+            Blast Radius — <span className="text-brand-400">{name}</span>
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {loading ? "Loading graph…" : graph
+              ? `${graph.nodes.length} nodes · ${graph.links.length} relationships · ${flatCount} reachable resources · ${criticalCount} critical`
+              : ""}
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* Legend */}
+          <div className="hidden md:flex items-center gap-3">
+            {LEGEND.map((l) => (
+              <span key={l.label} className="flex items-center gap-1.5 text-xs text-gray-400">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: l.color, boxShadow: `0 0 6px ${l.color}66` }} />
+                {l.label}
+              </span>
+            ))}
+          </div>
+          <button className="btn-secondary text-xs px-3 py-1.5" onClick={onClose}>Close ✕</button>
+        </div>
+      </div>
+
+      {/* Graph body */}
+      <div className="flex-1 relative overflow-hidden">
+        {loading ? (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="skeleton w-64 h-6 rounded" />
+          </div>
+        ) : error ? (
+          <div className="absolute inset-0 flex items-center justify-center text-red-400 text-sm">{error}</div>
+        ) : !graph || graph.nodes.length === 0 ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-500">
+            <p className="text-sm">No blast radius — this identity has no reachable roles, entitlements, or resources.</p>
+            <p className="text-xs text-gray-600">Assign a role or entitlement to see the graph.</p>
+          </div>
+        ) : (
+          <BlastRadiusGraph nodes={graph.nodes} links={graph.links} centerId={identityId} />
+        )}
+      </div>
+
+      {/* Footer hint */}
+      <div className="px-6 py-2.5 border-t border-gray-800 shrink-0 flex items-center justify-between">
+        <span className="text-xs text-gray-600">Drag nodes to rearrange · Scroll to zoom · Hover for details</span>
+        <span className="text-xs text-gray-600 font-mono">Identity → Role → Entitlement → Resource</span>
+      </div>
     </div>
   )
 }

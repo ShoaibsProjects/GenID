@@ -769,7 +769,7 @@ func (s *IdentityService) GetBlastRadius(w http.ResponseWriter, r *http.Request)
 	defer session.Close(r.Context())
 
 	result, err := session.Run(r.Context(), `
-		MATCH (i:Identity {uuid: $id})
+		MATCH (i {uuid: $id}) WHERE i:Identity OR i:NonHumanIdentity
 		MATCH path = (i)-[:HAS_ROLE|DIRECTLY_OWNS|DELEGATED_FROM*1..4]->(e:Entitlement)-[:ACCESSES]->(r:Resource)
 		RETURN r.name AS resource_name, r.criticality AS criticality,
 			   e.permission_level AS permission_level,
@@ -803,7 +803,108 @@ func (s *IdentityService) GetBlastRadius(w http.ResponseWriter, r *http.Request)
 	respondJSON(w, http.StatusOK, map[string]any{
 		"identity_id":  id,
 		"blast_radius": resources,
+		"graph":        s.blastRadiusGraph(r, id),
 	})
+}
+
+// blastRadiusGraph returns the graph-native view of an identity's blast
+// radius: every node (Identity/NonHumanIdentity, Role, Entitlement, Resource)
+// and every relationship (HAS_ROLE, DIRECTLY_OWNS, DELEGATED_FROM, ACCESSES)
+// on the paths, deduplicated. Powers the force-graph visualization.
+func (s *IdentityService) blastRadiusGraph(r *http.Request, id string) map[string]any {
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(r.Context())
+
+	nodes := map[string]map[string]any{}
+	var links []map[string]any
+	type linkKey struct{ s, t, typ string }
+	seenLinks := map[linkKey]bool{}
+
+	addNode := func(m map[string]any) {
+		if nid, ok := m["id"].(string); ok && nid != "" {
+			if _, exists := nodes[nid]; !exists {
+				nodes[nid] = m
+			}
+		}
+	}
+
+	// Center node — Identity or NonHumanIdentity (agents have blast radius too)
+	centerRes, err := session.Run(r.Context(), `
+		MATCH (i {uuid: $id}) WHERE i:Identity OR i:NonHumanIdentity
+		RETURN i.uuid AS id,
+		       COALESCE(i.display_name, i.name, i.email, i.uuid) AS label,
+		       labels(i)[0] AS type
+	`, map[string]any{"id": id})
+	if err == nil {
+		for centerRes.Next(r.Context()) {
+			rec := centerRes.Record()
+			addNode(map[string]any{
+				"id":    getRecordVal(rec, "id"),
+				"label": getRecordVal(rec, "label"),
+				"type":  getRecordVal(rec, "type"),
+			})
+		}
+	}
+
+	// Paths → nodes + links
+	pathRes, err := session.Run(r.Context(), `
+		MATCH (i {uuid: $id}) WHERE i:Identity OR i:NonHumanIdentity
+		MATCH path = (i)-[:HAS_ROLE|DIRECTLY_OWNS|DELEGATED_FROM*1..4]->(e:Entitlement)-[:ACCESSES]->(r:Resource)
+		RETURN [n IN nodes(path) | {
+			id: n.uuid,
+			label: COALESCE(n.display_name, n.name, n.app_name, n.email, n.uuid),
+			type: labels(n)[0],
+			criticality: n.criticality,
+			permission_level: n.permission_level
+		}] AS ns,
+		[rel IN relationships(path) | {
+			source: startNode(rel).uuid,
+			target: endNode(rel).uuid,
+			type: type(rel)
+		}] AS rs
+		LIMIT 200
+	`, map[string]any{"id": id})
+	if err != nil {
+		return map[string]any{"nodes": nodes, "links": links}
+	}
+
+	for pathRes.Next(r.Context()) {
+		rec := pathRes.Record()
+		if nsRaw, ok := rec.Get("ns"); ok {
+			if nsList, ok := nsRaw.([]any); ok {
+				for _, nRaw := range nsList {
+					if nMap, ok := nRaw.(map[string]any); ok {
+						addNode(nMap)
+					}
+				}
+			}
+		}
+		if rsRaw, ok := rec.Get("rs"); ok {
+			if rsList, ok := rsRaw.([]any); ok {
+				for _, lRaw := range rsList {
+					if lMap, ok := lRaw.(map[string]any); ok {
+						src, _ := lMap["source"].(string)
+						tgt, _ := lMap["target"].(string)
+						typ, _ := lMap["type"].(string)
+						k := linkKey{src, tgt, typ}
+						if src != "" && tgt != "" && !seenLinks[k] {
+							seenLinks[k] = true
+							links = append(links, map[string]any{"source": src, "target": tgt, "type": typ})
+						}
+					}
+				}
+			}
+		}
+	}
+
+	nodeList := make([]map[string]any, 0, len(nodes))
+	for _, n := range nodes {
+		nodeList = append(nodeList, n)
+	}
+	if links == nil {
+		links = []map[string]any{}
+	}
+	return map[string]any{"nodes": nodeList, "links": links}
 }
 
 // ─── Agent / NHI Handlers ─────────────────────────────────
