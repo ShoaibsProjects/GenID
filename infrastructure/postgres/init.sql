@@ -1,4 +1,4 @@
--- ─── ObserveID Reimagined PostgreSQL Schema ──────────────
+-- ─── GenID Reimagined PostgreSQL Schema ──────────────
 -- Core tables for the Identity Fabric
 
 -- Extensions
@@ -311,7 +311,8 @@ CREATE TABLE cedar_policies (
     tenant_id       UUID NOT NULL REFERENCES tenants(id),
     policy_id       VARCHAR(255) NOT NULL,
     effect          VARCHAR(10) NOT NULL CHECK (effect IN ('permit', 'forbid')),
-    policy_source   TEXT NOT NULL,
+    policy_source   TEXT NOT NULL DEFAULT '',
+    cedar_text      TEXT NOT NULL DEFAULT '',
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
     version         INTEGER NOT NULL DEFAULT 1,
     created_by      UUID REFERENCES identities(id),
@@ -548,7 +549,7 @@ ALTER TABLE connector_resources      DROP CONSTRAINT IF EXISTS connector_resourc
 
 -- ─── Seed Data: Default Tenant ─────────────────────────────
 INSERT INTO tenants (id, name, slug, tier) VALUES
-    ('00000000-0000-0000-0000-000000000001', 'ObserveID Reimagined Internal', 'observeid', 'enterprise');
+    ('00000000-0000-0000-0000-000000000001', 'GenID Reimagined Internal', 'observeid', 'enterprise');
 
 -- ─── Seed Data: Admin Identity ─────────────────────────────
 INSERT INTO identities (id, tenant_id, type, status, email, display_name, employee_id, source, assurance_level)
@@ -556,7 +557,7 @@ VALUES (
     '00000000-0000-0000-0000-000000000002',
     '00000000-0000-0000-0000-000000000001',
     'human', 'active',
-    'admin@observeid.io', 'System Admin', 'ADMIN-001',
+    'admin@genid.us', 'System Admin', 'ADMIN-001',
     'manual', 'aal2'
 );
 
