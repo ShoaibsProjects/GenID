@@ -1,0 +1,35 @@
+connector_id: epic-ehr
+name: Epic EHR
+category: healthcare
+auth_type: oauth2
+auth_config:
+  token_url: https://fhirepicproxy.genid.us/oauth2/token
+  scope: system/Patient.read system/Practitioner.read system/PractitionerRole.read
+endpoints:
+  practitioners:
+    url: https://fhirepicproxy.genid.us/api/api/FHIR/R4/Practitioner
+    method: GET
+    pagination: bundle
+  practitioner_roles:
+    url: https://fhirepicproxy.genid.us/api/FHIR/R4/PractitionerRole
+    method: GET
+    pagination: bundle
+  organizations:
+    url: https://fhirepicproxy.genid.us/api/FHIR/R4/Organization
+    method: GET
+    pagination: bundle
+schema_map:
+  username:
+    source: "identifier[0].value"
+  email:
+    source: "telecom[?system=='email'].value"
+  first_name:
+    source: "name[0].given[0]"
+  last_name:
+    source: "name[0].family"
+  npi:
+    source: "identifier[?system=='http://hl7.org/fhir/sid/us-npi'].value"
+  external_id:
+    source: "id"
+  department:
+    source: "extension[?url=='http://genid.us/fhir/StructureDefinition/department'].valueString"

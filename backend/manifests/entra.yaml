@@ -1,0 +1,35 @@
+connector_id: entra-id
+name: Microsoft Entra ID
+category: identity_provider
+auth_type: oauth2
+auth_config:
+  token_url: https://login.microsoftonline.com/tenant_id/oauth2/v2.0/token
+  scope: https://graph.microsoft.com/.default
+endpoints:
+  users:
+    url: https://graph.microsoft.com/v1.0/users
+    method: GET
+    pagination: nextLink
+  groups:
+    url: https://graph.microsoft.com/v1.0/groups
+    method: GET
+    pagination: nextLink
+  delta:
+    url: https://graph.microsoft.com/v1.0/users/delta
+    method: GET
+    pagination: nextLink
+schema_map:
+  email:
+    source: mail
+  first_name:
+    source: givenName
+  last_name:
+    source: surname
+  display_name:
+    source: displayName
+  department:
+    source: department
+  employee_id:
+    source: employeeId
+  manager_id:
+    source: "manager.id"

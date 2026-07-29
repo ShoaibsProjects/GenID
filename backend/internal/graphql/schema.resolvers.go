@@ -12,10 +12,11 @@ import (
 	"time"
 
 	pgx "github.com/jackc/pgx/v5"
-	"github.com/observeid/identity-platform/internal/audit"
-	"github.com/observeid/identity-platform/internal/connector"
-	"github.com/observeid/identity-platform/internal/domain"
-	"github.com/observeid/identity-platform/internal/workflow"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/observeid/genid/internal/audit"
+	"github.com/observeid/genid/internal/connector"
+	"github.com/observeid/genid/internal/domain"
+	"github.com/observeid/genid/internal/workflow"
 )
 
 // CreateIdentity is the resolver for the createIdentity field.
@@ -53,6 +54,24 @@ func (r *mutationResolver) CreateIdentity(ctx context.Context, input CreateIdent
 	).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("graphql: create identity: %w", err)
+	}
+
+	session := r.Svc.Neo4j().NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+	_, err = session.Run(ctx, `
+		MERGE (i:Identity {uuid: $uuid})
+		SET i.tenant_id = $tenant_id, i.type = $type, i.status = 'active',
+		    i.email = $email, i.display_name = $display_name,
+		    i.department = $department, i.employee_id = $employee_id,
+		    i.source = $source, i.risk_score = 0.0, i.risk_factors = ["pending_calculation"],
+		    i.updated_at = datetime(), i.created_at = COALESCE(i.created_at, datetime())
+	`, map[string]any{
+		"uuid": id, "tenant_id": "00000000-0000-0000-0000-000000000001", "type": identityType,
+		"email": input.Email, "display_name": input.DisplayName,
+		"department": dept, "employee_id": eid, "source": src,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("graphql: create identity neo4j: %w", err)
 	}
 
 	return (&queryResolver{r.Resolver}).getIdentityByID(ctx, id)
@@ -439,7 +458,7 @@ func (r *queryResolver) AuditLogs(ctx context.Context, limit *int, offset *int, 
 func (r *queryResolver) Health(ctx context.Context) (*HealthStatus, error) {
 	return &HealthStatus{
 		Status:  "ok",
-		Service: "observeid-identity",
+		Service: "genid-identity",
 		Version: "1.0.0",
 	}, nil
 }
