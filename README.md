@@ -14,8 +14,8 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat&logo=postgresql&logoColor=white&labelColor=1C1C24)](https://postgresql.org)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat&logo=redis&logoColor=white&labelColor=1C1C24)](https://redis.io)
 
-[![CI](https://github.com/ShoaibsProjects/genid/actions/workflows/ci.yml/badge.svg)](https://github.com/ShoaibsProjects/genid/actions/workflows/ci.yml)
-[![Deploy](https://github.com/ShoaibsProjects/genid/actions/workflows/deploy.yml/badge.svg)](https://github.com/ShoaibsProjects/genid/actions/workflows/deploy.yml)
+[![CI](https://github.com/ShoaibsProject/observeid-V2/actions/workflows/ci.yml/badge.svg)](https://github.com/ShoaibsProject/observeid-V2/actions/workflows/ci.yml)
+[![Deploy](https://github.com/ShoaibsProject/observeid-V2/actions/workflows/deploy.yml/badge.svg)](https://github.com/ShoaibsProject/observeid-V2/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-8B5CF6?style=flat&labelColor=1C1C24)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-112%20passed-22C55E?style=flat&labelColor=1C1C24)]()
 
