@@ -1,8 +1,8 @@
-# ObserveID: Master Build Plan (The Agentic Fabric v2.0)
+# GenID: Master Build Plan (The Agentic Fabric v2.0)
 
 ## 0. Core Mandate & Context
-**Project:** ObserveID
-**Goal:** Refactor the existing ObserveID codebase from a legacy IGA prototype into a FAANG-grade, Agentic Identity Fabric.
+**Project:** GenID
+**Goal:** Refactor the existing GenID codebase from a legacy IGA prototype into a FAANG-grade, Agentic Identity Fabric.
 **Target Audience for this Document:** AI Coding Agent (e.g., OpenCode, Cursor).
 **Instruction to AI:** Read this document entirely. Execute the tasks inch-by-inch in the exact order specified. Do not skip ahead. Adhere strictly to the "Tech Stack" and "Cut List" constraints. Ask for clarification if a task is ambiguous, but do not invent new architectural patterns.
 
@@ -58,7 +58,7 @@
 
 ### Task 1.3: NATS Event Bus Implementation
 **Create:** Create `backend/internal/eventbus/nats.go`.
-*   Implement a `NatsBus` struct that connects to NATS, creates a stream `observeid-events`, and exposes a `Publish(ctx, event)` method.
+*   Implement a `NatsBus` struct that connects to NATS, creates a stream `genid-events`, and exposes a `Publish(ctx, event)` method.
 **Update:** Open `backend/internal/outbox/processor.go`. After successfully applying an event to Neo4j, call `natsBus.Publish()`. Do not fail the outbox process if NATS publishing fails (NATS is a secondary notification, PG/Neo4j is source of truth).
 
 ### Task 1.4: CAEP Broadcast Completion

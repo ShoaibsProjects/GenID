@@ -1,4 +1,4 @@
-module github.com/observeid/identity-platform
+module github.com/observeid/genid
 
 go 1.25.0
 

@@ -68,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 function AuthBootstrap() {
   useEffect(() => {
     if (!isLoggedIn()) {
-      devLogin("admin@observeid.io", "dev-login").then((ok) => {
+      devLogin("admin@genid.io", "dev-login").then((ok) => {
         if (ok) window.location.reload()
       }).catch(() => {})
     }
@@ -88,7 +88,7 @@ function Sidebar() {
             </svg>
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight leading-none text-gradient-accent">ObserveID</h1>
+            <h1 className="text-base font-bold tracking-tight leading-none text-gradient-accent">GenID</h1>
             <p className="text-[0.55rem] font-semibold uppercase tracking-[0.15em]" style={{ color: '#5C5C62', marginTop: 2 }}>Fabric v1</p>
           </div>
         </div>

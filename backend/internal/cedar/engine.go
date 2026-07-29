@@ -11,7 +11,7 @@ import (
 
 	cedar "github.com/cedar-policy/cedar-go"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/observeid/identity-platform/pkg/telemetry"
+	"github.com/observeid/genid/pkg/telemetry"
 )
 
 // CedarEngine is the core Cedar authorization engine.

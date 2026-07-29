@@ -1,36 +1,36 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: observeid
+  name: genid
   labels:
-    name: observeid
+    name: genid
     pod-security.kubernetes.io/enforce: restricted
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: observeid-identity
-  namespace: observeid
+  name: genid-identity
+  namespace: genid
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/observeid-identity
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/genid-identity
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: observeid-temporal
-  namespace: observeid
+  name: genid-temporal
+  namespace: genid
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: spire-agent
-  namespace: observeid
+  namespace: genid
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: observeid-db-credentials
-  namespace: observeid
+  name: genid-db-credentials
+  namespace: genid
 type: Opaque
 stringData:
   DB_USER: "observeid"
@@ -42,10 +42,10 @@ stringData:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: observeid-identity
-  namespace: observeid
+  name: genid-identity
+  namespace: genid
   labels:
-    app: observeid-identity
+    app: genid-identity
     component: identity-service
 spec:
   replicas: 3
@@ -56,18 +56,18 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app: observeid-identity
+      app: genid-identity
   template:
     metadata:
       labels:
-        app: observeid-identity
+        app: genid-identity
         component: identity-service
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9090"
         spire.io/inject: "true"  # SPIRE workload attestation
     spec:
-      serviceAccountName: observeid-identity
+      serviceAccountName: genid-identity
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -82,11 +82,11 @@ spec:
                 - key: app
                   operator: In
                   values:
-                  - observeid-identity
+                  - genid-identity
               topologyKey: kubernetes.io/hostname
       containers:
       - name: identity-service
-        image: observeid/identity-service:latest
+        image: genid/identity-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -100,41 +100,41 @@ spec:
           protocol: TCP
         env:
         - name: DB_HOST
-          value: "observeid-postgres.observeid.svc.cluster.local"
+          value: "genid-postgres.genid.svc.cluster.local"
         - name: DB_PORT
           value: "5432"
         - name: DB_USER
           valueFrom:
             secretKeyRef:
-              name: observeid-db-credentials
+              name: genid-db-credentials
               key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: observeid-db-credentials
+              name: genid-db-credentials
               key: DB_PASSWORD
         - name: DB_NAME
           valueFrom:
             secretKeyRef:
-              name: observeid-db-credentials
+              name: genid-db-credentials
               key: DB_NAME
         - name: NEO4J_URI
-          value: "bolt://observeid-neo4j.observeid.svc.cluster.local:7687"
+          value: "bolt://genid-neo4j.genid.svc.cluster.local:7687"
         - name: NEO4J_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: observeid-db-credentials
+              name: genid-db-credentials
               key: NEO4J_PASSWORD
         - name: KAFKA_BROKERS
-          value: "observeid-kafka-headless.observeid.svc.cluster.local:9092"
+          value: "genid-kafka-headless.genid.svc.cluster.local:9092"
         - name: TEMPORAL_HOST
-          value: "observeid-temporal.observeid.svc.cluster.local:7233"
+          value: "genid-temporal.genid.svc.cluster.local:7233"
         - name: REDIS_ADDR
-          value: "observeid-redis.observeid.svc.cluster.local:6379"
+          value: "genid-redis.genid.svc.cluster.local:6379"
         - name: QDRANT_ADDR
-          value: "observeid-qdrant.observeid.svc.cluster.local:6333"
+          value: "genid-qdrant.genid.svc.cluster.local:6333"
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "observeid-otel-collector.observeid.svc.cluster.local:4317"
+          value: "genid-otel-collector.genid.svc.cluster.local:4317"
         - name: LOG_LEVEL
           value: "info"
         resources:
@@ -171,10 +171,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: observeid-identity
-  namespace: observeid
+  name: genid-identity
+  namespace: genid
   labels:
-    app: observeid-identity
+    app: genid-identity
 spec:
   type: ClusterIP
   ports:
@@ -188,45 +188,45 @@ spec:
     targetPort: 9090
     name: metrics
   selector:
-    app: observeid-identity
+    app: genid-identity
 ---
 # ─── Temporal Worker ──────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: observeid-temporal-worker
-  namespace: observeid
+  name: genid-temporal-worker
+  namespace: genid
   labels:
-    app: observeid-temporal-worker
+    app: genid-temporal-worker
     component: workflow-worker
 spec:
   replicas: 5
   selector:
     matchLabels:
-      app: observeid-temporal-worker
+      app: genid-temporal-worker
   template:
     metadata:
       labels:
-        app: observeid-temporal-worker
+        app: genid-temporal-worker
       annotations:
         spire.io/inject: "true"
     spec:
-      serviceAccountName: observeid-identity
+      serviceAccountName: genid-identity
       containers:
       - name: worker
-        image: observeid/identity-service:latest
+        image: genid/identity-service:latest
         command: ["/app/worker"]
         env:
         - name: TEMPORAL_HOST
-          value: "observeid-temporal.observeid.svc.cluster.local:7233"
+          value: "genid-temporal.genid.svc.cluster.local:7233"
         - name: DB_HOST
-          value: "observeid-postgres.observeid.svc.cluster.local"
+          value: "genid-postgres.genid.svc.cluster.local"
         - name: NEO4J_URI
-          value: "bolt://observeid-neo4j.observeid.svc.cluster.local:7687"
+          value: "bolt://genid-neo4j.genid.svc.cluster.local:7687"
         - name: KAFKA_BROKERS
-          value: "observeid-kafka-headless.observeid.svc.cluster.local:9092"
+          value: "genid-kafka-headless.genid.svc.cluster.local:9092"
         - name: REDIS_ADDR
-          value: "observeid-redis.observeid.svc.cluster.local:6379"
+          value: "genid-redis.genid.svc.cluster.local:6379"
         resources:
           requests:
             memory: "1Gi"
@@ -251,30 +251,30 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: observeid-frontend
-  namespace: observeid
+  name: genid-frontend
+  namespace: genid
   labels:
-    app: observeid-frontend
+    app: genid-frontend
     component: ui
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: observeid-frontend
+      app: genid-frontend
   template:
     metadata:
       labels:
-        app: observeid-frontend
+        app: genid-frontend
     spec:
       containers:
       - name: frontend
-        image: observeid/frontend:latest
+        image: genid/frontend:latest
         ports:
         - containerPort: 3000
           name: http
         env:
         - name: NEXT_PUBLIC_API_URL
-          value: "https://api.observeid.io"
+          value: "https://api.genid.io"
         resources:
           requests:
             memory: "256Mi"
@@ -292,8 +292,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: observeid-frontend
-  namespace: observeid
+  name: genid-frontend
+  namespace: genid
 spec:
   type: ClusterIP
   ports:
@@ -301,14 +301,14 @@ spec:
     targetPort: 3000
     name: http
   selector:
-    app: observeid-frontend
+    app: genid-frontend
 ---
 # ─── Ingress ───────────────────────────────────────────────
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: observeid-ingress
-  namespace: observeid
+  name: genid-ingress
+  namespace: genid
   annotations:
     kubernetes.io/ingress.class: "alb"
     alb.ingress.kubernetes.io/scheme: "internet-facing"
@@ -320,7 +320,7 @@ metadata:
     alb.ingress.kubernetes.io/wafv2-acl-arn: "${WAF_ARN}"
 spec:
   rules:
-  - host: app.observeid.io
+  - host: app.genid.io
     http:
       paths:
       - path: /*
@@ -334,17 +334,17 @@ spec:
         pathType: ImplementationSpecific
         backend:
           service:
-            name: observeid-identity
+            name: genid-identity
             port:
               number: 8081
       - path: /*
         pathType: ImplementationSpecific
         backend:
           service:
-            name: observeid-frontend
+            name: genid-frontend
             port:
               number: 3000
-  - host: api.observeid.io
+  - host: api.genid.io
     http:
       paths:
       - path: /*
@@ -358,7 +358,7 @@ spec:
         pathType: ImplementationSpecific
         backend:
           service:
-            name: observeid-identity
+            name: genid-identity
             port:
               number: 8081
 ---
@@ -366,8 +366,8 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: observeid-default-deny
-  namespace: observeid
+  name: genid-default-deny
+  namespace: genid
 spec:
   podSelector: {}
   policyTypes:
@@ -377,12 +377,12 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: observeid-identity-network
-  namespace: observeid
+  name: genid-identity-network
+  namespace: genid
 spec:
   podSelector:
     matchLabels:
-      app: observeid-identity
+      app: genid-identity
   policyTypes:
   - Ingress
   ingress:
@@ -400,25 +400,25 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: observeid-identity-pdb
-  namespace: observeid
+  name: genid-identity-pdb
+  namespace: genid
 spec:
   minAvailable: 2
   selector:
     matchLabels:
-      app: observeid-identity
+      app: genid-identity
 ---
 # ─── HorizontalPodAutoscaler ──────────────────────────────
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: observeid-identity-hpa
-  namespace: observeid
+  name: genid-identity-hpa
+  namespace: genid
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: observeid-identity
+    name: genid-identity
   minReplicas: 3
   maxReplicas: 20
   metrics:

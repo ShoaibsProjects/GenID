@@ -1,21 +1,21 @@
-# ─── Grafana Dashboard: ObserveID Reimagined Identity Fabric ──
+# ─── Grafana Dashboard: GenID Reimagined Identity Fabric ──
 # Key metrics for the Identity Control Plane
 
 apiVersion: 1
 
 providers:
-  - name: "ObserveID Reimagined"
+  - name: "GenID Reimagined"
     orgId: 1
-    folder: "ObserveID Reimagined"
+    folder: "GenID Reimagined"
     type: file
     options:
       path: /etc/grafana/provisioning/dashboards
 
 dashboards:
-  - name: "ObserveID Reimagined Identity Fabric Overview"
-    uid: "observeid-overview"
+  - name: "GenID Reimagined Identity Fabric Overview"
+    uid: "genid-overview"
     schemaVersion: 39
-    tags: ["observeid", "identity"]
+    tags: ["genid", "identity"]
     time:
       from: "now-6h"
       to: "now"
@@ -25,7 +25,7 @@ dashboards:
       list:
         - name: tenant
           type: query
-          query: "label_values(observeid_identities_total, tenant_id)"
+          query: "label_values(genid_identities_total, tenant_id)"
           refresh: 1
           sort: 0
 
@@ -35,7 +35,7 @@ dashboards:
         span: 4
         datasource: "Prometheus"
         targets:
-          - expr: 'sum(observeid_identities_total{tenant_id=~"$tenant"}) by (type)'
+          - expr: 'sum(genid_identities_total{tenant_id=~"$tenant"}) by (type)'
             legendFormat: "{{ type }}"
         options:
           pieType: "pie"
@@ -50,11 +50,11 @@ dashboards:
         span: 8
         datasource: "Prometheus"
         targets:
-          - expr: 'histogram_quantile(0.99, sum(rate(observeid_access_check_latency_ms_bucket{tenant_id=~"$tenant"}[5m])) by (le))'
+          - expr: 'histogram_quantile(0.99, sum(rate(genid_access_check_latency_ms_bucket{tenant_id=~"$tenant"}[5m])) by (le))'
             legendFormat: "P99"
-          - expr: 'histogram_quantile(0.95, sum(rate(observeid_access_check_latency_ms_bucket{tenant_id=~"$tenant"}[5m])) by (le))'
+          - expr: 'histogram_quantile(0.95, sum(rate(genid_access_check_latency_ms_bucket{tenant_id=~"$tenant"}[5m])) by (le))'
             legendFormat: "P95"
-          - expr: 'histogram_quantile(0.50, sum(rate(observeid_access_check_latency_ms_bucket{tenant_id=~"$tenant"}[5m])) by (le))'
+          - expr: 'histogram_quantile(0.50, sum(rate(genid_access_check_latency_ms_bucket{tenant_id=~"$tenant"}[5m])) by (le))'
             legendFormat: "P50"
         fieldConfig:
           defaults:
@@ -72,7 +72,7 @@ dashboards:
         span: 6
         datasource: "Prometheus"
         targets:
-          - expr: 'sum(rate(observeid_workflow_executions_total{tenant_id=~"$tenant"}[5m])) by (workflow_type)'
+          - expr: 'sum(rate(genid_workflow_executions_total{tenant_id=~"$tenant"}[5m])) by (workflow_type)'
             legendFormat: "{{ workflow_type }}"
 
       - title: "Cedar Policy Evaluations"
@@ -80,7 +80,7 @@ dashboards:
         span: 6
         datasource: "Prometheus"
         targets:
-          - expr: 'sum(rate(observeid_cedar_evaluation_latency_ms_count{tenant_id=~"$tenant"}[5m])) by (policy_effect)'
+          - expr: 'sum(rate(genid_cedar_evaluation_latency_ms_count{tenant_id=~"$tenant"}[5m])) by (policy_effect)'
             legendFormat: "{{ policy_effect }}"
 
       - title: "DLQ Size (Security Critical)"
@@ -88,7 +88,7 @@ dashboards:
         span: 4
         datasource: "Prometheus"
         targets:
-          - expr: 'sum(observeid_dlq_size{tenant_id=~"$tenant"})'
+          - expr: 'sum(genid_dlq_size{tenant_id=~"$tenant"})'
         fieldConfig:
           defaults:
             color:
@@ -107,7 +107,7 @@ dashboards:
         span: 8
         datasource: "Prometheus"
         targets:
-          - expr: 'sum(rate(observeid_caep_events_total{tenant_id=~"$tenant"}[5m])) by (delivery_status)'
+          - expr: 'sum(rate(genid_caep_events_total{tenant_id=~"$tenant"}[5m])) by (delivery_status)'
             legendFormat: "{{ delivery_status }}"
 
       - title: "Agent Health"
@@ -115,7 +115,7 @@ dashboards:
         span: 4
         datasource: "Prometheus"
         targets:
-          - expr: 'sum(observeid_agent_kill_switch_total{tenant_id=~"$tenant"})'
+          - expr: 'sum(genid_agent_kill_switch_total{tenant_id=~"$tenant"})'
             legendFormat: "Kill switches"
         options:
           reduceOptions:
@@ -126,7 +126,7 @@ dashboards:
         span: 12
         datasource: "Prometheus"
         targets:
-          - expr: 'topk(10, observeid_identities_total{tenant_id=~"$tenant"})'
+          - expr: 'topk(10, genid_identities_total{tenant_id=~"$tenant"})'
             format: "table"
             instant: true
 
@@ -138,7 +138,7 @@ dashboards:
             span: 6
             datasource: "Prometheus"
             targets:
-              - expr: 'sum(rate(observeid_cedar_deny_total[5m])) by (action)'
+              - expr: 'sum(rate(genid_cedar_deny_total[5m])) by (action)'
                 legendFormat: "{{ action }}"
 
           - title: "Agent Anomalies"
@@ -146,5 +146,5 @@ dashboards:
             span: 6
             datasource: "Prometheus"
             targets:
-              - expr: 'sum(rate(observeid_agent_anomalies_total{tenant_id=~"$tenant"}[5m])) by (type)'
+              - expr: 'sum(rate(genid_agent_anomalies_total{tenant_id=~"$tenant"}[5m])) by (type)'
                 legendFormat: "{{ type }}"

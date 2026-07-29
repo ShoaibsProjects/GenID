@@ -85,7 +85,7 @@ export default function IDPPage() {
     setTestLoading(true); setTestResult(null)
     try {
       // Step 1: authorize
-      const authRes = await fetch(`${API}/authorize?response_type=code&client_id=observeid-demo&redirect_uri=http://localhost:8080/callback&scope=openid+profile+email&state=test`)
+      const authRes = await fetch(`${API}/authorize?response_type=code&client_id=genid-demo&redirect_uri=http://localhost:8080/callback&scope=openid+profile+email&state=test`)
       let code = ""
       if (authRes.redirected) { code = new URL(authRes.url).searchParams.get("code") || "" }
       else { const d = await authRes.json(); code = d.code || "" }
@@ -95,7 +95,7 @@ export default function IDPPage() {
       const tokenRes = await fetch(`${API}/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: "http://localhost:8080/callback", client_id: "observeid-demo", client_secret: "observeid-demo-secret" }).toString(),
+        body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: "http://localhost:8080/callback", client_id: "genid-demo", client_secret: "genid-demo-secret" }).toString(),
       })
       const tokens = await tokenRes.json()
       if (tokens.error) { setTestResult({ error: tokens.error_description || tokens.error, step: "token" }); return }

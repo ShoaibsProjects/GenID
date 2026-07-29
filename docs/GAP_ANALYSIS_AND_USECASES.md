@@ -1,4 +1,4 @@
-# ObserveID — Gap Analysis & Use Cases
+# GenID — Gap Analysis & Use Cases
 **Date:** 2026-07-28 · **Scope:** Full codebase audit (`backend/internal`, `frontend/src/app`) + competitive benchmark + risk math architecture
 **Method:** Every backend handler and frontend page was read. Live dummy tests were executed against the running system and are cited as `[LIVE TEST]`.
 
@@ -138,7 +138,7 @@ Benchmarks: Okta (IGA + Lifecycle Mgmt), SailPoint IdentityNow, Saviynt EIC, Mic
 
 ### Lifecycle Management & JML (1–10)
 
-| # | Feature | Category | Industry standard behavior | ObserveID | Effort | Approach hint | Missing UI control |
+| # | Feature | Category | Industry standard behavior | GenID | Effort | Approach hint | Missing UI control |
 |---|---|---|---|---|---|---|---|
 | 1 | Joiner provisioning | JML | HR record → accounts created in all birthright apps day-1 | Partial | Med | LCM + connector write-back exists; needs birthright rule table | Birthright rules editor |
 | 2 | Mover transfer | JML | Attribute change → revoke old dept access, grant new | Partial | Med | Temporal workflow chained on attribute watch | Mover rule builder |
@@ -153,7 +153,7 @@ Benchmarks: Okta (IGA + Lifecycle Mgmt), SailPoint IdentityNow, Saviynt EIC, Mic
 
 ### Identity Correlation & Attribute Mapping (11–18)
 
-| # | Feature | Category | Industry standard | ObserveID | Effort | Approach hint | Missing UI control |
+| # | Feature | Category | Industry standard | GenID | Effort | Approach hint | Missing UI control |
 |---|---|---|---|---|---|---|---|
 | 11 | Correlation rules config | Correlation | Choose match keys + priority per source | Partial | Med | Stitching is email/employee_id only, hardcoded | Correlation rule editor |
 | 12 | Fuzzy/weighted matching | Correlation | SailPoint correlation config: weighted attributes, threshold | No | High | Score = Σ w_i·sim(attr_i); sim = exact/levenshtein | Match-threshold slider |
@@ -166,7 +166,7 @@ Benchmarks: Okta (IGA + Lifecycle Mgmt), SailPoint IdentityNow, Saviynt EIC, Mic
 
 ### Entitlements & SoD (19–26)
 
-| # | Feature | Category | Industry standard | ObserveID | Effort | Approach hint | Missing UI control |
+| # | Feature | Category | Industry standard | GenID | Effort | Approach hint | Missing UI control |
 |---|---|---|---|---|---|---|---|
 | 19 | Entitlement catalog | Entitlements | Searchable catalog w/ owners + risk tier | Partial | Low | Table exists + list endpoint | Catalog page w/ owner column |
 | 20 | Entitlement risk tiers | Entitlements | Criticality drives review cadence + risk score | Partial | Low | `risk_classification` exists — surface it | Tier badge + edit |
@@ -179,7 +179,7 @@ Benchmarks: Okta (IGA + Lifecycle Mgmt), SailPoint IdentityNow, Saviynt EIC, Mic
 
 ### Certifications & Access Reviews (27–34)
 
-| # | Feature | Category | Industry standard | ObserveID | Effort | Approach hint | Missing UI control |
+| # | Feature | Category | Industry standard | GenID | Effort | Approach hint | Missing UI control |
 |---|---|---|---|---|---|---|---|
 | 27 | Scheduled campaigns | Certs | Quarterly auto-launch, scoped | Partial | Low | Cron start of existing workflow | Schedule form |
 | 28 | Reviewer routing | Certs | Manager → app owner → security chain | No | High | Resolve manager_id chain per entry | Routing config per campaign |
@@ -192,7 +192,7 @@ Benchmarks: Okta (IGA + Lifecycle Mgmt), SailPoint IdentityNow, Saviynt EIC, Mic
 
 ### AI Agent Governance & Ephemeral Access (35–42)
 
-| # | Feature | Category | Industry standard | ObserveID | Effort | Approach hint | Missing UI control |
+| # | Feature | Category | Industry standard | GenID | Effort | Approach hint | Missing UI control |
 |---|---|---|---|---|---|---|---|
 | 35 | Agent registry w/ attestation | Agents | SPIFFE-style workload identity | Partial | High | Agent cards exist; SPIFFE deferred per plan (ok) | Card viewer drawer |
 | 36 | Kill switch | Agents | Instant global revoke | **Yes** | — | Shipped + cascade | — |
@@ -205,7 +205,7 @@ Benchmarks: Okta (IGA + Lifecycle Mgmt), SailPoint IdentityNow, Saviynt EIC, Mic
 
 ### Telemetry, Risk & Compliance (43–50)
 
-| # | Feature | Category | Industry standard | ObserveID | Effort | Approach hint | Missing UI control |
+| # | Feature | Category | Industry standard | GenID | Effort | Approach hint | Missing UI control |
 |---|---|---|---|---|---|---|---|
 | 43 | Composite risk engine | Risk | Weighted multi-signal score (Part 3) | **No** | High | Part 3 spec | Risk sliders + explainer popover |
 | 44 | UEBA behavior baseline | Risk | Entra Identity Protection: sign-in anomaly | No | High | Post-MVP; needs event stream features | — |
@@ -261,7 +261,7 @@ Benchmarks: Okta (IGA + Lifecycle Mgmt), SailPoint IdentityNow, Saviynt EIC, Mic
 // GET /api/v1/identities/{id}/blast-radius  ✅ graph modal shows exactly what it could have touched
 // GET /api/v1/audit/verify  ✅ proves the response trail wasn't altered
 ```
-**Where it breaks today:** step 1's findings are invisible (Part 4 #40); everything else works. This is ObserveID's strongest story — it should be the demo.
+**Where it breaks today:** step 1's findings are invisible (Part 4 #40); everything else works. This is GenID's strongest story — it should be the demo.
 
 ## Scenario 3 — Quarterly certification of production databases
 

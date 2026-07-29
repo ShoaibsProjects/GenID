@@ -3,17 +3,17 @@
 // Provides CORS, caching, and DDoS protection
 
 export interface Env {
-  API_ORIGIN: string;       // e.g. https://api.observeid.io (backend origin)
-  FRONTEND_ORIGIN?: string; // e.g. https://app.observeid.io (for CORS)
+  API_ORIGIN: string;       // e.g. https://api.genid.io (backend origin)
+  FRONTEND_ORIGIN?: string; // e.g. https://app.genid.io (for CORS)
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const origin = env.API_ORIGIN || "https://api.observeid.io";
+    const origin = env.API_ORIGIN || "https://api.genid.io";
 
     // ─── CORS Headers ─────────────────────────────────────
-    const frontendOrigin = env.FRONTEND_ORIGIN || "https://app.observeid.io";
+    const frontendOrigin = env.FRONTEND_ORIGIN || "https://app.genid.io";
     const corsHeaders = {
       "Access-Control-Allow-Origin": frontendOrigin,
       "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",

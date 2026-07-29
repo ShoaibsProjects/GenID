@@ -11,7 +11,7 @@
 > 
 > ---
 > 
-> **Context:** ObserveID currently uses dual-write to PostgreSQL + Neo4j without transactional guarantees. If Neo4j write fails after PostgreSQL commits, data becomes inconsistent. The Outbox Pattern solves this by making both writes atomic within a single PostgreSQL transaction, then asynchronously syncing to Neo4j.
+> **Context:** GenID currently uses dual-write to PostgreSQL + Neo4j without transactional guarantees. If Neo4j write fails after PostgreSQL commits, data becomes inconsistent. The Outbox Pattern solves this by making both writes atomic within a single PostgreSQL transaction, then asynchronously syncing to Neo4j.
 > 
 > ---
 
@@ -25,7 +25,7 @@
 
 ### Current Dual-Write Architecture
 
-ObserveID uses **dual-write** to maintain data in both PostgreSQL (relational) and Neo4j (graph):
+GenID uses **dual-write** to maintain data in both PostgreSQL (relational) and Neo4j (graph):
 
 - **PostgreSQL:** Identities, roles, entitlements, audit logs, connectors
 - **Neo4j:** Access graph, relationships, path traversal for authorization
@@ -306,7 +306,7 @@ import (
     
     "github.com/neo4j/neo4j-go-driver/v5/neo4j"
     "github.com/redis/go-redis/v9"
-    "github.com/observeid/identity-platform/pkg/telemetry"
+    "github.com/genid/identity-platform/pkg/telemetry"
 )
 
 // ProcessorConfig holds configuration for the outbox processor
@@ -634,28 +634,28 @@ var (
     
     OutboxEventsProcessed = prometheus.NewCounter(
         prometheus.CounterOpts{
-            Name: "observeid_outbox_events_processed_total",
+            Name: "genid_outbox_events_processed_total",
             Help: "Total outbox events processed successfully",
         },
     )
     
     OutboxErrors = prometheus.NewCounter(
         prometheus.CounterOpts{
-            Name: "observeid_outbox_errors_total",
+            Name: "genid_outbox_errors_total",
             Help: "Total outbox processing errors",
         },
     )
     
     OutboxQueueSize = prometheus.NewGauge(
         prometheus.GaugeOpts{
-            Name: "observeid_outbox_queue_size",
+            Name: "genid_outbox_queue_size",
             Help: "Current number of pending outbox events",
         },
     )
     
     OutboxProcessingLatency = prometheus.NewHistogramVec(
         prometheus.HistogramOpts{
-            Name:    "observeid_outbox_processing_latency_ms",
+            Name:    "genid_outbox_processing_latency_ms",
             Help:    "Outbox event processing latency in milliseconds",
             Buckets: []float64{1, 5, 10, 25, 50, 100, 250, 500, 1000},
         },
@@ -753,10 +753,10 @@ go test -v ./internal/outbox/... -run Integration
 
 | Metric | Type | Alert Threshold |
 |--------|------|-----------------|
-| `observeid_outbox_queue_size` | Gauge | > 1000 pending |
-| `observeid_outbox_errors_total` | Counter | Error rate > 5% |
-| `observeid_outbox_processing_latency_ms` | Histogram | p99 > 500ms |
-| `observeid_outbox_events_processed_total` | Counter | Sudden drop |
+| `genid_outbox_queue_size` | Gauge | > 1000 pending |
+| `genid_outbox_errors_total` | Counter | Error rate > 5% |
+| `genid_outbox_processing_latency_ms` | Histogram | p99 > 500ms |
+| `genid_outbox_events_processed_total` | Counter | Sudden drop |
 
 ### Dashboard (Grafana)
 ```

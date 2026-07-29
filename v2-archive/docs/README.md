@@ -1,6 +1,6 @@
-# ObserveID — Documentation
+# GenID — Documentation
 
-> **From ObserveID concept to Fortune Identity Cloud reality**
+> **From GenID concept to Fortune Identity Cloud reality**
 
 ---
 
@@ -27,7 +27,7 @@
 
 ## 📊 Project Status
 
-### Version 1 (ObserveID) — Complete ✅
+### Version 1 (GenID) — Complete ✅
 
 | Feature | Status | Tests |
 |---------|--------|-------|
@@ -48,9 +48,9 @@
 
 ## 🎯 The Vision
 
-### From ObserveID to Fortune
+### From GenID to Fortune
 
-**ObserveID** was the proof of concept — a solid foundation demonstrating modern IAM principles.
+**GenID** was the proof of concept — a solid foundation demonstrating modern IAM principles.
 
 **Fortune Identity Cloud** is the evolution:
 - Not just observing identity, but **governing** it
@@ -128,7 +128,7 @@ See **[FORTUNE-MINDMAP.md](./FORTUNE-MINDMAP.md)** for the complete architecture
 ## 📁 Repository Structure
 
 ```
-observeid/
+genid/
 ├── backend/                 # Go backend (33K+ lines)
 │   ├── cmd/                 # Entry point
 │   ├── internal/
@@ -224,4 +224,4 @@ See **[V2-AI-WORKFLOW.md](./V2-AI-WORKFLOW.md)** for detailed prompts and workfl
 
 **Last Updated:** 2026-07-22  
 **Maintainer:** Shoaib Akthar  
-**Project:** ObserveID → Fortune Identity Cloud
+**Project:** GenID → Fortune Identity Cloud

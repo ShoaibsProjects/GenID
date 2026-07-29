@@ -107,7 +107,7 @@ export default function SettingsPage() {
           The complete system documentation is in <code className="text-brand-400">STATUS.md</code> at the project root.
         </p>
         <div className="p-3 rounded-lg bg-surface-100/50 text-xs text-gray-400 font-mono">
-          /Users/shoaibakthar/Documents/Shoaib's IAM/observeid/STATUS.md
+          /Users/shoaibakthar/Documents/Shoaib's IAM/genid/STATUS.md
         </div>
       </div>
     </div>

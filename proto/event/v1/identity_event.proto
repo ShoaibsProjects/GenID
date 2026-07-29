@@ -1,7 +1,7 @@
 syntax = "proto3";
-package observeid.event.v1;
+package genid.event.v1;
 
-option go_package = "github.com/observeid/identity-platform/pkg/proto/event/v1";
+option go_package = "github.com/observeid/genid/pkg/proto/event/v1";
 
 // ─── Core Identity Events ─────────────────────────────────
 

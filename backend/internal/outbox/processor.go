@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/observeid/identity-platform/internal/eventbus"
-	"github.com/observeid/identity-platform/pkg/telemetry"
+	"github.com/observeid/genid/internal/eventbus"
+	"github.com/observeid/genid/pkg/telemetry"
 )
 
 // ProcessorConfig holds configuration for the outbox processor.

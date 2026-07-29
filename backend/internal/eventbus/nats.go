@@ -56,7 +56,7 @@ func NewNatsBus(natsURL string) (*NatsBus, error) {
 	bus := &NatsBus{
 		nc:     nc,
 		js:     js,
-		stream: "observeid-events",
+		stream: "genid-events",
 	}
 
 	// Ensure the stream exists

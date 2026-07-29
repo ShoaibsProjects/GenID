@@ -1,4 +1,4 @@
-# ObserveID Reimagined Identity Fabric — System Status
+# GenID Reimagined Identity Fabric — System Status
 
 > **Built:** July 2026 | **Go 1.25** | **Next.js 14** | **Cloudflare Free Tier**
 > **Architecture:** Event-Driven | AI-Native | Zero-Trust IAM/IGA Platform
@@ -33,8 +33,8 @@
 |----------|-----|---------|
 | **API + Frontend (local)** | `http://localhost:8080` | Full platform |
 | **API + Frontend (tunnel)** | see `/tmp/cloudflared.log` | Public access |
-| **Frontend (Cloudflare)** | `https://observeid-frontend.pages.dev` | Deployed UI |
-| **GitHub Repo** | `https://github.com/ShoaibsProjects/observeid` | Source code |
+| **Frontend (Cloudflare)** | `https://genid-frontend.pages.dev` | Deployed UI |
+| **GitHub Repo** | `https://github.com/ShoaibsProjects/genid` | Source code |
 
 ##  API Endpoints
 
@@ -179,7 +179,7 @@ Relationships: `HAS_ROLE`, `GRANTS`, `DIRECTLY_OWNS`, `ACCESSES`, `OWNED_BY`, `D
 
 ```bash
 # Start everything
-cd /Users/shoaibakthar/Documents/Shoaib's IAM/observeid
+cd /Users/shoaibakthar/Documents/Shoaib's IAM/genid
 make up                        # Start Docker containers
 make proto                     # Generate protobuf
 make backend                   # Build Go backend

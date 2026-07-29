@@ -1,4 +1,4 @@
-// ─── ObserveID Reimagined API Client ───────────────────────
+// ─── GenID Reimagined API Client ───────────────────────
 // Auto-detects deployment: relative URLs for same-origin (Go-served),
 // or tunnel URL for Cloudflare Pages. Configurable via settings.
 
@@ -11,7 +11,7 @@ function getApiBase(): string {
       window.location.hostname === "127.0.0.1" ||
       !window.location.hostname.includes("pages.dev")
     if (!isLocalOrBackend) {
-      return localStorage.getItem("observeid_api_url") || ""
+      return localStorage.getItem("genid_api_url") || ""
     }
   }
   // Built-time override from env
@@ -24,13 +24,13 @@ function getApiBase(): string {
 // Allows runtime API URL configuration (saved to localStorage)
 export function setApiUrl(url: string): void {
   if (typeof window !== "undefined") {
-    localStorage.setItem("observeid_api_url", url)
+    localStorage.setItem("genid_api_url", url)
   }
 }
 
 export function getApiUrl(): string {
   if (typeof window !== "undefined") {
-    return localStorage.getItem("observeid_api_url") || ""
+    return localStorage.getItem("genid_api_url") || ""
   }
   return ""
 }
@@ -38,8 +38,8 @@ export function getApiUrl(): string {
 // ─── Auth Token Management ─────────────────────────────────────
 // Token persisted in localStorage. Auto-attached as Authorization: Bearer to every request.
 
-const TOKEN_KEY = "observeid_access_token"
-const USER_KEY  = "observeid_user_email"
+const TOKEN_KEY = "genid_access_token"
+const USER_KEY  = "genid_user_email"
 
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null

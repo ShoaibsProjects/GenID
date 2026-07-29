@@ -1,6 +1,6 @@
-# ObserveID V1 — Documentation
+# GenID V1 — Documentation
 
-> **Version 1 (ObserveID)** — The current working IAM platform.
+> **Version 1 (GenID)** — The current working IAM platform.
 > 
 > **Version 2 (Fortune Identity Cloud)** — See `v2-archive/` for planning docs.
 

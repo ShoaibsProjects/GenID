@@ -3,7 +3,7 @@
 server:
   bind_address: "0.0.0.0"
   bind_port: 8081
-  trust_domain: "observeid.io"
+  trust_domain: "genid.io"
   data_dir: "/run/spire/data"
   log_level: "INFO"
   upstream_bundle: true
@@ -13,14 +13,14 @@ server:
 
   experimental:
     require_hinting: true
-    jwt_issuer: "observeid.io"
+    jwt_issuer: "genid.io"
 
 plugins:
   DataStore:
     sql:
       plugin_data:
         database_type: "postgres"
-        connection_string: "postgresql://spire:${SPIRE_PASSWORD}@observeid-postgres.observeid.svc.cluster.local:5432/spire?sslmode=disable"
+        connection_string: "postgresql://spire@genid-postgres.genid.svc.cluster.local:5432/spire?sslmode=disable"
 
   NodeAttestor:
     k8s_sat:

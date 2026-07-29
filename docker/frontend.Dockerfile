@@ -1,4 +1,4 @@
-# ─── ObserveID Reimagined Frontend (Next.js static export) ─
+# ─── GenID Reimagined Frontend (Next.js static export) ─
 FROM node:20-alpine AS builder
 
 WORKDIR /app

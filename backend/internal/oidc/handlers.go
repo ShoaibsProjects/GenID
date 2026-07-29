@@ -549,7 +549,7 @@ func isValidRedirectURI(client *ClientRecord, redirectURI string) bool {
 
 // Minimal login form for browser-based flows
 const loginHTML = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>ObserveID — Sign In</title>
+<html><head><meta charset="utf-8"><title>GenID — Sign In</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,sans-serif;background:#050508;color:#F0EFEC;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
@@ -568,7 +568,7 @@ button:hover{background:linear-gradient(135deg,rgba(245,158,11,0.25),rgba(217,11
 </style></head>
 <body>
 <div class="card">
-<h1><span>ObserveID</span></h1>
+<h1><span>GenID</span></h1>
 <p class="subtitle">Identity Fabric — Sign In</p>
 <form method="post" action="%s">
 <input type="hidden" name="client_id" value="%s">
@@ -579,7 +579,7 @@ button:hover{background:linear-gradient(135deg,rgba(245,158,11,0.25),rgba(217,11
 <input type="hidden" name="response_type" value="%s">
 <input type="hidden" name="nonce" value="%s">
 <input type="hidden" name="redirect_uri" value="%s">
-<label>Email</label><input name="email" type="email" placeholder="you@observeid.io" autofocus>
+<label>Email</label><input name="email" type="email" placeholder="you@genid.us" autofocus>
 <label>Password</label><input name="password" type="password" placeholder="Your password">
 <button type="submit">Sign In</button>
 </form>
@@ -589,7 +589,7 @@ button:hover{background:linear-gradient(135deg,rgba(245,158,11,0.25),rgba(217,11
 
 // Device authorization page
 const deviceHTML = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>ObserveID — Device Authorization</title>
+<html><head><meta charset="utf-8"><title>GenID — Device Authorization</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,sans-serif;background:#050508;color:#F0EFEC;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
@@ -609,13 +609,13 @@ button:hover{background:linear-gradient(135deg,rgba(245,158,11,0.25),rgba(217,11
 </style></head>
 <body>
 <div class="card">
-<h1><span>ObserveID</span></h1>
+<h1><span>GenID</span></h1>
 <p class="subtitle">Enter the code shown on your device</p>
 <div class="code">%s</div>
 %s
 <form method="post" action="">
 <input type="hidden" name="user_code" value="%s">
-<label>Email</label><input name="email" type="email" placeholder="you@observeid.io" autofocus>
+<label>Email</label><input name="email" type="email" placeholder="you@genid.us" autofocus>
 <label>Password</label><input name="password" type="password" placeholder="Your password">
 <button type="submit">Authorize</button>
 </form>
@@ -625,7 +625,7 @@ button:hover{background:linear-gradient(135deg,rgba(245,158,11,0.25),rgba(217,11
 
 // Device authorization success page
 const deviceSuccessHTML = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>ObserveID — Authorized</title>
+<html><head><meta charset="utf-8"><title>GenID — Authorized</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,sans-serif;background:#050508;color:#F0EFEC;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}

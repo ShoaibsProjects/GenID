@@ -1198,7 +1198,7 @@ func (ec *executionContext) field_Mutation_createConnector_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNCreateConnectorInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐCreateConnectorInput(ctx, tmp)
+		return ec.unmarshalNCreateConnectorInput2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐCreateConnectorInput(ctx, tmp)
 	}
 
 	var zeroVal CreateConnectorInput
@@ -1230,7 +1230,7 @@ func (ec *executionContext) field_Mutation_createIdentity_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNCreateIdentityInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐCreateIdentityInput(ctx, tmp)
+		return ec.unmarshalNCreateIdentityInput2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐCreateIdentityInput(ctx, tmp)
 	}
 
 	var zeroVal CreateIdentityInput
@@ -1358,7 +1358,7 @@ func (ec *executionContext) field_Mutation_requestJustInTimeAccess_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNJITAccessInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐJITAccessInput(ctx, tmp)
+		return ec.unmarshalNJITAccessInput2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐJITAccessInput(ctx, tmp)
 	}
 
 	var zeroVal JITAccessInput
@@ -1481,7 +1481,7 @@ func (ec *executionContext) field_Mutation_updateIdentity_argsInput(
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("input"))
 	if tmp, ok := rawArgs["input"]; ok {
-		return ec.unmarshalNUpdateIdentityInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐUpdateIdentityInput(ctx, tmp)
+		return ec.unmarshalNUpdateIdentityInput2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐUpdateIdentityInput(ctx, tmp)
 	}
 
 	var zeroVal UpdateIdentityInput
@@ -2695,7 +2695,7 @@ func (ec *executionContext) _Connector_connectorType(ctx context.Context, field 
 	}
 	res := resTmp.(ConnectorType)
 	fc.Result = res
-	return ec.marshalNConnectorType2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorType(ctx, field.Selections, res)
+	return ec.marshalNConnectorType2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorType(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Connector_connectorType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2739,7 +2739,7 @@ func (ec *executionContext) _Connector_status(ctx context.Context, field graphql
 	}
 	res := resTmp.(ConnectorStatus)
 	fc.Result = res
-	return ec.marshalNConnectorStatus2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorStatus(ctx, field.Selections, res)
+	return ec.marshalNConnectorStatus2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Connector_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3815,7 +3815,7 @@ func (ec *executionContext) _Identity_type(ctx context.Context, field graphql.Co
 	}
 	res := resTmp.(IdentityType)
 	fc.Result = res
-	return ec.marshalNIdentityType2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityType(ctx, field.Selections, res)
+	return ec.marshalNIdentityType2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityType(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Identity_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -3859,7 +3859,7 @@ func (ec *executionContext) _Identity_status(ctx context.Context, field graphql.
 	}
 	res := resTmp.(IdentityStatus)
 	fc.Result = res
-	return ec.marshalNIdentityStatus2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx, field.Selections, res)
+	return ec.marshalNIdentityStatus2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Identity_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4422,7 +4422,7 @@ func (ec *executionContext) _Mutation_createIdentity(ctx context.Context, field 
 	}
 	res := resTmp.(*Identity)
 	fc.Result = res
-	return ec.marshalNIdentity2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx, field.Selections, res)
+	return ec.marshalNIdentity2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_createIdentity(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4511,7 +4511,7 @@ func (ec *executionContext) _Mutation_updateIdentity(ctx context.Context, field 
 	}
 	res := resTmp.(*Identity)
 	fc.Result = res
-	return ec.marshalNIdentity2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx, field.Selections, res)
+	return ec.marshalNIdentity2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_updateIdentity(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4655,7 +4655,7 @@ func (ec *executionContext) _Mutation_createConnector(ctx context.Context, field
 	}
 	res := resTmp.(*Connector)
 	fc.Result = res
-	return ec.marshalNConnector2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
+	return ec.marshalNConnector2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_createConnector(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4785,7 +4785,7 @@ func (ec *executionContext) _Mutation_connectConnector(ctx context.Context, fiel
 	}
 	res := resTmp.(*Connector)
 	fc.Result = res
-	return ec.marshalNConnector2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
+	return ec.marshalNConnector2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_connectConnector(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4860,7 +4860,7 @@ func (ec *executionContext) _Mutation_disconnectConnector(ctx context.Context, f
 	}
 	res := resTmp.(*Connector)
 	fc.Result = res
-	return ec.marshalNConnector2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
+	return ec.marshalNConnector2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_disconnectConnector(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -4935,7 +4935,7 @@ func (ec *executionContext) _Mutation_syncConnector(ctx context.Context, field g
 	}
 	res := resTmp.(*Connector)
 	fc.Result = res
-	return ec.marshalNConnector2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
+	return ec.marshalNConnector2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_syncConnector(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5010,7 +5010,7 @@ func (ec *executionContext) _Mutation_syncConnectorDelta(ctx context.Context, fi
 	}
 	res := resTmp.(*Connector)
 	fc.Result = res
-	return ec.marshalNConnector2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
+	return ec.marshalNConnector2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_syncConnectorDelta(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5085,7 +5085,7 @@ func (ec *executionContext) _Mutation_requestJustInTimeAccess(ctx context.Contex
 	}
 	res := resTmp.(*WorkflowResult)
 	fc.Result = res
-	return ec.marshalNWorkflowResult2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐWorkflowResult(ctx, field.Selections, res)
+	return ec.marshalNWorkflowResult2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐWorkflowResult(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_requestJustInTimeAccess(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5280,7 +5280,7 @@ func (ec *executionContext) _NonHumanIdentity_type(ctx context.Context, field gr
 	}
 	res := resTmp.(IdentityType)
 	fc.Result = res
-	return ec.marshalNIdentityType2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityType(ctx, field.Selections, res)
+	return ec.marshalNIdentityType2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityType(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_NonHumanIdentity_type(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5324,7 +5324,7 @@ func (ec *executionContext) _NonHumanIdentity_status(ctx context.Context, field 
 	}
 	res := resTmp.(IdentityStatus)
 	fc.Result = res
-	return ec.marshalNIdentityStatus2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx, field.Selections, res)
+	return ec.marshalNIdentityStatus2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_NonHumanIdentity_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5752,7 +5752,7 @@ func (ec *executionContext) _Query_identities(ctx context.Context, field graphql
 	}
 	res := resTmp.([]*Identity)
 	fc.Result = res
-	return ec.marshalNIdentity2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityᚄ(ctx, field.Selections, res)
+	return ec.marshalNIdentity2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_identities(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5838,7 +5838,7 @@ func (ec *executionContext) _Query_identity(ctx context.Context, field graphql.C
 	}
 	res := resTmp.(*Identity)
 	fc.Result = res
-	return ec.marshalOIdentity2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx, field.Selections, res)
+	return ec.marshalOIdentity2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_identity(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -5927,7 +5927,7 @@ func (ec *executionContext) _Query_agents(ctx context.Context, field graphql.Col
 	}
 	res := resTmp.([]*NonHumanIdentity)
 	fc.Result = res
-	return ec.marshalNNonHumanIdentity2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentityᚄ(ctx, field.Selections, res)
+	return ec.marshalNNonHumanIdentity2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentityᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_agents(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6009,7 +6009,7 @@ func (ec *executionContext) _Query_agent(ctx context.Context, field graphql.Coll
 	}
 	res := resTmp.(*NonHumanIdentity)
 	fc.Result = res
-	return ec.marshalONonHumanIdentity2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentity(ctx, field.Selections, res)
+	return ec.marshalONonHumanIdentity2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentity(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_agent(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6094,7 +6094,7 @@ func (ec *executionContext) _Query_connectors(ctx context.Context, field graphql
 	}
 	res := resTmp.([]*Connector)
 	fc.Result = res
-	return ec.marshalNConnector2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorᚄ(ctx, field.Selections, res)
+	return ec.marshalNConnector2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_connectors(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6155,7 +6155,7 @@ func (ec *executionContext) _Query_connector(ctx context.Context, field graphql.
 	}
 	res := resTmp.(*Connector)
 	fc.Result = res
-	return ec.marshalOConnector2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
+	return ec.marshalOConnector2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_connector(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6230,7 +6230,7 @@ func (ec *executionContext) _Query_connectorUsers(ctx context.Context, field gra
 	}
 	res := resTmp.([]*ConnectorUser)
 	fc.Result = res
-	return ec.marshalNConnectorUser2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorUserᚄ(ctx, field.Selections, res)
+	return ec.marshalNConnectorUser2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorUserᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_connectorUsers(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6299,7 +6299,7 @@ func (ec *executionContext) _Query_connectorGroups(ctx context.Context, field gr
 	}
 	res := resTmp.([]*ConnectorGroup)
 	fc.Result = res
-	return ec.marshalNConnectorGroup2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorGroupᚄ(ctx, field.Selections, res)
+	return ec.marshalNConnectorGroup2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorGroupᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_connectorGroups(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6361,7 +6361,7 @@ func (ec *executionContext) _Query_connectorHealth(ctx context.Context, field gr
 	}
 	res := resTmp.(*ConnectorHealth)
 	fc.Result = res
-	return ec.marshalOConnectorHealth2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorHealth(ctx, field.Selections, res)
+	return ec.marshalOConnectorHealth2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorHealth(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_connectorHealth(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6428,7 +6428,7 @@ func (ec *executionContext) _Query_auditLogs(ctx context.Context, field graphql.
 	}
 	res := resTmp.([]*AuditEntry)
 	fc.Result = res
-	return ec.marshalNAuditEntry2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐAuditEntryᚄ(ctx, field.Selections, res)
+	return ec.marshalNAuditEntry2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐAuditEntryᚄ(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_auditLogs(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6507,7 +6507,7 @@ func (ec *executionContext) _Query_health(ctx context.Context, field graphql.Col
 	}
 	res := resTmp.(*HealthStatus)
 	fc.Result = res
-	return ec.marshalNHealthStatus2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐHealthStatus(ctx, field.Selections, res)
+	return ec.marshalNHealthStatus2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐHealthStatus(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_health(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6559,7 +6559,7 @@ func (ec *executionContext) _Query_ready(ctx context.Context, field graphql.Coll
 	}
 	res := resTmp.(*ReadinessResult)
 	fc.Result = res
-	return ec.marshalNReadinessResult2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐReadinessResult(ctx, field.Selections, res)
+	return ec.marshalNReadinessResult2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐReadinessResult(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Query_ready(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -6914,7 +6914,7 @@ func (ec *executionContext) _ReadinessResult_checks(ctx context.Context, field g
 	}
 	res := resTmp.(*ReadinessChecks)
 	fc.Result = res
-	return ec.marshalNReadinessChecks2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐReadinessChecks(ctx, field.Selections, res)
+	return ec.marshalNReadinessChecks2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐReadinessChecks(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_ReadinessResult_checks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -8863,7 +8863,7 @@ func (ec *executionContext) unmarshalInputCreateConnectorInput(ctx context.Conte
 			it.Name = data
 		case "connectorType":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("connectorType"))
-			data, err := ec.unmarshalNConnectorType2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorType(ctx, v)
+			data, err := ec.unmarshalNConnectorType2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorType(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -8897,7 +8897,7 @@ func (ec *executionContext) unmarshalInputCreateIdentityInput(ctx context.Contex
 		switch k {
 		case "type":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("type"))
-			data, err := ec.unmarshalNIdentityType2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityType(ctx, v)
+			data, err := ec.unmarshalNIdentityType2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityType(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -9076,7 +9076,7 @@ func (ec *executionContext) unmarshalInputUpdateIdentityInput(ctx context.Contex
 			it.Email = data
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOIdentityStatus2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx, v)
+			data, err := ec.unmarshalOIdentityStatus2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -10530,7 +10530,7 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 // region    ***************************** type.gotpl *****************************
 
-func (ec *executionContext) marshalNAuditEntry2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐAuditEntryᚄ(ctx context.Context, sel ast.SelectionSet, v []*AuditEntry) graphql.Marshaler {
+func (ec *executionContext) marshalNAuditEntry2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐAuditEntryᚄ(ctx context.Context, sel ast.SelectionSet, v []*AuditEntry) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10554,7 +10554,7 @@ func (ec *executionContext) marshalNAuditEntry2ᚕᚖgithubᚗcomᚋobserveidᚋ
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNAuditEntry2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐAuditEntry(ctx, sel, v[i])
+			ret[i] = ec.marshalNAuditEntry2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐAuditEntry(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -10574,7 +10574,7 @@ func (ec *executionContext) marshalNAuditEntry2ᚕᚖgithubᚗcomᚋobserveidᚋ
 	return ret
 }
 
-func (ec *executionContext) marshalNAuditEntry2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐAuditEntry(ctx context.Context, sel ast.SelectionSet, v *AuditEntry) graphql.Marshaler {
+func (ec *executionContext) marshalNAuditEntry2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐAuditEntry(ctx context.Context, sel ast.SelectionSet, v *AuditEntry) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -10599,11 +10599,11 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) marshalNConnector2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx context.Context, sel ast.SelectionSet, v Connector) graphql.Marshaler {
+func (ec *executionContext) marshalNConnector2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx context.Context, sel ast.SelectionSet, v Connector) graphql.Marshaler {
 	return ec._Connector(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNConnector2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorᚄ(ctx context.Context, sel ast.SelectionSet, v []*Connector) graphql.Marshaler {
+func (ec *executionContext) marshalNConnector2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorᚄ(ctx context.Context, sel ast.SelectionSet, v []*Connector) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10627,7 +10627,7 @@ func (ec *executionContext) marshalNConnector2ᚕᚖgithubᚗcomᚋobserveidᚋi
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNConnector2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, sel, v[i])
+			ret[i] = ec.marshalNConnector2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -10647,7 +10647,7 @@ func (ec *executionContext) marshalNConnector2ᚕᚖgithubᚗcomᚋobserveidᚋi
 	return ret
 }
 
-func (ec *executionContext) marshalNConnector2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx context.Context, sel ast.SelectionSet, v *Connector) graphql.Marshaler {
+func (ec *executionContext) marshalNConnector2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx context.Context, sel ast.SelectionSet, v *Connector) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -10657,7 +10657,7 @@ func (ec *executionContext) marshalNConnector2ᚖgithubᚗcomᚋobserveidᚋiden
 	return ec._Connector(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNConnectorGroup2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorGroupᚄ(ctx context.Context, sel ast.SelectionSet, v []*ConnectorGroup) graphql.Marshaler {
+func (ec *executionContext) marshalNConnectorGroup2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorGroupᚄ(ctx context.Context, sel ast.SelectionSet, v []*ConnectorGroup) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10681,7 +10681,7 @@ func (ec *executionContext) marshalNConnectorGroup2ᚕᚖgithubᚗcomᚋobservei
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNConnectorGroup2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorGroup(ctx, sel, v[i])
+			ret[i] = ec.marshalNConnectorGroup2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorGroup(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -10701,7 +10701,7 @@ func (ec *executionContext) marshalNConnectorGroup2ᚕᚖgithubᚗcomᚋobservei
 	return ret
 }
 
-func (ec *executionContext) marshalNConnectorGroup2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorGroup(ctx context.Context, sel ast.SelectionSet, v *ConnectorGroup) graphql.Marshaler {
+func (ec *executionContext) marshalNConnectorGroup2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorGroup(ctx context.Context, sel ast.SelectionSet, v *ConnectorGroup) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -10711,27 +10711,27 @@ func (ec *executionContext) marshalNConnectorGroup2ᚖgithubᚗcomᚋobserveid�
 	return ec._ConnectorGroup(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNConnectorStatus2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorStatus(ctx context.Context, v interface{}) (ConnectorStatus, error) {
+func (ec *executionContext) unmarshalNConnectorStatus2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorStatus(ctx context.Context, v interface{}) (ConnectorStatus, error) {
 	var res ConnectorStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNConnectorStatus2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorStatus(ctx context.Context, sel ast.SelectionSet, v ConnectorStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNConnectorStatus2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorStatus(ctx context.Context, sel ast.SelectionSet, v ConnectorStatus) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNConnectorType2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorType(ctx context.Context, v interface{}) (ConnectorType, error) {
+func (ec *executionContext) unmarshalNConnectorType2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorType(ctx context.Context, v interface{}) (ConnectorType, error) {
 	var res ConnectorType
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNConnectorType2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorType(ctx context.Context, sel ast.SelectionSet, v ConnectorType) graphql.Marshaler {
+func (ec *executionContext) marshalNConnectorType2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorType(ctx context.Context, sel ast.SelectionSet, v ConnectorType) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) marshalNConnectorUser2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorUserᚄ(ctx context.Context, sel ast.SelectionSet, v []*ConnectorUser) graphql.Marshaler {
+func (ec *executionContext) marshalNConnectorUser2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorUserᚄ(ctx context.Context, sel ast.SelectionSet, v []*ConnectorUser) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10755,7 +10755,7 @@ func (ec *executionContext) marshalNConnectorUser2ᚕᚖgithubᚗcomᚋobserveid
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNConnectorUser2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorUser(ctx, sel, v[i])
+			ret[i] = ec.marshalNConnectorUser2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorUser(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -10775,7 +10775,7 @@ func (ec *executionContext) marshalNConnectorUser2ᚕᚖgithubᚗcomᚋobserveid
 	return ret
 }
 
-func (ec *executionContext) marshalNConnectorUser2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorUser(ctx context.Context, sel ast.SelectionSet, v *ConnectorUser) graphql.Marshaler {
+func (ec *executionContext) marshalNConnectorUser2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorUser(ctx context.Context, sel ast.SelectionSet, v *ConnectorUser) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -10785,12 +10785,12 @@ func (ec *executionContext) marshalNConnectorUser2ᚖgithubᚗcomᚋobserveidᚋ
 	return ec._ConnectorUser(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNCreateConnectorInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐCreateConnectorInput(ctx context.Context, v interface{}) (CreateConnectorInput, error) {
+func (ec *executionContext) unmarshalNCreateConnectorInput2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐCreateConnectorInput(ctx context.Context, v interface{}) (CreateConnectorInput, error) {
 	res, err := ec.unmarshalInputCreateConnectorInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreateIdentityInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐCreateIdentityInput(ctx context.Context, v interface{}) (CreateIdentityInput, error) {
+func (ec *executionContext) unmarshalNCreateIdentityInput2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐCreateIdentityInput(ctx context.Context, v interface{}) (CreateIdentityInput, error) {
 	res, err := ec.unmarshalInputCreateIdentityInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
@@ -10825,11 +10825,11 @@ func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.S
 	return graphql.WrapContextMarshaler(ctx, res)
 }
 
-func (ec *executionContext) marshalNHealthStatus2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐHealthStatus(ctx context.Context, sel ast.SelectionSet, v HealthStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNHealthStatus2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐHealthStatus(ctx context.Context, sel ast.SelectionSet, v HealthStatus) graphql.Marshaler {
 	return ec._HealthStatus(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNHealthStatus2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐHealthStatus(ctx context.Context, sel ast.SelectionSet, v *HealthStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNHealthStatus2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐHealthStatus(ctx context.Context, sel ast.SelectionSet, v *HealthStatus) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -10854,11 +10854,11 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 	return res
 }
 
-func (ec *executionContext) marshalNIdentity2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx context.Context, sel ast.SelectionSet, v Identity) graphql.Marshaler {
+func (ec *executionContext) marshalNIdentity2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx context.Context, sel ast.SelectionSet, v Identity) graphql.Marshaler {
 	return ec._Identity(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNIdentity2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityᚄ(ctx context.Context, sel ast.SelectionSet, v []*Identity) graphql.Marshaler {
+func (ec *executionContext) marshalNIdentity2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityᚄ(ctx context.Context, sel ast.SelectionSet, v []*Identity) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10882,7 +10882,7 @@ func (ec *executionContext) marshalNIdentity2ᚕᚖgithubᚗcomᚋobserveidᚋid
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNIdentity2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx, sel, v[i])
+			ret[i] = ec.marshalNIdentity2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -10902,7 +10902,7 @@ func (ec *executionContext) marshalNIdentity2ᚕᚖgithubᚗcomᚋobserveidᚋid
 	return ret
 }
 
-func (ec *executionContext) marshalNIdentity2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx context.Context, sel ast.SelectionSet, v *Identity) graphql.Marshaler {
+func (ec *executionContext) marshalNIdentity2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx context.Context, sel ast.SelectionSet, v *Identity) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -10912,23 +10912,23 @@ func (ec *executionContext) marshalNIdentity2ᚖgithubᚗcomᚋobserveidᚋident
 	return ec._Identity(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNIdentityStatus2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx context.Context, v interface{}) (IdentityStatus, error) {
+func (ec *executionContext) unmarshalNIdentityStatus2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx context.Context, v interface{}) (IdentityStatus, error) {
 	var res IdentityStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNIdentityStatus2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx context.Context, sel ast.SelectionSet, v IdentityStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNIdentityStatus2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx context.Context, sel ast.SelectionSet, v IdentityStatus) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNIdentityType2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityType(ctx context.Context, v interface{}) (IdentityType, error) {
+func (ec *executionContext) unmarshalNIdentityType2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityType(ctx context.Context, v interface{}) (IdentityType, error) {
 	var res IdentityType
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNIdentityType2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityType(ctx context.Context, sel ast.SelectionSet, v IdentityType) graphql.Marshaler {
+func (ec *executionContext) marshalNIdentityType2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityType(ctx context.Context, sel ast.SelectionSet, v IdentityType) graphql.Marshaler {
 	return v
 }
 
@@ -10947,7 +10947,7 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 	return res
 }
 
-func (ec *executionContext) unmarshalNJITAccessInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐJITAccessInput(ctx context.Context, v interface{}) (JITAccessInput, error) {
+func (ec *executionContext) unmarshalNJITAccessInput2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐJITAccessInput(ctx context.Context, v interface{}) (JITAccessInput, error) {
 	res, err := ec.unmarshalInputJITAccessInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
@@ -10973,7 +10973,7 @@ func (ec *executionContext) marshalNJSON2interface(ctx context.Context, sel ast.
 	return res
 }
 
-func (ec *executionContext) marshalNNonHumanIdentity2ᚕᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentityᚄ(ctx context.Context, sel ast.SelectionSet, v []*NonHumanIdentity) graphql.Marshaler {
+func (ec *executionContext) marshalNNonHumanIdentity2ᚕᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentityᚄ(ctx context.Context, sel ast.SelectionSet, v []*NonHumanIdentity) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -10997,7 +10997,7 @@ func (ec *executionContext) marshalNNonHumanIdentity2ᚕᚖgithubᚗcomᚋobserv
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNNonHumanIdentity2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentity(ctx, sel, v[i])
+			ret[i] = ec.marshalNNonHumanIdentity2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentity(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -11017,7 +11017,7 @@ func (ec *executionContext) marshalNNonHumanIdentity2ᚕᚖgithubᚗcomᚋobserv
 	return ret
 }
 
-func (ec *executionContext) marshalNNonHumanIdentity2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentity(ctx context.Context, sel ast.SelectionSet, v *NonHumanIdentity) graphql.Marshaler {
+func (ec *executionContext) marshalNNonHumanIdentity2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentity(ctx context.Context, sel ast.SelectionSet, v *NonHumanIdentity) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -11027,7 +11027,7 @@ func (ec *executionContext) marshalNNonHumanIdentity2ᚖgithubᚗcomᚋobserveid
 	return ec._NonHumanIdentity(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNReadinessChecks2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐReadinessChecks(ctx context.Context, sel ast.SelectionSet, v *ReadinessChecks) graphql.Marshaler {
+func (ec *executionContext) marshalNReadinessChecks2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐReadinessChecks(ctx context.Context, sel ast.SelectionSet, v *ReadinessChecks) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -11037,11 +11037,11 @@ func (ec *executionContext) marshalNReadinessChecks2ᚖgithubᚗcomᚋobserveid�
 	return ec._ReadinessChecks(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNReadinessResult2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐReadinessResult(ctx context.Context, sel ast.SelectionSet, v ReadinessResult) graphql.Marshaler {
+func (ec *executionContext) marshalNReadinessResult2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐReadinessResult(ctx context.Context, sel ast.SelectionSet, v ReadinessResult) graphql.Marshaler {
 	return ec._ReadinessResult(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNReadinessResult2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐReadinessResult(ctx context.Context, sel ast.SelectionSet, v *ReadinessResult) graphql.Marshaler {
+func (ec *executionContext) marshalNReadinessResult2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐReadinessResult(ctx context.Context, sel ast.SelectionSet, v *ReadinessResult) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -11098,16 +11098,16 @@ func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel
 	return ret
 }
 
-func (ec *executionContext) unmarshalNUpdateIdentityInput2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐUpdateIdentityInput(ctx context.Context, v interface{}) (UpdateIdentityInput, error) {
+func (ec *executionContext) unmarshalNUpdateIdentityInput2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐUpdateIdentityInput(ctx context.Context, v interface{}) (UpdateIdentityInput, error) {
 	res, err := ec.unmarshalInputUpdateIdentityInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNWorkflowResult2githubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐWorkflowResult(ctx context.Context, sel ast.SelectionSet, v WorkflowResult) graphql.Marshaler {
+func (ec *executionContext) marshalNWorkflowResult2githubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐWorkflowResult(ctx context.Context, sel ast.SelectionSet, v WorkflowResult) graphql.Marshaler {
 	return ec._WorkflowResult(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNWorkflowResult2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐWorkflowResult(ctx context.Context, sel ast.SelectionSet, v *WorkflowResult) graphql.Marshaler {
+func (ec *executionContext) marshalNWorkflowResult2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐWorkflowResult(ctx context.Context, sel ast.SelectionSet, v *WorkflowResult) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
@@ -11396,14 +11396,14 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
-func (ec *executionContext) marshalOConnector2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx context.Context, sel ast.SelectionSet, v *Connector) graphql.Marshaler {
+func (ec *executionContext) marshalOConnector2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnector(ctx context.Context, sel ast.SelectionSet, v *Connector) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Connector(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOConnectorHealth2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorHealth(ctx context.Context, sel ast.SelectionSet, v *ConnectorHealth) graphql.Marshaler {
+func (ec *executionContext) marshalOConnectorHealth2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐConnectorHealth(ctx context.Context, sel ast.SelectionSet, v *ConnectorHealth) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -11442,14 +11442,14 @@ func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) marshalOIdentity2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx context.Context, sel ast.SelectionSet, v *Identity) graphql.Marshaler {
+func (ec *executionContext) marshalOIdentity2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentity(ctx context.Context, sel ast.SelectionSet, v *Identity) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Identity(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalOIdentityStatus2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx context.Context, v interface{}) (*IdentityStatus, error) {
+func (ec *executionContext) unmarshalOIdentityStatus2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx context.Context, v interface{}) (*IdentityStatus, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -11458,7 +11458,7 @@ func (ec *executionContext) unmarshalOIdentityStatus2ᚖgithubᚗcomᚋobserveid
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOIdentityStatus2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx context.Context, sel ast.SelectionSet, v *IdentityStatus) graphql.Marshaler {
+func (ec *executionContext) marshalOIdentityStatus2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐIdentityStatus(ctx context.Context, sel ast.SelectionSet, v *IdentityStatus) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -11497,7 +11497,7 @@ func (ec *executionContext) marshalOJSON2interface(ctx context.Context, sel ast.
 	return res
 }
 
-func (ec *executionContext) marshalONonHumanIdentity2ᚖgithubᚗcomᚋobserveidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentity(ctx context.Context, sel ast.SelectionSet, v *NonHumanIdentity) graphql.Marshaler {
+func (ec *executionContext) marshalONonHumanIdentity2ᚖgithubᚗcomᚋgenidᚋidentityᚑplatformᚋinternalᚋgraphqlᚐNonHumanIdentity(ctx context.Context, sel ast.SelectionSet, v *NonHumanIdentity) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}

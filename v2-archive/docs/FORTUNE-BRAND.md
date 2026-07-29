@@ -1,6 +1,6 @@
 # Fortune — Brand Identity & Naming Rationale
 
-> **From ObserveID concept to Fortune Identity Cloud**
+> **From GenID concept to Fortune Identity Cloud**
 
 ---
 
@@ -8,7 +8,7 @@
 
 ### Why "Fortune"?
 
-**ObserveID** was the original concept — a solid foundation for identity management. But as we evolved the vision from first principles, we realized we needed a name that reflects:
+**GenID** was the original concept — a solid foundation for identity management. But as we evolved the vision from first principles, we realized we needed a name that reflects:
 
 1. **Scale** — Not just observing identity, but governing it at enterprise scale
 2. **Destiny** — Identity is the foundation of digital trust; it's the fortune of every organization
@@ -19,7 +19,7 @@
 
 | Name | Pros | Cons | Verdict |
 |------|------|------|---------|
-| **ObserveID** | Original concept, clear | Too passive, doesn't convey action | ❌ Keep as internal codename |
+| **GenID** | Original concept, clear | Too passive, doesn't convey action | ❌ Keep as internal codename |
 | **Fortune IAM** | Clear, professional | "IAM" feels dated (2015) | ⚠️ Too traditional |
 | **Fortune Identity Cloud** | Modern, cloud-native, scalable | Longer | ✅ **Winner** |
 | **Fortune Identity Fabric** | Sophisticated, interconnected | Less clear to non-technical | ⚠️ Too abstract |
@@ -256,9 +256,9 @@ Fortune sits at the intersection of **enterprise-grade** and **modern architectu
 
 ## 🎓 The Story
 
-### From ObserveID to Fortune
+### From GenID to Fortune
 
-**ObserveID** was the proof of concept — a solid foundation demonstrating:
+**GenID** was the proof of concept — a solid foundation demonstrating:
 - OIDC/OAuth2 provider (10/10 tests)
 - Cedar policy engine (10 unit tests)
 - Temporal workflows

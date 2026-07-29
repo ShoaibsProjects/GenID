@@ -22,13 +22,13 @@ processors:
         value: "dev"
         action: upsert
       - key: service.namespace
-        value: "observeid"
+        value: "genid"
         action: upsert
 
 exporters:
   prometheus:
     endpoint: "0.0.0.0:8889"
-    namespace: "observeid"
+    namespace: "genid"
     const_labels:
       environment: "dev"
   debug:

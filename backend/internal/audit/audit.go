@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/observeid/identity-platform/internal/middleware"
+	"github.com/observeid/genid/internal/middleware"
 )
 
 type Level string
@@ -213,7 +213,7 @@ func LoggingMiddleware(store *Store, chain *Chain) func(http.Handler) http.Handl
 
 			entry := Entry{
 				Level:     level,
-				Service:   "observeid-api",
+				Service:   "genid-api",
 				Method:    r.Method,
 				Path:      r.URL.Path,
 				Status:    rw.status,

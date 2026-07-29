@@ -7,7 +7,7 @@ x-logging: &default-logging
     max-file: "3"
 
 networks:
-  observeid-net:
+  genid-net:
     driver: bridge
     ipam:
       config:
@@ -24,7 +24,7 @@ services:
   # ─── PostgreSQL ────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: observeid-postgres
+    container_name: genid-postgres
     environment:
       POSTGRES_DB: observeid
       POSTGRES_USER: observeid
@@ -36,7 +36,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
-      - observeid-net
+      - genid-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U observeid"]
       interval: 5s
@@ -47,7 +47,7 @@ services:
   # ─── Neo4j ─────────────────────────────────────────────────
   neo4j:
     image: neo4j:5-community
-    container_name: observeid-neo4j
+    container_name: genid-neo4j
     environment:
       NEO4J_AUTH: neo4j/observeid123
       NEO4J_dbms_memory_pagecache_size: "512M"
@@ -62,7 +62,7 @@ services:
       - neo4j-data:/data
       - ./neo4j/init.cypher:/init.cypher
     networks:
-      - observeid-net
+      - genid-net
     healthcheck:
       test: ["CMD-SHELL", "wget -q --no-verbose -O- http://localhost:7474 2>/dev/null || exit 1"]
       interval: 15s
@@ -73,13 +73,13 @@ services:
   # ─── Redis ─────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: observeid-redis
+    container_name: genid-redis
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
     networks:
-      - observeid-net
+      - genid-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -90,7 +90,7 @@ services:
   # ─── NATS JetStream ────────────────────────────────────────
   nats:
     image: nats:2.10-alpine
-    container_name: observeid-nats
+    container_name: genid-nats
     command: ["-js"]
     ports:
       - "4222:4222"
@@ -98,7 +98,7 @@ services:
     volumes:
       - nats-data:/data
     networks:
-      - observeid-net
+      - genid-net
     healthcheck:
       test: ["CMD", "nats-server", "--signal", "ldm=nats"]
       interval: 10s
@@ -109,7 +109,7 @@ services:
   # ─── Temporal Server ───────────────────────────────────────
   temporal:
     image: temporalio/auto-setup:1.25
-    container_name: observeid-temporal
+    container_name: genid-temporal
     depends_on:
       postgres:
         condition: service_healthy
@@ -128,7 +128,7 @@ services:
     volumes:
       - ./temporal/config.yaml:/etc/temporal/config/dynamic.yaml
     networks:
-      - observeid-net
+      - genid-net
     healthcheck:
       test: ["CMD", "pidof", "temporal-server"]
       interval: 15s
@@ -138,7 +138,7 @@ services:
 
   temporal-admin:
     image: temporalio/admin-tools:1.25
-    container_name: observeid-temporal-admin
+    container_name: genid-temporal-admin
     depends_on:
       temporal:
         condition: service_healthy
@@ -157,13 +157,13 @@ services:
       tail -f /dev/null
       "
     networks:
-      - observeid-net
+      - genid-net
     logging: *default-logging
 
   # ─── OpenTelemetry Collector ───────────────────────────────
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.103.0
-    container_name: observeid-otel
+    container_name: genid-otel
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
@@ -171,13 +171,13 @@ services:
       - "4317:4317"  # OTLP gRPC
       - "4318:4318"  # OTLP HTTP
     networks:
-      - observeid-net
+      - genid-net
     logging: *default-logging
 
   # ─── Temporal Web UI ───────────────────────────────────────
   temporal-ui:
     image: temporalio/ui:latest
-    container_name: observeid-temporal-ui
+    container_name: genid-temporal-ui
     depends_on:
       temporal:
         condition: service_healthy
@@ -187,13 +187,13 @@ services:
     ports:
       - "8234:8080"
     networks:
-      - observeid-net
+      - genid-net
     logging: *default-logging
 
   # ─── Grafana ───────────────────────────────────────────────
   grafana:
     image: grafana/grafana:11.1.0
-    container_name: observeid-grafana
+    container_name: genid-grafana
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: observeid123
@@ -203,7 +203,7 @@ services:
     volumes:
       - ../grafana:/etc/grafana/provisioning
     networks:
-      - observeid-net
+      - genid-net
     logging: *default-logging
 
   # ─── Identity Service (Go) ─────────────────────────────────
@@ -213,7 +213,7 @@ services:
     build:
       context: ..
       dockerfile: docker/identity-service.Dockerfile
-    container_name: observeid-identity-service
+    container_name: genid-identity-service
     depends_on:
       postgres:
         condition: service_healthy
@@ -228,7 +228,7 @@ services:
       temporal-admin:
         condition: service_started
     environment:
-      DATABASE_URL: postgresql://observeid:observeid@postgres:5432/observeid?sslmode=disable
+      DATABASE_URL: postgresql://observeid:observeid@postgres:5432/genid?sslmode=disable
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: observeid123
@@ -244,7 +244,7 @@ services:
     ports:
       - "8080:8080"
     networks:
-      - observeid-net
+      - genid-net
     logging: *default-logging
     restart: unless-stopped
 
@@ -253,12 +253,12 @@ services:
     build:
       context: ..
       dockerfile: docker/frontend.Dockerfile
-    container_name: observeid-frontend
+    container_name: genid-frontend
     depends_on:
       - identity-service
     ports:
       - "3001:3000"
     networks:
-      - observeid-net
+      - genid-net
     logging: *default-logging
     restart: unless-stopped

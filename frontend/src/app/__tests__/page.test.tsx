@@ -5,7 +5,7 @@ import HomePage from "../page"
 describe("HomePage", () => {
   it("renders the main heading", () => {
     render(<HomePage />)
-    expect(screen.getByText("ObserveID Reimagined Identity Fabric")).toBeInTheDocument()
+    expect(screen.getByText("GenID Reimagined Identity Fabric")).toBeInTheDocument()
   })
 
   it("renders the subtitle", () => {

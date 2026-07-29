@@ -15,7 +15,7 @@ Email security reports to the project maintainers. You should receive a response
 
 ## Security Architecture
 
-ObserveID implements defense-in-depth for identity data:
+GenID implements defense-in-depth for identity data:
 
 - **AES-256-GCM** authenticated encryption for all stored secrets (vault)
 - **API key authentication** with configurable key rotation (`API_KEYS` env var)

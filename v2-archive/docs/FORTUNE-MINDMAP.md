@@ -1,6 +1,6 @@
 # Fortune Identity Cloud — Architecture Mindmap
 
-> **From ObserveID concept to Fortune Identity Cloud reality**
+> **From GenID concept to Fortune Identity Cloud reality**
 > 
 > A Principal Engineer's blueprint for the next decade of identity.
 

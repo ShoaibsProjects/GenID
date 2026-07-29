@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 
 // Sample Cedar policy set — shown when the policies API is unavailable.
 // Matches the policies seeded into the cedar_policies table.
-const SAMPLE_CEDAR = `// ObserveID Cedar Policy Set (v1)
+const SAMPLE_CEDAR = `// GenID Cedar Policy Set (v1)
 // Evaluation: forbid always wins; otherwise at least one permit must match.
 
 // Engineers may read production AWS resources

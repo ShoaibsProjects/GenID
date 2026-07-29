@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="media/banner.svg">
-  <img alt="ObserveID — Identity Fabric Engine" src="media/banner.svg" width="100%">
+  <img alt="GenID — Identity Fabric Engine" src="media/banner.svg" width="100%">
 </picture>
 
 <br/>
@@ -14,8 +14,8 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat&logo=postgresql&logoColor=white&labelColor=1C1C24)](https://postgresql.org)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat&logo=redis&logoColor=white&labelColor=1C1C24)](https://redis.io)
 
-[![CI](https://github.com/ShoaibsProjects/observeid/actions/workflows/ci.yml/badge.svg)](https://github.com/ShoaibsProjects/observeid/actions/workflows/ci.yml)
-[![Deploy](https://github.com/ShoaibsProjects/observeid/actions/workflows/deploy.yml/badge.svg)](https://github.com/ShoaibsProjects/observeid/actions/workflows/deploy.yml)
+[![CI](https://github.com/ShoaibsProjects/genid/actions/workflows/ci.yml/badge.svg)](https://github.com/ShoaibsProjects/genid/actions/workflows/ci.yml)
+[![Deploy](https://github.com/ShoaibsProjects/genid/actions/workflows/deploy.yml/badge.svg)](https://github.com/ShoaibsProjects/genid/actions/workflows/deploy.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-8B5CF6?style=flat&labelColor=1C1C24)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-112%20passed-22C55E?style=flat&labelColor=1C1C24)]()
 
@@ -31,9 +31,9 @@
 
 </div>
 
-## What is ObserveID?
+## What is GenID?
 
-ObserveID is an **open-source Identity Governance and Administration (IGA) platform** built on four architectural decisions no other IAM product makes:
+GenID is an **open-source Identity Governance and Administration (IGA) platform** built on four architectural decisions no other IAM product makes:
 
 | Decision | Why it matters |
 |----------|---------------|
@@ -46,9 +46,9 @@ ObserveID is an **open-source Identity Governance and Administration (IGA) platf
 
 ---
 
-## Why ObserveID over Okta, SailPoint, or Entra?
+## Why GenID over Okta, SailPoint, or Entra?
 
-| Dimension | Okta / SailPoint / Entra | ObserveID |
+| Dimension | Okta / SailPoint / Entra | GenID |
 |-----------|-------------------------|-----------|
 | **Identity model** | Human-first. NHIs are an afterthought. | Humans + NHIs share the same graph, policies, and workflows. |
 | **Relationship model** | Flat SQL tables with bridge tables for RBAC. | Neo4j graph with `*1..N` traversal — roles, entitlements, resources, and delegation chains in a single query. |
@@ -60,7 +60,7 @@ ObserveID is an **open-source Identity Governance and Administration (IGA) platf
 | **API design** | REST with inconsistent semantics. | REST + GraphQL + SCIM 2.0. QUERY method (RFC 10008) for safe, idempotent read operations with request bodies. |
 | **Audit trail** | Separate product or add-on. | Built-in middleware logs every request with method, path, status, latency, source IP. Queryable with 7 filter dimensions. |
 
-> **The core insight:** Existing IAM products optimize for selling to CIOs. ObserveID optimizes for the engineering team that has to integrate, extend, and audit it.
+> **The core insight:** Existing IAM products optimize for selling to CIOs. GenID optimizes for the engineering team that has to integrate, extend, and audit it.
 
 ---
 
@@ -153,8 +153,8 @@ MATCH path *1..3          SELECT effect FROM          GET policy:decision
 
 ```bash
 # 1. Clone and start infrastructure
-git clone https://github.com/ShoaibsProjects/observeid.git
-cd observeid
+git clone https://github.com/ShoaibsProjects/genid.git
+cd genid
 make up          # PostgreSQL, Neo4j, Redis, Temporal, Zookeeper — 6 containers
 
 # 2. Seed the database
@@ -309,7 +309,7 @@ GET    /api/v1/audit/logs?method=POST&status=403&level=error&since=2026-01-01T00
 ## Project Structure
 
 ```
-observeid/
+genid/
 ├── backend/
 │   ├── cmd/identity-service/main.go      # Entry point, 830 lines — all route + middleware wiring
 │   ├── internal/
@@ -385,7 +385,7 @@ All configuration is via environment variables. See [`.env.example`](backend/.en
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `DATABASE_URL` | PostgreSQL connection | `postgresql://observeid:observeid@localhost:5432/observeid` |
+| `DATABASE_URL` | PostgreSQL connection | `postgresql://genid:genid@localhost:5432/genid` |
 | `NEO4J_URI` | Neo4j Bolt endpoint | `bolt://localhost:7687` |
 | `NEO4J_USER` / `NEO4J_PASSWORD` | Neo4j credentials | `neo4j` / (local) |
 | `REDIS_ADDR` / `REDIS_PASSWORD` | Redis connection | `localhost:6379` / (empty) |
@@ -425,7 +425,7 @@ graphify path "ListIdentities" "evaluateCedarPolicy"
 
 ## License
 
-MIT License — ObserveID Reimagined, Inc. Copyright 2026.
+MIT License — GenID Reimagined, Inc. Copyright 2026.
 
 ```
 Built with Go · TypeScript · PostgreSQL · Neo4j · Redis · Temporal · Docker · Love

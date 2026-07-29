@@ -1,19 +1,19 @@
 # ─── SPIRE Configuration ────────────────────────────────────
-# Workload identity for every ObserveID Reimagined service
+# Workload identity for every GenID Reimagined service
 
 apiVersion: spire.spiffe.io/v1alpha1
 kind: ClusterSPIFFEID
 metadata:
-  name: observeid-workloads
+  name: genid-workloads
 spec:
-  spiffeIDTemplate: "spiffe://observeid.io/ns/{{ .PodMeta.Namespace }}/sa/{{ .PodSpec.ServiceAccountName }}"
+  spiffeIDTemplate: "spiffe://genid.io/ns/{{ .PodMeta.Namespace }}/sa/{{ .PodSpec.ServiceAccountName }}"
   podSelector:
     matchLabels:
       spire.io/inject: "true"
   workloadSelectorTemplates:
-    - "k8s:ns:observeid"
+    - "k8s:ns:genid"
   dnsNameTemplates:
-    - "{{ .PodMeta.Name }}.observeid.svc.cluster.local"
+    - "{{ .PodMeta.Name }}.genid.svc.cluster.local"
 ---
 # ─── SPIRE Agent DaemonSet ─────────────────────────────────
 apiVersion: apps/v1

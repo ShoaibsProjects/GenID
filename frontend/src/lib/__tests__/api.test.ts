@@ -23,7 +23,7 @@ describe("setApiUrl / getApiUrl", () => {
 
   it("stores to localStorage", () => {
     setApiUrl("https://test.com")
-    expect(localStorage.getItem("observeid_api_url")).toBe("https://test.com")
+    expect(localStorage.getItem("genid_api_url")).toBe("https://test.com")
   })
 })
 

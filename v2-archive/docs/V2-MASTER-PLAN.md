@@ -15,7 +15,7 @@
 > 
 > ---
 > 
-> **Context:** We completed V1 (ObserveID) with OIDC/OAuth2 provider (10/10 tests), Cedar engine (10 unit tests), Temporal workflows, and basic IAM features. V2 transforms this into **Fortune Identity Cloud** — a production-grade identity platform that scales to 100M+ identities.
+> **Context:** We completed V1 (GenID) with OIDC/OAuth2 provider (10/10 tests), Cedar engine (10 unit tests), Temporal workflows, and basic IAM features. V2 transforms this into **Fortune Identity Cloud** — a production-grade identity platform that scales to 100M+ identities.
 > 
 > **Next Step:** Begin **Phase 1: Foundation** (Event Sourcing + Outbox Pattern) — see below.
 > 
@@ -169,10 +169,10 @@ Build the **Identity Cloud** — a platform that:
 
 | Week | Deliverable | V1 Reuse | V2 New |
 |------|-------------|----------|--------|
-| 13 | Go SDK | — | `observeid-go` package |
-| 14 | TypeScript SDK | — | `@observeid/sdk` npm |
-| 15 | CLI | — | `observeid` binary |
-| 16 | Terraform provider | — | `terraform-provider-observeid` |
+| 13 | Go SDK | — | `genid-go` package |
+| 14 | TypeScript SDK | — | `@genid/sdk` npm |
+| 15 | CLI | — | `genid` binary |
+| 16 | Terraform provider | — | `terraform-provider-genid` |
 
 **Key Decisions:**
 - SDKs: Auto-generated from OpenAPI
@@ -339,7 +339,7 @@ Cursor / Claude / GPT
         ↓
       MCP
         ↓
-   ObserveID
+   GenID
         ↓
 • Get user
 • Provision user

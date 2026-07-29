@@ -1,7 +1,7 @@
 .PHONY: all proto backend frontend infra up down dev-db dev-full lint test clean docker-build deploy
 
 # ─── Project Metadata ───────────────────────────────────────
-APP_NAME        := observeid
+APP_NAME        := genid
 BACKEND_DIR     := backend
 FRONTEND_DIR    := frontend
 INFRA_DIR       := infrastructure
@@ -86,8 +86,8 @@ dev-db: up
 	@echo "$(CYAN)▶ Waiting for databases to be ready...$(NC)"
 	@sleep 10
 	@echo "$(CYAN)▶ Running database migrations...$(NC)"
-	@cat $(INFRA_DIR)/postgres/init.sql | docker exec -i observeid-postgres psql -U observeid -d observeid
-	@docker exec -i observeid-neo4j cypher-shell -u neo4j -p $${NEO4J_PASSWORD:-observeid123} -f /init.cypher
+	@cat $(INFRA_DIR)/postgres/init.sql | docker exec -i genid-postgres psql -U genid -d genid
+	@docker exec -i genid-neo4j cypher-shell -u neo4j -p $${NEO4J_PASSWORD:-genid123} -f /init.cypher
 	@echo "$(GREEN)✓ Database migrations complete$(NC)"
 
 dev-full: dev-db
@@ -142,7 +142,7 @@ clean: down
 
 # ─── Help ──────────────────────────────────────────────────
 help:
-	@echo "$(CYAN)ObserveID Reimagined Build System$(NC)"
+	@echo "$(CYAN)GenID Reimagined Build System$(NC)"
 	@echo ""
 	@echo "  $(YELLOW)make all$(NC)        - Build everything (proto + backend + frontend)"
 	@echo "  $(YELLOW)make proto$(NC)      - Generate protobuf code"

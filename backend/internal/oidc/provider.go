@@ -40,7 +40,7 @@ func NewProvider(pgPool *pgxpool.Pool, issuer string) (*Provider, error) {
 	}
 
 	h := sha256.Sum256([]byte(time.Now().String()))
-	kid := fmt.Sprintf("observeid-%x", h[:8])
+	kid := fmt.Sprintf("genid-%x", h[:8])
 
 	return &Provider{
 		pgPool:     pgPool,

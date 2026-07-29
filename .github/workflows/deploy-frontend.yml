@@ -31,7 +31,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: ${{ vars.API_URL || 'https://observeid-api.fly.dev' }}
+          NEXT_PUBLIC_API_URL: ${{ vars.API_URL || 'https://genid-api.fly.dev' }}
           CI: false
 
       - name: Publish to Cloudflare Pages
@@ -39,6 +39,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: pages deploy out --project-name=observeid-frontend
+          command: pages deploy out --project-name=genid-frontend
           workingDirectory: frontend
           packageManager: npm

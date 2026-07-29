@@ -1,7 +1,7 @@
 package graphql
 
 import (
-	"github.com/observeid/identity-platform/internal/service"
+	"github.com/observeid/genid/internal/service"
 )
 
 type Resolver struct {

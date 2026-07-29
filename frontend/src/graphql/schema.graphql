@@ -1,5 +1,5 @@
 // ─── GraphQL Schema ─────────────────────────────────────────
-// ObserveID Reimagined Identity Fabric API
+// GenID Reimagined Identity Fabric API
 
 schema {
   query: Query

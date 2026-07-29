@@ -1,7 +1,7 @@
 syntax = "proto3";
-package observeid.model.v1;
+package genid.model.v1;
 
-option go_package = "github.com/observeid/identity-platform/pkg/proto/model/v1";
+option go_package = "github.com/observeid/genid/pkg/proto/model/v1";
 
 // ─── Identity ─────────────────────────────────────────────
 

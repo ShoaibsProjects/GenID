@@ -1,9 +1,9 @@
-# ─── ObserveID Identity Service — Fly.io Configuration ─────
+# ─── GenID Identity Service — Fly.io Configuration ─────
 # Deploy: fly deploy
 # Secrets: fly secrets set DATABASE_URL=... NEO4J_URI=... etc.
 # Status:  fly status
 
-app = "observeid-api"
+app = "genid-api"
 primary_region = "iad"
 
 # ─── Build ───────────────────────────────────────────────
@@ -15,7 +15,7 @@ primary_region = "iad"
   PORT = "8080"
   REDIS_TLS = "true"
   TEMPORAL_NAMESPACE = "critical-offboarding"
-  CORS_ORIGIN = "https://observeid.pages.dev"
+  CORS_ORIGIN = "https://genid.pages.dev"
 
 # ─── HTTP Service ────────────────────────────────────────
 [http_service]
