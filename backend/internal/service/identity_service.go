@@ -21,15 +21,16 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/observeid/identity-platform/internal/audit"
-	"github.com/observeid/identity-platform/internal/cedar"
-	"github.com/observeid/identity-platform/internal/connector"
-	"github.com/observeid/identity-platform/internal/middleware"
-	"github.com/observeid/identity-platform/internal/oidc"
-	"github.com/observeid/identity-platform/internal/outbox"
-	"github.com/observeid/identity-platform/internal/vault"
-	"github.com/observeid/identity-platform/internal/workflow"
-	"github.com/observeid/identity-platform/pkg/telemetry"
+	"github.com/observeid/genid/internal/audit"
+	"github.com/observeid/genid/internal/cedar"
+	"github.com/observeid/genid/internal/connector"
+	"github.com/observeid/genid/internal/middleware"
+	"github.com/observeid/genid/internal/oidc"
+	"github.com/observeid/genid/internal/outbox"
+	"github.com/observeid/genid/internal/risk"
+	"github.com/observeid/genid/internal/vault"
+	"github.com/observeid/genid/internal/workflow"
+	"github.com/observeid/genid/pkg/telemetry"
 )
 
 // ─── Identity Service ──────────────────────────────────────
@@ -53,7 +54,7 @@ func NewIdentityService(pgPool *pgxpool.Pool, neo4j neo4j.DriverWithContext, rdb
 	connMgr := connector.NewManager(pgPool)
 	vaultPath := os.Getenv("VAULT_PATH")
 	if vaultPath == "" {
-		vaultPath = "/tmp/observeid-vault.json"
+		vaultPath = "/tmp/genid-vault.json"
 	}
 	vlt, err := vault.NewVault(os.Getenv("VAULT_MASTER_KEY"), vaultPath)
 	if err != nil {
@@ -475,7 +476,7 @@ func (s *IdentityService) ScimDeleteUser(w http.ResponseWriter, r *http.Request)
 func (s *IdentityService) ScimServiceProviderConfig(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]any{
 		"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"},
-		"documentationUri": "https://observeid.io/docs/scim",
+		"documentationUri": "https://genid.us/docs/scim",
 		"patch":            map[string]any{"supported": true},
 		"bulk":             map[string]any{"supported": false, "maxOperations": 0, "maxPayloadSize": 0},
 		"filter":           map[string]any{"supported": true, "maxResults": 500},
@@ -727,6 +728,28 @@ func (s *IdentityService) GetIdentity(w http.ResponseWriter, r *http.Request) {
 	respondError(w, http.StatusNotFound, "Identity not found")
 }
 
+func (s *IdentityService) RecalculateIdentityRisk(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	tenantID := r.URL.Query().Get("tenant_id")
+	if tenantID == "" {
+		tenantID = "00000000-0000-0000-0000-000000000001"
+	}
+
+	score, factors, err := risk.CalculateIdentityRisk(r.Context(), s.neo4j, s.pgPool, tenantID, id)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "risk calculation failed: "+err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"identity_id":  id,
+		"risk_score":   score,
+		"risk_factors": factors,
+	})
+}
+
 func (s *IdentityService) GetIdentityEntitlements(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -770,12 +793,48 @@ func (s *IdentityService) GetBlastRadius(w http.ResponseWriter, r *http.Request)
 
 	result, err := session.Run(r.Context(), `
 		MATCH (i {uuid: $id}) WHERE i:Identity OR i:NonHumanIdentity
-		MATCH path = (i)-[:HAS_ROLE|DIRECTLY_OWNS|DELEGATED_FROM*1..4]->(e:Entitlement)-[:ACCESSES]->(r:Resource)
-		RETURN r.name AS resource_name, r.criticality AS criticality,
-			   e.permission_level AS permission_level,
-			   LENGTH(path) AS path_depth,
-			   [n IN NODES(path) | labels(n)[0]] AS path_types
-		ORDER BY r.criticality DESC, path_depth ASC
+		OPTIONAL MATCH pathRole = (i)-[:HAS_ROLE]->(:Role)-[:GRANTS]->(e:Entitlement)-[:ACCESSES]->(r:Resource)
+		OPTIONAL MATCH pathDirectEnt = (i)-[:HAS_ENTITLEMENT]->(e2:Entitlement)-[:ACCESSES]->(r2:Resource)
+		OPTIONAL MATCH pathDirect = (i)-[:HAS_DIRECT_ACCESS]->(r3:Resource)
+		OPTIONAL MATCH pathTemp = (i)-[:HAS_TEMPORARY_ACCESS]->(r4:Resource)
+		WITH i,
+		     COLLECT(DISTINCT CASE WHEN pathRole IS NOT NULL THEN {
+				path: pathRole,
+				resource: r,
+				entitlement: e,
+				depth: length(pathRole),
+				source: 'role'
+			} END) AS rolePaths,
+		     COLLECT(DISTINCT CASE WHEN pathDirectEnt IS NOT NULL THEN {
+				path: pathDirectEnt,
+				resource: r2,
+				entitlement: e2,
+				depth: length(pathDirectEnt),
+				source: 'direct_entitlement'
+			} END) AS directEntPaths,
+		     COLLECT(DISTINCT CASE WHEN pathDirect IS NOT NULL THEN {
+				path: pathDirect,
+				resource: r3,
+				entitlement: null,
+				depth: length(pathDirect),
+				source: 'direct_access'
+			} END) AS directPaths,
+		     COLLECT(DISTINCT CASE WHEN pathTemp IS NOT NULL THEN {
+				path: pathTemp,
+				resource: r4,
+				entitlement: null,
+				depth: length(pathTemp),
+				source: 'temporary_access'
+			} END) AS tempPaths
+		WITH [p IN rolePaths + directEntPaths + directPaths + tempPaths WHERE p IS NOT NULL] AS paths
+		UNWIND paths AS p
+		RETURN p.resource.name AS resource_name,
+			   p.resource.criticality AS criticality,
+			   COALESCE(p.entitlement.permission_level, 'direct') AS permission_level,
+			   p.depth AS path_depth,
+			   [n IN NODES(p.path) | labels(n)[0]] AS path_types,
+			   p.source AS source
+		ORDER BY p.resource.criticality DESC, p.depth ASC
 	`, map[string]any{"id": id})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Query failed")
@@ -790,6 +849,7 @@ func (s *IdentityService) GetBlastRadius(w http.ResponseWriter, r *http.Request)
 		perm, _ := record.Get("permission_level")
 		depth, _ := record.Get("path_depth")
 		types, _ := record.Get("path_types")
+		source, _ := record.Get("source")
 
 		resources = append(resources, map[string]any{
 			"resource":         name,
@@ -797,6 +857,7 @@ func (s *IdentityService) GetBlastRadius(w http.ResponseWriter, r *http.Request)
 			"permission_level": perm,
 			"path_depth":       depth,
 			"path_types":       types,
+			"source":           source,
 		})
 	}
 
@@ -849,7 +910,17 @@ func (s *IdentityService) blastRadiusGraph(r *http.Request, id string) map[strin
 	// Paths → nodes + links
 	pathRes, err := session.Run(r.Context(), `
 		MATCH (i {uuid: $id}) WHERE i:Identity OR i:NonHumanIdentity
-		MATCH path = (i)-[:HAS_ROLE|DIRECTLY_OWNS|DELEGATED_FROM*1..4]->(e:Entitlement)-[:ACCESSES]->(r:Resource)
+		OPTIONAL MATCH pathRole = (i)-[:HAS_ROLE]->(:Role)-[:GRANTS]->(e:Entitlement)-[:ACCESSES]->(r:Resource)
+		OPTIONAL MATCH pathDirectEnt = (i)-[:HAS_ENTITLEMENT]->(e2:Entitlement)-[:ACCESSES]->(r2:Resource)
+		OPTIONAL MATCH pathDirect = (i)-[:HAS_DIRECT_ACCESS]->(r3:Resource)
+		OPTIONAL MATCH pathTemp = (i)-[:HAS_TEMPORARY_ACCESS]->(r4:Resource)
+		WITH i,
+		     COLLECT(DISTINCT CASE WHEN pathRole IS NOT NULL THEN pathRole END) AS rolePaths,
+		     COLLECT(DISTINCT CASE WHEN pathDirectEnt IS NOT NULL THEN pathDirectEnt END) AS directEntPaths,
+		     COLLECT(DISTINCT CASE WHEN pathDirect IS NOT NULL THEN pathDirect END) AS directPaths,
+		     COLLECT(DISTINCT CASE WHEN pathTemp IS NOT NULL THEN pathTemp END) AS tempPaths
+		WITH [p IN rolePaths + directEntPaths + directPaths + tempPaths WHERE p IS NOT NULL] AS paths
+		UNWIND paths AS path
 		RETURN [n IN nodes(path) | {
 			id: n.uuid,
 			label: COALESCE(n.display_name, n.name, n.app_name, n.email, n.uuid),
@@ -986,7 +1057,7 @@ func (s *IdentityService) RegisterAgent(w http.ResponseWriter, r *http.Request) 
 	agentID := uuid.New().String()
 	agentCardID := uuid.New().String()
 
-	// Create Neo4j node
+	// Create Neo4j node (risk_score is computed dynamically after creation)
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(r.Context())
 
@@ -997,7 +1068,7 @@ func (s *IdentityService) RegisterAgent(w http.ResponseWriter, r *http.Request) 
 			owner_id: $owner_id, owner_name: $owner_name, team_id: $team_id,
 			capabilities: $capabilities,
 			deployment_environment: $env, is_governed: true,
-			risk_score: 0.3, created_at: datetime()
+			risk_score: 0.0, risk_factors: ["pending_calculation"], created_at: datetime()
 		})
 		WITH n
 		OPTIONAL MATCH (owner:Identity {uuid: $owner_id})
@@ -1017,10 +1088,15 @@ func (s *IdentityService) RegisterAgent(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Compute initial risk (will be low/zero for a fresh agent with no access paths).
+	score, factors, _ := risk.CalculateIdentityRisk(r.Context(), s.neo4j, s.pgPool, req.TenantID, agentID)
+
 	respondJSON(w, http.StatusCreated, map[string]any{
 		"agent_id":      agentID,
 		"agent_card_id": agentCardID,
 		"status":        "active",
+		"risk_score":    score,
+		"risk_factors":  factors,
 	})
 }
 
@@ -1303,18 +1379,29 @@ func (s *IdentityService) CheckAccess(w http.ResponseWriter, r *http.Request) {
 
 	start = time.Now()
 
-	// Query Neo4j for entitlement path
+	// Query Neo4j for entitlement path through the unified governance graph:
+	// Identity-[:HAS_ROLE]->Role-[:GRANTS]->Entitlement-[:ACCESSES]->Resource
+	// plus direct/temporary access edges.
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(r.Context())
 
 	query := `
-		MATCH (i:Identity {uuid: $identityId})
-		OPTIONAL MATCH path = (i)-[:HAS_ROLE|HAS_DIRECT_ACCESS|HAS_TEMPORARY_ACCESS*1..3]->(res:Resource {id: $resourceId})
+		MATCH (i {uuid: $identityId}) WHERE i:Identity OR i:NonHumanIdentity
+		OPTIONAL MATCH pathRole = (i)-[:HAS_ROLE]->(:Role)-[:GRANTS]->(:Entitlement)-[:ACCESSES]->(res:Resource {uuid: $resourceId})
+		OPTIONAL MATCH pathDirectEnt = (i)-[:HAS_ENTITLEMENT]->(:Entitlement)-[:ACCESSES]->(res:Resource {uuid: $resourceId})
+		OPTIONAL MATCH pathDirect = (i)-[:HAS_DIRECT_ACCESS]->(res:Resource {uuid: $resourceId})
+		OPTIONAL MATCH pathTemp = (i)-[:HAS_TEMPORARY_ACCESS]->(res:Resource {uuid: $resourceId})
 		RETURN
 			i.status AS identityStatus,
-			CASE WHEN res IS NOT NULL THEN true ELSE false END AS hasPath,
-			length(path) AS pathLength,
-			collect(DISTINCT type(relationships(path)[0])) AS accessTypes
+			CASE WHEN pathRole IS NOT NULL OR pathDirectEnt IS NOT NULL OR pathDirect IS NOT NULL OR pathTemp IS NOT NULL
+				THEN true ELSE false END AS hasPath,
+			CASE
+				WHEN pathRole IS NOT NULL THEN length(pathRole)
+				WHEN pathDirectEnt IS NOT NULL THEN length(pathDirectEnt)
+				WHEN pathDirect IS NOT NULL THEN length(pathDirect)
+				WHEN pathTemp IS NOT NULL THEN length(pathTemp)
+				ELSE 0
+			END AS pathLength
 	`
 
 	result, err := session.Run(r.Context(), query, map[string]any{
@@ -1506,6 +1593,73 @@ func (s *IdentityService) RevokeAccess(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusAccepted, map[string]any{
 		"status":      "revocation_initiated",
 		"workflow_id": we.GetID(),
+	})
+}
+
+func (s *IdentityService) ListActiveJITSessions(w http.ResponseWriter, r *http.Request) {
+	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(r.Context())
+
+	nowMs := time.Now().UnixMilli()
+	result, err := session.Run(r.Context(), `
+		MATCH (i)-[r:HAS_TEMPORARY_ACCESS]->(res:Resource)
+		WHERE (i:Identity OR i:NonHumanIdentity) AND r.expires_at > $nowMs
+		RETURN i.uuid AS identity_id, COALESCE(i.display_name, i.name, i.email, i.uuid) AS identity_name,
+		       res.uuid AS resource_id, COALESCE(res.name, res.uuid) AS resource_name,
+		       r.expires_at AS expires_at
+	`, map[string]any{"nowMs": nowMs})
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to query JIT sessions: "+err.Error())
+		return
+	}
+
+	type JITSession struct {
+		IdentityID   string `json:"identity_id"`
+		IdentityName string `json:"identity_name"`
+		ResourceID   string `json:"resource_id"`
+		ResourceName string `json:"resource_name"`
+		ExpiresAt    string `json:"expires_at"`
+	}
+
+	var sessions []JITSession
+	for result.Next(r.Context()) {
+		rec := result.Record()
+		identityID, _ := rec.Get("identity_id")
+		idName, _ := rec.Get("identity_name")
+		resourceID, _ := rec.Get("resource_id")
+		resourceName, _ := rec.Get("resource_name")
+		expiresAt, _ := rec.Get("expires_at")
+
+		expiresStr := ""
+		if v, ok := expiresAt.(int64); ok && v > 0 {
+			expiresStr = time.UnixMilli(v).UTC().Format(time.RFC3339)
+		}
+
+		nameStr := ""
+		if idName != nil {
+			nameStr = fmt.Sprint(idName)
+		}
+
+		resStr := ""
+		if resourceName != nil {
+			resStr = fmt.Sprint(resourceName)
+		}
+
+		sessions = append(sessions, JITSession{
+			IdentityID:   fmt.Sprint(identityID),
+			IdentityName: nameStr,
+			ResourceID:   fmt.Sprint(resourceID),
+			ResourceName: resStr,
+			ExpiresAt:    expiresStr,
+		})
+	}
+
+	if sessions == nil {
+		sessions = []JITSession{}
+	}
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"sessions": sessions,
 	})
 }
 
@@ -2474,7 +2628,7 @@ if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 
 	uploadDir := os.Getenv("CSV_UPLOAD_DIR")
 	if uploadDir == "" {
-		uploadDir = "/tmp/observeid-csv-uploads"
+		uploadDir = "/tmp/genid-csv-uploads"
 	}
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to create upload directory")
@@ -2976,7 +3130,7 @@ func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Re
 	}
 	err := s.pgPool.QueryRow(r.Context(), `
 		INSERT INTO identities (id, tenant_id, type, status, email, display_name, department, employee_id, manager_id, source, risk_score, attributes)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0.0, $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (tenant_id, email) DO UPDATE SET
 			display_name = EXCLUDED.display_name,
 			department   = EXCLUDED.department,
@@ -2985,7 +3139,7 @@ func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Re
 			updated_at   = NOW()
 		RETURNING id
 	`, id, input.TenantID, input.Type, input.Status, input.Email, input.DisplayName,
-		input.Department, input.EmployeeID, managerID, input.Source, attrsJSON).Scan(&returnedID)
+		input.Department, input.EmployeeID, managerID, input.Source, 0.0, attrsJSON).Scan(&returnedID)
 	if err != nil {
 		s.auditLog.Append(audit.Entry{
 			Level: audit.LevelError, Service: "identity", Path: r.URL.Path,
@@ -3010,7 +3164,8 @@ func (s *IdentityService) CreateIdentityRecord(w http.ResponseWriter, r *http.Re
 		    i.department = $department, i.title = $title,
 		    i.employee_id = $employee_id, i.manager_id = $manager_id,
 		    i.source = $source, i.phone = $phone,
-		    i.risk_score = 0.0, i.updated_at = datetime(),
+		    i.risk_score = 0.0, i.risk_factors = ["pending_calculation"],
+		    i.updated_at = datetime(),
 		    i.created_at = COALESCE(i.created_at, datetime())
 	`, map[string]any{
 		"uuid": id, "tenant_id": input.TenantID, "type": input.Type,
@@ -3426,7 +3581,7 @@ func (s *IdentityService) ExportCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/csv")
-	w.Header().Set("Content-Disposition", "attachment; filename=observeid-identities.csv")
+	w.Header().Set("Content-Disposition", "attachment; filename=genid-identities.csv")
 
 	writer := csv.NewWriter(w)
 	writer.Write([]string{
@@ -3779,7 +3934,7 @@ func (s *IdentityService) AssignRole(w http.ResponseWriter, r *http.Request) {
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(r.Context())
 	_, err := session.Run(r.Context(), `
-		MATCH (i:Identity {uuid: $identity_id})
+		MATCH (i {uuid: $identity_id}) WHERE i:Identity OR i:NonHumanIdentity
 		MATCH (r:Role {uuid: $role_id})
 		MERGE (i)-[rel:HAS_ROLE]->(r)
 		SET rel.assigned_at = datetime(), rel.assigned_by = $assigned_by,
@@ -3792,7 +3947,14 @@ func (s *IdentityService) AssignRole(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[ASSIGN] Neo4j write failed: %v", err)
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{"status": "assigned"})
+	// 3. Recalculate risk so inherited entitlements are reflected immediately.
+	score, factors, _ := risk.CalculateIdentityRisk(r.Context(), s.neo4j, s.pgPool, "00000000-0000-0000-0000-000000000001", req.IdentityID)
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":       "assigned",
+		"risk_score":   score,
+		"risk_factors": factors,
+	})
 }
 
 func (s *IdentityService) RemoveRole(w http.ResponseWriter, r *http.Request) {
@@ -3818,7 +3980,8 @@ func (s *IdentityService) RemoveRole(w http.ResponseWriter, r *http.Request) {
 	session := s.neo4j.NewSession(r.Context(), neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(r.Context())
 	if _, err := session.Run(r.Context(), `
-		MATCH (i:Identity {uuid: $identity_id})-[rel:HAS_ROLE]->(r:Role {uuid: $role_id})
+		MATCH (i {uuid: $identity_id}) WHERE i:Identity OR i:NonHumanIdentity
+		MATCH (i)-[rel:HAS_ROLE]->(r:Role {uuid: $role_id})
 		DELETE rel
 		SET i.updated_at = datetime()
 	`, map[string]any{
@@ -3827,7 +3990,14 @@ func (s *IdentityService) RemoveRole(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[UNASSIGN] Neo4j write failed: %v", err)
 	}
 
-	respondJSON(w, http.StatusOK, map[string]string{"status": "removed"})
+	// 3. Recalculate risk so removed entitlements stop contributing.
+	score, factors, _ := risk.CalculateIdentityRisk(r.Context(), s.neo4j, s.pgPool, "00000000-0000-0000-0000-000000000001", req.IdentityID)
+
+	respondJSON(w, http.StatusOK, map[string]any{
+		"status":       "removed",
+		"risk_score":   score,
+		"risk_factors": factors,
+	})
 }
 
 // ─── Entitlement CRUD + Role-Entitlement Linking ─────────────

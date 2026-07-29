@@ -1,4 +1,4 @@
-// ─── ObserveID Reimagined Neo4j Graph Schema ──────────────
+// ─── GenID Reimagined Neo4j Graph Schema ──────────────
 // Identity Fabric graph initialization
 
 // ─── Constraints (Uniqueness) ────────────────────────────────
@@ -55,9 +55,9 @@ CREATE (admin:Identity {
     status: "active",
     type: "human",
     risk_score: 0.0,
-    risk_factors: [],
+    risk_factors: ["pending_calculation"],
     department: "Engineering",
-    email: "admin@observeid.io",
+    email: "admin@genid.us",
     display_name: "System Admin",
     employee_id: "ADMIN-001",
     employment_type: "employee",
@@ -234,11 +234,6 @@ CREATE (snowflakeRead:Entitlement {
 // Roles → Entitlements
 CREATE (adminRole)-[:GRANTS {assigned_at: datetime()}]->(adminEnt)
 CREATE (adminRole)-[:GRANTS {assigned_at: datetime()}]->(oktaAdmin)
-CREATE (adminRole)-[:GRANTS {assigned_at: datetime()}]->(aws)
-CREATE (adminRole)-[:GRANTS {assigned_at: datetime()}]->(okta_instance)
-CREATE (adminRole)-[:GRANTS {assigned_at: datetime()}]->(github)
-CREATE (adminRole)-[:GRANTS {assigned_at: datetime()}]->(slack)
-CREATE (adminRole)-[:GRANTS {assigned_at: datetime()}]->(snowflake)
 
 CREATE (engRole)-[:GRANTS {assigned_at: datetime()}]->(s3Read)
 CREATE (engRole)-[:GRANTS {assigned_at: datetime()}]->(githubWrite)
@@ -277,10 +272,10 @@ CREATE (alice:Identity {
     tenant_id: "00000000-0000-0000-0000-000000000001",
     status: "active",
     type: "human",
-    risk_score: 0.15,
-    risk_factors: [],
+    risk_score: 0.0,
+    risk_factors: ["pending_calculation"],
     department: "Engineering",
-    email: "alice@observeid.io",
+    email: "alice@genid.us",
     display_name: "Alice Johnson",
     employee_id: "EMP-002",
     employment_type: "employee",
@@ -311,7 +306,8 @@ CREATE (deployBot:NonHumanIdentity {
     is_governed: true,
     framework: "openai",
     deployment_environment: "production",
-    risk_score: 0.35
+    risk_score: 0.0,
+    risk_factors: ["pending_calculation"]
 })
 
 CREATE (deployBot)-[:OWNED_BY {ownership_type: "primary"}]->(alice)

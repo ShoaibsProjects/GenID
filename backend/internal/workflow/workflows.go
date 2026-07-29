@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/observeid/identity-platform/internal/activities"
+	"github.com/observeid/genid/internal/activities"
 )
 
 // ─── Workflow Input Types ──────────────────────────────────
@@ -865,6 +865,68 @@ func DetectSoDViolationsWorkflow(ctx workflow.Context) error {
 		}
 	}
 
+	return nil
+}
+
+// ─── Risk Recalculation Cron Workflow ─────────────────────
+// Periodically recalculates dynamic risk scores for all active identities.
+// Schedule via Temporal client StartWorkflowOptions.CronSchedule.
+
+type RiskRecalculationInput struct {
+	TenantID string `json:"tenant_id"`
+}
+
+func RiskRecalculationCronWorkflow(ctx workflow.Context, input RiskRecalculationInput) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Risk recalculation cron started", "tenant_id", input.TenantID)
+
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		HeartbeatTimeout:    30 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 3},
+	}
+	actCtx := workflow.WithActivityOptions(ctx, ao)
+
+	var identityIDs []string
+	if err := workflow.ExecuteActivity(actCtx, "ListActiveIdentityIDs", activities.ListIdentityIDsParams{
+		TenantID: input.TenantID,
+	}).Get(ctx, &identityIDs); err != nil {
+		return fmt.Errorf("list identities: %w", err)
+	}
+
+	logger.Info("Recalculating risk", "identity_count", len(identityIDs))
+
+	// Fan-out recalculation in batches of 50 to avoid huge histories.
+	const batchSize = 50
+	var failures []string
+	for i := 0; i < len(identityIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(identityIDs) {
+			end = len(identityIDs)
+		}
+		batch := identityIDs[i:end]
+
+		futures := make([]workflow.Future, len(batch))
+		for j, id := range batch {
+			j, id := j, id
+			futures[j] = workflow.ExecuteActivity(actCtx, "CalculateIdentityRisk", activities.CalculateIdentityRiskParams{
+				TenantID:   input.TenantID,
+				IdentityID: id,
+			})
+		}
+		for j, f := range futures {
+			if err := f.Get(ctx, nil); err != nil {
+				failures = append(failures, fmt.Sprintf("%s: %v", batch[j], err))
+			}
+		}
+	}
+
+	if len(failures) > 0 {
+		logger.Warn("Risk recalculation completed with failures", "failure_count", len(failures))
+		return fmt.Errorf("risk recalc had %d failures", len(failures))
+	}
+
+	logger.Info("Risk recalculation cron completed")
 	return nil
 }
 

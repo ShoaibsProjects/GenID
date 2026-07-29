@@ -21,9 +21,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/observeid/identity-platform/internal/audit"
-	"github.com/observeid/identity-platform/internal/cedar"
-	"github.com/observeid/identity-platform/internal/oidc"
+	"github.com/observeid/genid/internal/audit"
+	"github.com/observeid/genid/internal/cedar"
+	"github.com/observeid/genid/internal/oidc"
+	"github.com/observeid/genid/internal/risk"
 	"github.com/redis/go-redis/v9"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
@@ -521,17 +522,40 @@ func (s *ActivityService) ProvisionAccess(ctx context.Context, params ProvisionP
 		return fmt.Errorf("provision: audit log: %w", err)
 	}
 
-	// Create Neo4j relationship
+	// Create Neo4j relationship.
+	// If a RoleID is supplied we model the grant as Identity-[:HAS_ROLE]->Role
+	// (the role already owns entitlements that access the resource).
+	// Otherwise we fall back to a direct Identity-[:HAS_DIRECT_ACCESS]->Resource edge
+	// so that JIT / break-glass access still shows up in blast-radius queries.
 	session := s.neo4j.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
-	if _, err := session.Run(ctx, `
-		MATCH (i:Identity {uuid: $identityId}), (res:Resource {id: $resourceId})
-		MERGE (i)-[:HAS_DIRECT_ACCESS {granted_at: timestamp(), granted_by: $grantedBy, reason: $reason}]->(res)
-	`, map[string]any{
-		"identityId": params.IdentityID, "resourceId": params.ResourceID,
-		"grantedBy": params.GrantedBy, "reason": params.Reason,
-	}); err != nil {
-		return fmt.Errorf("provision: neo4j relationship: %w", err)
+
+	if params.RoleID != "" {
+		if _, err := session.Run(ctx, `
+			MATCH (i:Identity {uuid: $identityId}), (r:Role {id: $roleId})
+			MERGE (i)-[rel:HAS_ROLE {source: 'provision_access'}]->(r)
+			SET rel.granted_at = timestamp(), rel.granted_by = $grantedBy, rel.reason = $reason, rel.is_active = true
+		`, map[string]any{
+			"identityId": params.IdentityID, "roleId": params.RoleID,
+			"grantedBy": params.GrantedBy, "reason": params.Reason,
+		}); err != nil {
+			return fmt.Errorf("provision: neo4j role relationship: %w", err)
+		}
+	} else if params.ResourceID != "" {
+		if _, err := session.Run(ctx, `
+			MATCH (i:Identity {uuid: $identityId}), (res:Resource {id: $resourceId})
+			MERGE (i)-[:HAS_DIRECT_ACCESS {granted_at: timestamp(), granted_by: $grantedBy, reason: $reason}]->(res)
+		`, map[string]any{
+			"identityId": params.IdentityID, "resourceId": params.ResourceID,
+			"grantedBy": params.GrantedBy, "reason": params.Reason,
+		}); err != nil {
+			return fmt.Errorf("provision: neo4j direct relationship: %w", err)
+		}
+	}
+
+	// Recalculate the identity risk score so newly granted access is reflected immediately.
+	if _, _, err := risk.CalculateIdentityRisk(ctx, s.neo4j, s.pgPool, params.TenantID, params.IdentityID); err != nil {
+		activity.RecordHeartbeat(ctx, "risk_recalc_failed", err.Error())
 	}
 
 	// Store in Redis for quick access check invalidation
@@ -594,17 +618,24 @@ func (s *ActivityService) ProvisionTemporaryAccess(ctx context.Context, params P
 	jitKey := fmt.Sprintf("jit:grant:%s:%s", params.IdentityID, params.ResourceID)
 	s.redis.Set(ctx, jitKey, "active", time.Duration(params.DurationMinutes)*time.Minute)
 
-	// Create Neo4j temp relationship
+	// Create Neo4j temp relationship: direct Identity -> Resource edge so the
+	// JIT grant shows up in both access checks and blast-radius queries.
 	session := s.neo4j.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 	if _, err := session.Run(ctx, `
-		MATCH (i:Identity {uuid: $identityId}), (res:Resource {id: $resourceId})
+		MATCH (i {uuid: $identityId}) WHERE i:Identity OR i:NonHumanIdentity
+		MATCH (res:Resource {uuid: $resourceId})
 		MERGE (i)-[:HAS_TEMPORARY_ACCESS {granted_at: timestamp(), expires_at: $expiresAt, granted_by: $grantedBy}]->(res)
 	`, map[string]any{
 		"identityId": params.IdentityID, "resourceId": params.ResourceID,
 		"expiresAt": expiresAt.UnixMilli(), "grantedBy": params.GrantedBy,
 	}); err != nil {
 		return fmt.Errorf("temp provision: neo4j relationship: %w", err)
+	}
+
+	// Recalculate the identity risk score so the temporary elevation is captured.
+	if _, _, err := risk.CalculateIdentityRisk(ctx, s.neo4j, s.pgPool, params.TenantID, params.IdentityID); err != nil {
+		activity.RecordHeartbeat(ctx, "risk_recalc_failed", err.Error())
 	}
 
 	// Mint a short-lived RS256 JWT signed by the OIDC provider's RSA private key.
@@ -650,7 +681,7 @@ func (s *ActivityService) RevokeTemporaryAccess(ctx context.Context, params map[
 
 	if resourceID != "" {
 		if _, err := session.Run(ctx, `
-			MATCH (i:Identity {uuid: $identityId})-[r:HAS_TEMPORARY_ACCESS]->(res:Resource {id: $resourceId})
+			MATCH (i:Identity {uuid: $identityId})-[r:HAS_TEMPORARY_ACCESS]->(res:Resource {uuid: $resourceId})
 			DELETE r
 		`, map[string]any{"identityId": identityID, "resourceId": resourceID}); err != nil {
 			return fmt.Errorf("revoke temp access: neo4j delete: %w", err)
@@ -754,7 +785,7 @@ func (s *ActivityService) BroadcastCAEPEvent(ctx context.Context, params CAEPEve
 	eventURL := fmt.Sprintf("https://schemas.openid.net/secevent/caep/event-type/%s", params.EventType)
 
 	event := map[string]any{
-		"iss": "https://observeid.io/",
+		"iss": "https://genid.us/",
 		"sub": params.IdentityID,
 		"jti": uuid.New().String(),
 		"iat": time.Now().Unix(),
@@ -798,7 +829,7 @@ func (s *ActivityService) BroadcastCAEPEvent(ctx context.Context, params CAEPEve
 	if webhookURL != "" {
 		hmacSecret := os.Getenv("CAEP_HMAC_SECRET")
 		if hmacSecret == "" {
-			hmacSecret = "observeid-dev-secret"
+			hmacSecret = "genid-dev-secret"
 		}
 
 		// HMAC-SHA256 sign the payload
@@ -810,9 +841,9 @@ func (s *ActivityService) BroadcastCAEPEvent(ctx context.Context, params CAEPEve
 		req, err := http.NewRequestWithContext(ctx, "POST", webhookURL, bytes.NewReader(payload))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("X-ObserveID-Signature", signature)
-			req.Header.Set("X-ObserveID-Event", params.EventType)
-			req.Header.Set("X-ObserveID-JTI", eventJTI)
+			req.Header.Set("X-GenID-Signature", signature)
+			req.Header.Set("X-GenID-Event", params.EventType)
+			req.Header.Set("X-GenID-JTI", eventJTI)
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -879,7 +910,8 @@ func (s *ActivityService) AssignRoleToIdentity(ctx context.Context, params Assig
 	defer session.Close(ctx)
 
 	_, err := session.Run(ctx, `
-		MATCH (i:Identity {uuid: $identityId}), (r:Role {id: $roleId})
+		MATCH (i {uuid: $identityId}) WHERE i:Identity OR i:NonHumanIdentity
+		MATCH (r:Role {id: $roleId})
 		MERGE (i)-[rel:HAS_ROLE]->(r)
 		SET rel.assigned_at = timestamp(), rel.assigned_by = $assignedBy, rel.source = 'workflow'
 	`, map[string]any{
@@ -888,6 +920,11 @@ func (s *ActivityService) AssignRoleToIdentity(ctx context.Context, params Assig
 	})
 	if err != nil {
 		return fmt.Errorf("assign role: neo4j: %w", err)
+	}
+
+	// Recalculate the identity risk score so inherited entitlements are reflected.
+	if _, _, err := risk.CalculateIdentityRisk(ctx, s.neo4j, s.pgPool, params.TenantID, params.IdentityID); err != nil {
+		activity.RecordHeartbeat(ctx, "risk_recalc_failed", err.Error())
 	}
 
 	// Audit — best-effort, don't block role assignment
@@ -903,6 +940,73 @@ func (s *ActivityService) AssignRoleToIdentity(ctx context.Context, params Assig
 	}
 
 	return nil
+}
+
+// ─── Risk Recalculation Activity ──────────────────────────
+
+type CalculateIdentityRiskParams struct {
+	TenantID   string `json:"tenant_id"`
+	IdentityID string `json:"identity_id"`
+}
+
+type CalculateIdentityRiskResult struct {
+	RiskScore float64  `json:"risk_score"`
+	Factors   []string `json:"risk_factors"`
+}
+
+type ListIdentityIDsParams struct {
+	TenantID string `json:"tenant_id"`
+	Type     string `json:"type"` // "human", "non_human", or "" for both
+}
+
+// ListActiveIdentityIDs returns the UUIDs of active identities (human and/or NHI)
+// for a tenant. Used by the risk recalculation cron workflow.
+func (s *ActivityService) ListActiveIdentityIDs(ctx context.Context, params ListIdentityIDsParams) ([]string, error) {
+	var ids []string
+
+	if params.Type == "" || params.Type == "human" {
+		rows, err := s.pgPool.Query(ctx, `
+			SELECT id FROM identities WHERE tenant_id = $1 AND status = 'active'
+		`, params.TenantID)
+		if err != nil {
+			return nil, fmt.Errorf("list human identities: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err == nil {
+				ids = append(ids, id)
+			}
+		}
+	}
+
+	if params.Type == "" || params.Type == "non_human" {
+		rows, err := s.pgPool.Query(ctx, `
+			SELECT id FROM non_human_identities WHERE tenant_id = $1 AND status = 'active'
+		`, params.TenantID)
+		if err != nil {
+			return nil, fmt.Errorf("list nhi identities: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err == nil {
+				ids = append(ids, id)
+			}
+		}
+	}
+
+	activity.RecordHeartbeat(ctx, "identity_ids_listed", len(ids))
+	return ids, nil
+}
+
+func (s *ActivityService) CalculateIdentityRisk(ctx context.Context, params CalculateIdentityRiskParams) (CalculateIdentityRiskResult, error) {
+	score, factors, err := risk.CalculateIdentityRisk(ctx, s.neo4j, s.pgPool, params.TenantID, params.IdentityID)
+	if err != nil {
+		return CalculateIdentityRiskResult{}, fmt.Errorf("calculate identity risk: %w", err)
+	}
+	activity.RecordHeartbeat(ctx, "identity_risk_calculated", score)
+	return CalculateIdentityRiskResult{RiskScore: score, Factors: factors}, nil
 }
 
 // ─── Policy Activities ────────────────────────────────────

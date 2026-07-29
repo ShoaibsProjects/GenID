@@ -28,18 +28,19 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/api/enums/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/observeid/identity-platform/internal/activities"
-	"github.com/observeid/identity-platform/internal/audit"
-	"github.com/observeid/identity-platform/internal/eventbus"
-	"github.com/observeid/identity-platform/internal/graphql"
-	"github.com/observeid/identity-platform/internal/middleware"
-	"github.com/observeid/identity-platform/internal/outbox"
-	"github.com/observeid/identity-platform/internal/service"
-	"github.com/observeid/identity-platform/internal/workflow"
-	"github.com/observeid/identity-platform/pkg/telemetry"
+	"github.com/observeid/genid/internal/activities"
+	"github.com/observeid/genid/internal/audit"
+	"github.com/observeid/genid/internal/eventbus"
+	"github.com/observeid/genid/internal/graphql"
+	"github.com/observeid/genid/internal/middleware"
+	"github.com/observeid/genid/internal/outbox"
+	"github.com/observeid/genid/internal/service"
+	"github.com/observeid/genid/internal/workflow"
+	"github.com/observeid/genid/pkg/telemetry"
 )
 
 func main() {
@@ -65,11 +66,11 @@ func main() {
 	log.Logger = zerolog.New(os.Stdout).
 		With().
 		Timestamp().
-		Str("service", "observeid-identity").
+		Str("service", "genid-identity").
 		Logger()
 
 	log.Info().Msg("═══════════════════════════════════════════")
-	log.Info().Msg("  ObserveID Reimagined Identity Service Starting")
+	log.Info().Msg("  GenID Reimagined Identity Service Starting")
 	log.Info().Msg("  The Identity Fabric Engine")
 	log.Info().Msg("═══════════════════════════════════════════")
 
@@ -152,6 +153,7 @@ func main() {
 	w.RegisterWorkflow(workflow.CascadeRevokeWorkflow)
 	w.RegisterWorkflow(workflow.RevokeAccessChildWorkflow)
 	w.RegisterWorkflow(workflow.AccessCertificationWorkflow)
+	w.RegisterWorkflow(workflow.RiskRecalculationCronWorkflow)
 
 	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient, svc.CedarEngine(), svc.OIDCProvider(), svc.AuditChain())
 	w.RegisterActivity(act)
@@ -161,6 +163,25 @@ func main() {
 	}
 	defer w.Stop()
 	log.Info().Msg("Temporal worker started")
+
+	// Start the risk-recalculation cron workflow (every 15 minutes).
+	// The cron schedule can be overridden with RISK_RECALC_CRON_SCHEDULE env var.
+	riskCronSchedule := getEnv("RISK_RECALC_CRON_SCHEDULE", "*/15 * * * *")
+	if riskCronSchedule != "" && riskCronSchedule != "disabled" {
+		_, err := temporalClient.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
+			ID:                    "risk-recalc-cron",
+			TaskQueue:             cfg.TemporalNamespace,
+			CronSchedule:          riskCronSchedule,
+			WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		}, workflow.RiskRecalculationCronWorkflow, workflow.RiskRecalculationInput{
+			TenantID: "00000000-0000-0000-0000-000000000001",
+		})
+		if err != nil {
+			log.Warn().Err(err).Msg("Failed to start risk recalculation cron workflow")
+		} else {
+			log.Info().Str("schedule", riskCronSchedule).Msg("Risk recalculation cron workflow started")
+		}
+	}
 
 	// ─── Start Cedar Hot Reload (30s interval) ──────────
 	svc.CedarEngine().StartHotReload(context.Background(), 30*time.Second)
@@ -216,7 +237,7 @@ func main() {
 	r := mux.NewRouter()
 	r.Use(securityHeadersMiddleware)
 	r.Use(corsMiddleware(cfg.CORSOrigin))
-	r.Use(otelhttp.NewMiddleware("observeid-api"))
+	r.Use(otelhttp.NewMiddleware("genid-api"))
 	r.Use(rateLimiter.Middleware)
 	r.Use(requestValidation.Middleware)
 	r.Use(jwtAuth.Middleware)
@@ -246,7 +267,7 @@ func main() {
 			// Dev-login users get the admin role so master-guarded workflow
 			// operations (kill switch, grant/revoke, certifications, LCM)
 			// work from the local UI. Dev-only endpoint — disabled in prod.
-			token, err := svc.OIDCProvider().SignAccessTokenWithRoles(userID, "observeid-frontend", "openid profile email api", []string{"admin"})
+			token, err := svc.OIDCProvider().SignAccessTokenWithRoles(userID, "genid-frontend", "openid profile email api", []string{"admin"})
 			if err != nil {
 				http.Error(w, `{"error":"token_sign_failed"}`, http.StatusInternalServerError)
 				return
@@ -307,7 +328,7 @@ func main() {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ObserveID — Identity Fabric Engine</title>
+<title>GenID — Identity Fabric Engine</title>
 <style>
   :root {
     --bg: #09090B; --surface: #111116; --border: #1E1E24;
@@ -430,7 +451,7 @@ func main() {
           d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
       </svg>
     </div>
-    <h1>ObserveID Identity Fabric Engine</h1>
+    <h1>GenID Identity Fabric Engine</h1>
     <p class="subtitle">Event-Driven, AI-Native Identity Governance Platform. Real-time access control for humans, AI agents, and machines.</p>
   </div>
 
@@ -532,7 +553,7 @@ func main() {
   </div>
 
   <div class="footer">
-    <span>ObserveID Reimagined &mdash; Identity Fabric Engine</span>
+    <span>GenID Reimagined &mdash; Identity Fabric Engine</span>
     <span>
       <a href="/health">Health</a> &middot;
       <a href="/ready">Ready</a> &middot;
@@ -558,7 +579,7 @@ func main() {
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"status":"ok","service":"observeid-identity","version":"1.0.0"}`)
+		fmt.Fprint(w, `{"status":"ok","service":"genid-identity","version":"1.0.0"}`)
 	}).Methods("GET")
 
 	r.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
@@ -666,6 +687,7 @@ func main() {
 	api.HandleFunc("/identities/{id}", svc.GetIdentity).Methods("GET")
 	api.HandleFunc("/identities/{id}/entitlements", svc.GetIdentityEntitlements).Methods("GET")
 	api.HandleFunc("/identities/{id}/blast-radius", svc.GetBlastRadius).Methods("GET")
+	api.HandleFunc("/identities/{id}/risk/recalculate", svc.RecalculateIdentityRisk).Methods("POST")
 
 	// NHI/Agent API
 	api.HandleFunc("/agents", svc.ListAgents).Methods("GET")
@@ -680,6 +702,7 @@ func main() {
 	api.HandleFunc("/access/grant", workflowGuard.Protect(middleware.OpGrantAccess, svc.GrantAccess)).Methods("POST")
 	api.HandleFunc("/access/revoke", workflowGuard.Protect(middleware.OpRevokeAccess, svc.RevokeAccess)).Methods("POST")
 	api.HandleFunc("/access/jit", svc.JustInTimeAccess).Methods("POST")
+	api.HandleFunc("/access/sessions", svc.ListActiveJITSessions).Methods("GET")
 
 	// AI Copilot API
 	api.HandleFunc("/copilot/query", svc.CopilotQuery).Methods("QUERY", "POST")
@@ -958,7 +981,7 @@ func loadAPIKeys() map[string]string {
 func initTelemetry(cfg *Config) func() {
 	res, err := resource.New(context.Background(),
 		resource.WithAttributes(
-			semconv.ServiceNameKey.String("observeid-identity-service"),
+			semconv.ServiceNameKey.String("genid-identity-service"),
 			semconv.ServiceVersionKey.String("1.0.0"),
 		),
 	)
