@@ -153,7 +153,7 @@ MATCH path *1..3          SELECT effect FROM          GET policy:decision
 
 ```bash
 # 1. Clone and start infrastructure
-git clone https://github.com/ShoaibsProjects/genid.git
+git clone https://github.com/ShoaibsProject/observeid-V2.git
 cd genid
 make up          # PostgreSQL, Neo4j, Redis, Temporal, Zookeeper — 6 containers
 
