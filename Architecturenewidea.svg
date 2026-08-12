@@ -39,8 +39,8 @@
   <rect width="1200" height="1450" fill="url(#bg-grad)"/>
 
   <g id="Header">
-    <text x="60" y="60" font-family="Inter, sans-serif" font-size="24" font-weight="700" fill="#FAFAFA">ObserveID Architecture</text>
-    <text x="60" y="85" font-family="Inter, sans-serif" font-size="14" font-weight="400" fill="#717D96">The Agentic Identity Fabric · v2.0.0</text>
+    <text x="60" y="60" font-family="Inter, sans-serif" font-size="24" font-weight="700" fill="#FAFAFA">GenID Architecture</text>
+    <text x="60" y="85" font-family="Inter, sans-serif" font-size="14" font-weight="400" fill="#717D96">The Agentic Identity Fabric · v1.0.0</text>
     <line x1="60" y1="100" x2="1140" y2="100" stroke="#27272A" stroke-width="1"/>
   </g>
 
