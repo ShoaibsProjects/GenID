@@ -68,8 +68,8 @@
   
   <!-- AWS-style service icon dots -->
   <circle cx="28" cy="26" r="6" fill="#3B82F6"/>
-  <text x="42" y="31" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="16" font-weight="700" fill="#F0F0F0" letter-spacing="-0.2">ObserveID Reimagined</text>
-  <text x="145" y="31" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="500" fill="#717D96">IAM/IGA Platform Architecture</text>
+  <text x="42" y="31" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="16" font-weight="700" fill="#F0F0F0" letter-spacing="-0.2">GenID Reimagined</text>
+  <text x="125" y="31" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="12" font-weight="500" fill="#717D96">IAM/IGA Platform Architecture</text>
   
   <text x="1540" y="31" font-family="'JetBrains Mono', monospace" font-size="10" fill="#52525B" text-anchor="end">v1.5.0 — P0 Complete</text>
 
@@ -473,7 +473,7 @@
     <text x="128" y="1069" font-family="'Plus Jakarta Sans', -apple-system, sans-serif" font-size="13" font-weight="600" fill="#FAFAFA">PostgreSQL 16</text>
     <text x="96" y="1092" font-family="'JetBrains Mono', monospace" font-size="9" fill="#9CA3AF">21 tables · GIN indexes · Full-text search</text>
     <text x="96" y="1108" font-family="'JetBrains Mono', monospace" font-size="9" fill="#717D96">Identities · Connectors · Roles · Audit · Outbox · Policies</text>
-    <text x="96" y="1122" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Docker: observeid-postgres · :5432</text>
+    <text x="96" y="1122" font-family="'JetBrains Mono', monospace" font-size="9" fill="#52525B">Docker: genid-postgres · :5433</text>
   </g>
 
   <!-- Neo4j -->

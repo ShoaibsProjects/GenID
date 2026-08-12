@@ -1,0 +1,31 @@
+# GenID · Cloudflare Tunnel config
+#
+# 1. Install on the VM:
+#      sudo apt install -y cloudflared
+# 2. Authenticate (one-time, opens browser):
+#      cloudflared tunnel login
+# 3. Create a tunnel:
+#      cloudflared tunnel create genid
+#    -> prints a <TUNNEL_ID> and writes credentials.json to ~/.cloudflared/
+# 4. Copy this file to ~/.cloudflared/config.yml and substitute:
+#      <TUNNEL_ID>  (printed in step 3)
+#      YOUR_DOMAIN  (the apex/subdomain you own + Cloudflare-managed zone)
+#    Move credentials.json next to it (default location is fine).
+# 5. Install as a system service:
+#      sudo cloudflared service install
+#    Starts on boot, auto-reconnects.
+#
+# Result: https://api.YOUR_DOMAIN  -> identity-service:8080 (Go API)
+#         https://app.YOUR_DOMAIN  -> frontend:3001       (Next.js static UI)
+# All other infra services (PG / Neo4j / Redis / Temporal / NATS) are bound to
+# 127.0.0.1 ONLY and never reach the internet.
+
+tunnel: <TUNNEL_ID>
+credentials-file: /root/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: api.YOUR_DOMAIN
+    service: http://localhost:8080
+  - hostname: app.YOUR_DOMAIN
+    service: http://localhost:3001
+  - service: http_status:404

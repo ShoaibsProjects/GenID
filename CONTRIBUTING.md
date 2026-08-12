@@ -14,8 +14,8 @@ Welcome to the Identity Fabric Engine. This document covers the conventions, wor
 ### Clone & Setup
 
 ```bash
-git clone https://github.com/ShoaibsProject/observeid-V2
-cd observeid-V2
+git clone https://github.com/ShoaibsProjects/GenID.git
+cd GenID
 
 # Install dependencies
 cd backend && go mod download && cd ..
