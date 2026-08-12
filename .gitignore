@@ -1,8 +1,15 @@
-# ─── ObserveID Reimagined ────────────────────────────────
-# Environment
+# ─── GenID ────────────────────────────────────────────────
+# Environment — NEVER commit real secrets
 .env
 .env.local
 .env.production
+.env.*.local
+**/.env
+
+# Application vault store (AES-256-GCM encrypted, but never commit it)
+**/vault.json
+**/vault-data.json
+**/secrets.*
 
 # Dependencies
 **/node_modules

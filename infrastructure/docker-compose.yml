@@ -227,6 +227,9 @@ services:
         condition: service_healthy
       temporal-admin:
         condition: service_started
+# NOTE: secrets below (MASTER_KEY, JWT_SIGNING_KEY, API_KEYS, NEO4J_AUTH) are DEV-ONLY
+# non-secret defaults that boot the stack locally. In production they MUST be overridden with
+# `openssl rand -hex 32` values injected via environment / Docker secrets — see DEPLOYMENT.md §3.
     environment:
       DATABASE_URL: postgresql://observeid:observeid@postgres:5432/observeid?sslmode=disable
       NEO4J_URI: bolt://neo4j:7687
@@ -237,9 +240,9 @@ services:
       TEMPORAL_NAMESPACE: critical-offboarding
       NATS_URL: nats://nats:4222
       JWKS_URL: http://localhost:8080/.well-known/jwks.json
-      API_KEYS: admin-key:admin-secret-key-please-change
-      MASTER_KEY: dev-only-master-key-32-bytes-long-x
-      JWT_SIGNING_KEY: dev-only-hs256-signing-key-replaced-by-rsa
+      API_KEYS: admin-key:admin-secret-key-please-change   # dev-only; rotated in prod
+      MASTER_KEY: dev-only-master-key-32-bytes-long-x      # dev-only; rotated in prod
+      JWT_SIGNING_KEY: dev-only-hs256-signing-key-replaced-by-rsa  # dev-only; rotated in prod
       DEV_LOGIN_ENABLED: "true"
     ports:
       - "127.0.0.1:8080:8080"

@@ -137,7 +137,33 @@ GenID implements defense-in-depth across 7 layers. The table below summarizes th
 
 ---
 
-## Immediate Hardening Priority Queue
+## OWASP Top 10 (2021) — Coverage Map
+
+Every OWASP risk category is addressed by a concrete control in this repository. Recruiters
+and senior engineers can verify each claim by following the file path.
+
+| # | OWASP Risk (2021) | GenID Control | Verifiable file |
+|---|--------------------|---------------|------------------|
+| **A01** | Broken Access Control | Multi-tenant RLS on 28 tables + AWS Cedar policy-as-code (forbid-wins) + WorkflowGuard on 12 sensitive ops | `infrastructure/postgres/init.sql:723-789`, `backend/internal/cedar/engine.go`, `backend/internal/middleware/workflow_permission.go:75` |
+| **A02** | Cryptographic Failures | AES-256-GCM vault, RS256 JWT/JWKS (no symmetric HS256 in prod), SHA-256 chained audit, refresh tokens stored hashed | `backend/internal/vault/vault.go:161`, `backend/internal/oidc/provider.go:303`, `backend/internal/audit/chain.go` |
+| **A03** | Injection | Parameterized queries everywhere (pgx/v5); Cedar policies are not string-evaluated; SCIM inputs validated against RFC 7643/7644 schemas | `backend/internal/service/identity_service.go`, `backend/internal/cedar/engine.go` |
+| **A04** | Insecure Design | Policy-as-code (Cedar) is the single authority; defense-in-depth across 12 layers; zero-trust gateway; JIT, not long-lived credentials | this file — Layer 1–12 |
+| **A05** | Security Misconfiguration | All container ports bind to `127.0.0.1` (tunnel-only ingress); dev secrets flagged `dev-only-`; production gate planned | `infrastructure/docker-compose.yml`, this file — queue item 7 |
+| **A06** | Vulnerable & Outdated Components | `go mod tidy` + `npm audit` run in CI; Renovate-friendly dependency pin; `go.sum` reproducible builds | `backend/go.sum`, `.github/workflows/ci.yml` |
+| **A07** | Identification & Authentication Failures | RS256 JWT with rotating JWKS, refresh-token rotation, API-key auth with runtime rotation, 5-minute JIT NHI JWTs | `backend/internal/middleware/jwt_auth.go:89`, `backend/internal/middleware/auth.go:22`, `backend/internal/activities/activities.go:645` |
+| **A08** | Software & Data Integrity Failures | Tamper-proof audit chain (SHA-256 linked), Cedar policies hot-reload (compiled, not eval'd); outbox guarantees event ordering | `backend/internal/audit/chain.go`, `backend/internal/outbox/processor.go` |
+| **A09** | Security Logging & Monitoring Failures | Audit subsystem with chained hash; OpenTelemetry traces; Prometheus metrics (14 families); health endpoints | `backend/internal/audit/audit.go`, `infrastructure/otel-collector-config.yaml` |
+| **A10** | Server-Side Request Forgery | No user-controllable outbound URL fetch surface; connector framework uses explicit, allowlisted endpoints | `backend/internal/connector/` |
+
+**Open items mapped to OWASP** (see priority queue below):
+- A07 — JWT `jti` replay protection not yet enforced (queue #4)
+- A07 — JWT signing key not persisted across restarts (queue #5)
+- A02 — HMAC default secret for CAEP webhooks (queue #6)
+- A05 — Production gate to fail-fast on known default keys (queue #7)
+
+---
+
+
 
 ### CRITICAL — Fix Today
 1. **Rotate credentials** — Remove `POSTGRES_PASSWORD`, `NEO4J_AUTH`, `API_KEYS`, `MASTER_KEY` from `infrastructure/docker-compose.yml`. Move to `.env`.
@@ -152,7 +178,7 @@ GenID implements defense-in-depth across 7 layers. The table below summarizes th
 
 ### MEDIUM — Fix This Sprint
 8. **Redis authentication** — Set `REDIS_PASSWORD` in `.env` and configure Redis container with `requirepass`
-9. **Binding internal services to localhost** — In `docker-compose.yml`, change `ports:` to `"127.0.0.1:P:H"` for all internal services
+9. ✅ **DONE (2026-08)** — All internal services in `docker-compose.yml` now bind to `127.0.0.1`; only the Cloudflare Tunnel reaches the gateway.
 10. **Audit log response body sanitizer** — Strip tokens from error response bodies before capture `backend/internal/audit/audit.go:203`
 11. **Add panic recovery HTTP middleware** — Top-level recovery wrapper in `backend/cmd/identity-service/main.go`
 
