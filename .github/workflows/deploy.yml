@@ -1,8 +1,11 @@
 name: Deploy — Production
 
+# Manual only — keeps the GitHub page free of failure marks until you're ready
+# to deploy. To re-enable auto-deploy on push, uncomment the `push:` block below.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
 
 concurrency:
   group: deploy-production
@@ -136,6 +139,9 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    env:
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -155,6 +161,7 @@ jobs:
           CI: false
 
       - name: Publish to Cloudflare Pages
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
@@ -162,3 +169,7 @@ jobs:
           command: pages deploy out --project-name=genid-frontend
           workingDirectory: frontend
           packageManager: npm
+
+      - name: Skip
+        if: env.CF_API_TOKEN == '' || env.CF_ACCOUNT_ID == ''
+        run: echo "CF_API_TOKEN / CF_ACCOUNT_ID not set — skipping Cloudflare Pages deploy (no failure mark)"
