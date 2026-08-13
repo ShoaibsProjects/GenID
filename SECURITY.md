@@ -137,29 +137,57 @@ GenID implements defense-in-depth across 7 layers. The table below summarizes th
 
 ---
 
-## OWASP Top 10 (2021) — Coverage Map
+## OWASP Top 10:2025 — Coverage Map
 
-Every OWASP risk category is addressed by a concrete control in this repository. Recruiters
-and senior engineers can verify each claim by following the file path.
+OWASP's flagship Top 10 was refreshed in 2025 (the 2021 list is now superseded). Every
+2025 risk category is addressed by a concrete control in this repository — recruiters and
+senior engineers can verify each claim by following the file path.
 
-| # | OWASP Risk (2021) | GenID Control | Verifiable file |
+| # | OWASP Top 10:2025 | GenID Control | Verifiable file |
 |---|--------------------|---------------|------------------|
 | **A01** | Broken Access Control | Multi-tenant RLS on 28 tables + AWS Cedar policy-as-code (forbid-wins) + WorkflowGuard on 12 sensitive ops | `infrastructure/postgres/init.sql:723-789`, `backend/internal/cedar/engine.go`, `backend/internal/middleware/workflow_permission.go:75` |
-| **A02** | Cryptographic Failures | AES-256-GCM vault, RS256 JWT/JWKS (no symmetric HS256 in prod), SHA-256 chained audit, refresh tokens stored hashed | `backend/internal/vault/vault.go:161`, `backend/internal/oidc/provider.go:303`, `backend/internal/audit/chain.go` |
-| **A03** | Injection | Parameterized queries everywhere (pgx/v5); Cedar policies are not string-evaluated; SCIM inputs validated against RFC 7643/7644 schemas | `backend/internal/service/identity_service.go`, `backend/internal/cedar/engine.go` |
-| **A04** | Insecure Design | Policy-as-code (Cedar) is the single authority; defense-in-depth across 12 layers; zero-trust gateway; JIT, not long-lived credentials | this file — Layer 1–12 |
-| **A05** | Security Misconfiguration | All container ports bind to `127.0.0.1` (tunnel-only ingress); dev secrets flagged `dev-only-`; production gate planned | `infrastructure/docker-compose.yml`, this file — queue item 7 |
-| **A06** | Vulnerable & Outdated Components | `go mod tidy` + `npm audit` run in CI; Renovate-friendly dependency pin; `go.sum` reproducible builds | `backend/go.sum`, `.github/workflows/ci.yml` |
-| **A07** | Identification & Authentication Failures | RS256 JWT with rotating JWKS, refresh-token rotation, API-key auth with runtime rotation, 5-minute JIT NHI JWTs | `backend/internal/middleware/jwt_auth.go:89`, `backend/internal/middleware/auth.go:22`, `backend/internal/activities/activities.go:645` |
-| **A08** | Software & Data Integrity Failures | Tamper-proof audit chain (SHA-256 linked), Cedar policies hot-reload (compiled, not eval'd); outbox guarantees event ordering | `backend/internal/audit/chain.go`, `backend/internal/outbox/processor.go` |
-| **A09** | Security Logging & Monitoring Failures | Audit subsystem with chained hash; OpenTelemetry traces; Prometheus metrics (14 families); health endpoints | `backend/internal/audit/audit.go`, `infrastructure/otel-collector-config.yaml` |
-| **A10** | Server-Side Request Forgery | No user-controllable outbound URL fetch surface; connector framework uses explicit, allowlisted endpoints | `backend/internal/connector/` |
+| **A02** | Security Misconfiguration | All container ports bind to `127.0.0.1` (tunnel-only ingress); dev secrets flagged `dev-only-`; production gate planned | `infrastructure/docker-compose.yml`, this file — queue item 7 |
+| **A03** | Software Supply Chain Failures | `go mod tidy` + `npm audit` in CI; reproducible `go.sum`; images pinned by version tag (no `:latest`); `go.mod` module pinned | `backend/go.sum`, `.github/workflows/ci.yml`, `infrastructure/docker-compose.yml` |
+| **A04** | Cryptographic Failures | AES-256-GCM vault, RS256 JWT/JWKS (no HS256 in prod), SHA-256 chained audit, refresh tokens stored hashed | `backend/internal/vault/vault.go:161`, `backend/internal/oidc/provider.go:303`, `backend/internal/audit/chain.go` |
+| **A05** | Injection | Parameterized queries everywhere (pgx/v5); Cedar policies compiled, not string-evaluated; SCIM inputs validated against RFC 7643/7644 | `backend/internal/service/identity_service.go`, `backend/internal/cedar/engine.go` |
+| **A06** | Insecure Design | Policy-as-code (Cedar) is the single authority; defense-in-depth across 12 layers; zero-trust gateway; JIT, not long-lived credentials; Redis fence tokens for optimistic concurrency | this file — Layers 1–12, `backend/internal/activities/activities.go:285-321` |
+| **A07** | Authentication Failures | RS256 JWT with rotating JWKS, refresh-token rotation, API-key auth with runtime rotation, 5-minute JIT NHI JWTs | `backend/internal/middleware/jwt_auth.go:89`, `backend/internal/middleware/auth.go:22`, `backend/internal/activities/activities.go:645` |
+| **A08** | Software or Data Integrity Failures | Tamper-proof audit chain (SHA-256 linked), Cedar policies hot-reload (compiled, not eval'd); outbox guarantees event ordering | `backend/internal/audit/chain.go`, `backend/internal/outbox/processor.go` |
+| **A09** | Security Logging and Alerting Failures | Audit subsystem with chained hash; OpenTelemetry traces; Prometheus metrics (14 families); health endpoints feed alerting | `backend/internal/audit/audit.go`, `infrastructure/otel-collector-config.yaml` |
+| **A10** | Mishandling of Exceptional Conditions *(new in 2025, replaces SSRF)* | Redis fence tokens guard race conditions (optimistic concurrency); no user-controllable outbound URL fetch surface in the connector framework; panic-recovery middleware is open (queue #11) | `backend/internal/activities/activities.go:285-321`, `backend/internal/connector/`, this file — queue item 11 |
 
-**Open items mapped to OWASP** (see priority queue below):
-- A07 — JWT `jti` replay protection not yet enforced (queue #4)
-- A07 — JWT signing key not persisted across restarts (queue #5)
-- A02 — HMAC default secret for CAEP webhooks (queue #6)
-- A05 — Production gate to fail-fast on known default keys (queue #7)
+**Open items mapped to OWASP Top 10:2025:**
+- **A07** — JWT `jti` replay protection not yet enforced (queue #4)
+- **A07** — JWT signing key not persisted across restarts (queue #5)
+- **A04** — HMAC default secret for CAEP webhooks (queue #6)
+- **A02** — Production gate to fail-fast on known default keys (queue #7)
+- **A10** — Panic-recovery HTTP middleware (queue #11)
+
+---
+
+## OWASP Top 10 for LLM Applications:2025 — Agentic Coverage Map
+
+The OWASP Top 10 for LLM/GenAI Applications is a separate, AI-specific list (2025 edition).
+GenID is built for the agentic era — its **Non-Human Identity governance is a direct mitigation
+for LLM06 (Excessive Agency)**, the single biggest risk when LLM agents act on real systems.
+Mapping below is honest: ✅ controlled today, ⛔ low risk by design, ⚠️ partial / production slot.
+
+| # | OWASP LLM:2025 | GenID stance | Status |
+|---|----------------|--------------|--------|
+| **LLM01** | Prompt Injection | Copilot pipeline is deterministic retrieve→rerank→generate→**validate** (5-step in `ai/copilot.go`). Production LLM path needs strict input sanitization. | ⚠️ partial |
+| **LLM02** | Sensitive Information Disclosure | GraphRAG retrieves only what the requesting identity can access (tenancy enforced through RLS on the source PG); confidence scoring flags low-information answers. Production needs PII redaction in LLM responses. | ⚠️ partial |
+| **LLM03** | Supply Chain | Reuses A03 controls (locked deps, reproducible `go.sum`, pinned images). Model supply chain is a future concern (current copilot is deterministic, no third-party model dependency). | ✅ |
+| **LLM04** | Data and Model Poisoning | Graph is sourced from audit-governed Postgres writes, not untrusted user text → poisoning surface is minimal today. Watch when fine-tuning/embedding pipelines land. | ✅ by design |
+| **LLM05** | Improper Output Handling | Copilot returns structured responses (confidence + recommendations), never raw actions to execute; no `eval`/shell surface. | ✅ |
+| **LLM06** | **Excessive Agency** | 🎯 **GenID's core thesis.** Agents get **5-minute scoped JIT JWTs** (never long-lived creds); Cedar narrows an agent's span at **evaluation time, not issuance time**; `policies/agent.cedar` scopes agents; the 109ms kill switch revokes a compromised agent identity mid-action. **No agent ever holds blanket authority.** | ✅ |
+| **LLM07** | System Prompt Leakage | No user-facing system prompts today (deterministic copilot); low risk. | ⛔ |
+| **LLM08** | Vector and Embedding Weaknesses | Primary retrieval is **graph-native (Neo4j Cypher)**, not flat vector → no cross-tenant vector leakage. The Qdrant hybrid slot is future work, designed to layer *on top of* tenancy. | ✅ by design |
+| **LLM09** | Misinformation | Confidence scoring (0.6–0.92) + validation step (queue production LLM); recommendations are flagged, not asserted as fact. | ⚠️ partial |
+| **LLM10** | Unbounded Consumption | Gateway rate limit (100 req/s, burst 200, per-IP token bucket) bounds copilot request volume. Per-tenant cost caps slot for production. | ⚠️ partial |
+
+The standout message for AI-security recruiters: GenID does not bolt AI onto a legacy IAM.
+Its **NHI plane is purpose-built to neutralize LLM06 (Excessive Agency)** — the OWASP LLM risk
+that Anthropic, OpenAI, and every agentic-AI company must solve to ship agents that act safely.
 
 ---
 
