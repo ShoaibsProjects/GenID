@@ -23,6 +23,29 @@ under a single real-time policy engine, with a 109ms kill switch and a tamper-pr
 
 ---
 
+## 1.5 Vocabulary — what the boxes in the diagram actually are
+
+GenID's architecture diagram mixes three *different kinds* of things. Reviewers and AI agents
+parsing this doc should know which is which, because the runtime implications differ.
+
+| Term | What it actually is | In GenID |
+|------|---------------------|----------|
+| **Plane / layer** | A horizontal *responsibility band*. Not code — just a way to divide the diagram. | Edge · Gateway · Services · Async · State |
+| **Component / module** | Code **we wrote**, living inside **one Go binary** (a *modular monolith*). Each has a clean internal API boundary but runs in-process. | Cedar Engine · Identity Service · Access Service · GraphRAG Copilot · Connector Framework · Credential Vault · Audit Chain · OIDC Provider · NHI registry |
+| **Infrastructure / dependency** | Third-party software in `docker-compose.yml` that the binary *talks to* but didn't author. | PostgreSQL · Neo4j · Redis · Temporal · NATS JetStream · OTel Collector · Grafana |
+| **Middleware** | Cross-cutting code that runs on every HTTP request, before handlers. | JWT/JWKS · Rate Limiter · API-Key · WorkflowGuard (`backend/internal/middleware/`) |
+| **Workflow / Activity** | Orchestration *units* executed by Temporal (not "services"). | Offboard, Grant, JIT, SoD… (11 workflows / 29 activities in `workflow/`, `activities/`) |
+| **Policy artifact** | The declarative `.cedar` files (static), evaluated by the Cedar **engine**. | `policies/{rbac,abac,agent,sod_emergency}.cedar` |
+| **Connector** | A plugin flavour under the Connector Framework, declared by a YAML manifest. | Entra ID · LDAP · SCIM 2.0 · CSV · generic REST |
+
+**Why it matters:** calling Cedar or the Copilot a "microservice" would be wrong — they are
+**components** of a modular monolith, deliberately kept in-process so the Temporal worker and
+the PG→Neo4j dual-write share a transaction boundary. Prematurely splitting them would trade
+cohesion for network hops. The only things that ship as separate processes are the **infrastructure
+dependencies** in `docker-compose.yml`.
+
+---
+
 ## 2. Five-Plane Architecture
 
 ```
