@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GO_VERSION: "1.26"
+  GO_VERSION: "1.26.6"
   NODE_VERSION: "22"
   FLY_APP: "genid-api"
 
@@ -148,7 +148,7 @@ jobs:
 
       - name: Publish to Cloudflare Pages
         if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v3.15.0
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
           accountId: ${{ secrets.CF_ACCOUNT_ID }}
