@@ -1,4 +1,4 @@
-name: Build & Push Docker Images
+name: Build, Scan & Publish Docker Images
 on:
   push:
     branches: [main]
@@ -9,31 +9,14 @@ env:
 
 jobs:
   docker:
-    name: Build & Push
+    name: Scan, Build & Publish
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      id-token: write # for cosign keyless signing
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.26"
-
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-        with:
-          version: "25.1"
-
-      - name: Install protoc-gen-go
-        run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
-
-      - name: Generate Protobuf
-        run: make proto
 
       - name: Lowercase image name
         id: img
@@ -46,25 +29,132 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata (identity-service)
+        id: meta-identity
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}
+          images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}/identity-service
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha
 
-      - name: Build & Push Identity Service
+      - name: Extract metadata (event-processor)
+        id: meta-event
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}/event-processor
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha
+
+      - name: Extract metadata (frontend)
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}/frontend
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha
+
+      - name: Build & Scan Identity Service
+        id: build-identity
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/identity-service.Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          push: false
+          load: true
+          tags: ${{ steps.meta-identity.outputs.tags }}
+          labels: ${{ steps.meta-identity.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
 
-      - name: Build & Push Frontend
+      - name: Build & Scan Event Processor
+        id: build-event
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/event-processor.Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.meta-event.outputs.tags }}
+          labels: ${{ steps.meta-event.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Build & Scan Frontend
+        id: build-frontend
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/frontend.Dockerfile
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}/frontend:latest
+          push: false
+          load: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Trivy scan — identity-service
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}/identity-service:main
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          format: table
+
+      - name: Trivy scan — event-processor
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}/event-processor:main
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          format: table
+
+      - name: Trivy scan — frontend
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}/frontend:main
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          format: table
+
+      - name: Push Identity Service
+        run: printf '%s\n' "${{ steps.meta-identity.outputs.tags }}" | xargs -I{} docker push {}
+
+      - name: Push Event Processor
+        run: printf '%s\n' "${{ steps.meta-event.outputs.tags }}" | xargs -I{} docker push {}
+
+      - name: Push Frontend
+        run: printf '%s\n' "${{ steps.meta-frontend.outputs.tags }}" | xargs -I{} docker push {}
+
+      - name: Install cosign
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: "v2.2.4"
+
+      - name: Sign images with cosign (keyless)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          for tag in ${{ steps.meta-identity.outputs.tags }} ${{ steps.meta-event.outputs.tags }} ${{ steps.meta-frontend.outputs.tags }}; do
+            cosign sign --yes "$tag"
+          done
