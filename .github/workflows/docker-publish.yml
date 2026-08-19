@@ -111,7 +111,7 @@ jobs:
           sbom: true
 
       - name: Trivy scan — identity-service
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}/identity-service:main
           severity: HIGH,CRITICAL
@@ -120,7 +120,7 @@ jobs:
           format: table
 
       - name: Trivy scan — event-processor
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}/event-processor:main
           severity: HIGH,CRITICAL
@@ -129,7 +129,7 @@ jobs:
           format: table
 
       - name: Trivy scan — frontend
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}/frontend:main
           severity: HIGH,CRITICAL
