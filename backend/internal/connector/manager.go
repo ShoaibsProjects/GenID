@@ -55,6 +55,7 @@ func (m *Manager) WithVault(v VaultHandle) *Manager {
 type VaultHandle interface {
 	Store(ctx context.Context, name, secretType, reference, plaintext string) (string, error)
 	Retrieve(ctx context.Context, id string) (string, error)
+	Delete(ctx context.Context, id string) error
 }
 
 // asV2 returns the ConnectorV2 for a connector ID, caching the
@@ -365,12 +366,25 @@ func (m *Manager) Unregister(ctx context.Context, id string) error {
 	delete(m.health, id)
 	m.mu.Unlock()
 
+	// Resolve the vault reference before deleting so the encrypted secret
+	// can be removed once the connector row is gone.
+	var vaultSecretID *string
+	m.pgPool.QueryRow(ctx, `SELECT vault_secret_id FROM connectors WHERE id = $1`, id).Scan(&vaultSecretID)
+
 	// Delete from PostgreSQL
 	if _, err := m.pgPool.Exec(ctx, `DELETE FROM connectors WHERE id = $1`, id); err != nil {
 		return fmt.Errorf("manager: delete connector: %w", err)
 	}
 	// Also clean up connector_identities
 	m.pgPool.Exec(ctx, `DELETE FROM connector_identities WHERE connector_id = $1`, id)
+
+	// Clean up the vaulted secret so a deleted connector doesn't leave an
+	// orphaned encrypted credential behind in the vault.
+	if vaultSecretID != nil && m.vault != nil {
+		if err := m.vault.Delete(ctx, *vaultSecretID); err != nil {
+			return fmt.Errorf("manager: delete connector: delete vault secret: %w", err)
+		}
+	}
 	return nil
 }
 
