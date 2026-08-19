@@ -9,6 +9,10 @@ on:
 jobs:
   deploy:
     name: Deploy to Cloudflare Pages
+    # Opt-in: set the CLOUDFLARE_PAGES_ENABLED repository variable AND the
+    # CF_API_TOKEN / CF_ACCOUNT_ID secrets to enable auto-deploy on main.
+    # (Missing token previously failed this workflow on every push.)
+    if: ${{ vars.CLOUDFLARE_PAGES_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
