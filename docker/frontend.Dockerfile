@@ -18,6 +18,9 @@ RUN npm run build
 # ─── Runtime: nginx ───────────────────────────────────────
 FROM nginx:1.27-alpine
 
+# Patch Alpine packages in the base image (Trivy gate: no fixable HIGH/CRITICAL)
+RUN apk upgrade --no-cache && rm -rf /var/cache/apk/*
+
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 
 COPY --from=builder /app/out /usr/share/nginx/html

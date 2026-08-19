@@ -20,6 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
 FROM alpine:3.21
 
 RUN apk add --no-cache ca-certificates tzdata \
+    && apk upgrade --no-cache \
     && adduser -D -u 1001 genid
 
 USER genid
