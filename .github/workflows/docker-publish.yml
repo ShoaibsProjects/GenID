@@ -77,8 +77,11 @@ jobs:
           labels: ${{ steps.meta-identity.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
+          platforms: linux/amd64
+          # attestations (provenance/sbom) are incompatible with `load: true` (docker exporter
+          # cannot export manifest lists); scan-before-push gate takes priority
+          provenance: false
+          sbom: false
 
       - name: Build & Scan Event Processor
         id: build-event
@@ -92,8 +95,11 @@ jobs:
           labels: ${{ steps.meta-event.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
+          platforms: linux/amd64
+          # attestations (provenance/sbom) are incompatible with `load: true` (docker exporter
+          # cannot export manifest lists); scan-before-push gate takes priority
+          provenance: false
+          sbom: false
 
       - name: Build & Scan Frontend
         id: build-frontend
@@ -107,8 +113,11 @@ jobs:
           labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
+          platforms: linux/amd64
+          # attestations (provenance/sbom) are incompatible with `load: true` (docker exporter
+          # cannot export manifest lists); scan-before-push gate takes priority
+          provenance: false
+          sbom: false
 
       - name: Trivy scan — identity-service
         uses: aquasecurity/trivy-action@v0.36.0
