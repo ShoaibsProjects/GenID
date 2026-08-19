@@ -54,7 +54,26 @@ type ConnectorConfig struct {
 	CreatedAt          time.Time         `json:"created_at"`
 	UpdatedAt          time.Time         `json:"updated_at"`
 	LastSyncAt         *time.Time        `json:"last_sync_at,omitempty"`
-	LastError          string            `json:"last_error,omitempty"`
+	LastError           string            `json:"last_error,omitempty"`
+
+	// ─── Connector Platform (migration 001) ──────────────────
+	// Fields below are sourced from dedicated columns on the `connectors`
+	// table (not the config JSONB) and power the enterprise connector framework.
+
+	// ScheduleCron drives the per-connector Temporal ScheduleWorkflow. Default "*/20 * * * *".
+	ScheduleCron string `json:"schedule_cron,omitempty"`
+	// OwnerIdentityID is the governance owner for certification campaigns.
+	OwnerIdentityID string `json:"owner_identity_id,omitempty"`
+	// RiskWeight (0-100) raises risk for dependents when the connector degrades.
+	RiskWeight int `json:"risk_weight,omitempty"`
+	// ConnectorGovernanceStatus: 'active' (default) | 'deprecated' | 'quarantined'.
+	ConnectorGovernanceStatus string `json:"connector_governance_status,omitempty"`
+	// VaultSecretID is a reference to a vault_secrets row. When set, the runtime
+	// pulls credentials from the vault instead of using the plaintext fields above.
+	// RegisterSecure() populates this and zeroes the plaintext fields.
+	VaultSecretID string `json:"vault_secret_id,omitempty"`
+	// LastSyncDurationMS is the rolling latency of the last sync, surfaced in ops.
+	LastSyncDurationMS int `json:"last_sync_duration_ms,omitempty"`
 }
 
 // ─── Connector Objects ───────────────────────────────────────
@@ -198,6 +217,35 @@ const (
 	EntitlementTypeLicense           EntitlementType = "license"
 	EntitlementTypeOAuth2Permission  EntitlementType = "oauth2_permission"
 )
+
+// ─── Permissions (Entitlement Catalog) ────────────────────────
+// The permission CATALOG is the set of access items a source *defines*
+// (e.g. an application's appRoles and oauth2PermissionScopes). This is
+// distinct from entitlements, which are the *assignments* of those items
+// to principals. SailPoint models this separation as the "Managed
+// Attributes" catalog vs. the links on accounts.
+
+type ConnectorPermission struct {
+	// PermissionID is the stable identifier of the permission in the source
+	// (an appRole ID or oauth2PermissionScope ID).
+	PermissionID string `json:"permission_id"`
+	// Name is the display name of the permission (appRole displayName or
+	// oauth2 scope value).
+	Name string `json:"name"`
+	// PermissionType: "app_role" | "oauth2_scope" | "application_permission" ...
+	PermissionType string `json:"permission_type"`
+	// AppID is the source application (service principal) object ID.
+	AppID string `json:"app_id"`
+	// AppName is the source application display name.
+	AppName string `json:"app_name"`
+	// Description of the permission.
+	Description string `json:"description,omitempty"`
+	// IsAdmin flags admin-consent-only / high-privilege permissions.
+	IsAdmin bool `json:"is_admin"`
+	// RawAttributes carries source-specific detail (id, value, userConsentDisplayName,
+	// adminConsentDisplayName, isEnabled, type, origin).
+	RawAttributes map[string]any `json:"raw_attributes,omitempty"`
+}
 
 // ─── Resources ───────────────────────────────────────────────
 

@@ -37,7 +37,7 @@ system.enableVisibilityToN:
     constraints: {}
 
 matching.numTaskqueuePartitions:
-  - value: 100
+  - value: 1
 
 worker.maxConcurrentActivityExecutionSize:
   - value: 500

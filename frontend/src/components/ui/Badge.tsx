@@ -1,31 +1,36 @@
-"use client"
+import * as React from "react"
+import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
-type BadgeVariant = "success" | "warning" | "danger" | "info" | "neutral"
+const badgeVariants = cva(
+  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  {
+    variants: {
+      variant: {
+        default:
+          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
+        secondary:
+          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        destructive:
+          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
+        outline: "text-foreground",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
 
-const colors: Record<BadgeVariant, string> = {
-  success: "bg-green-500/10 text-green-400 border-green-500/25",
-  warning: "bg-amber-500/10 text-amber-400 border-amber-500/25",
-  danger: "bg-red-500/10 text-red-400 border-red-500/25",
-  info: "bg-blue-500/10 text-blue-400 border-blue-500/25",
-  neutral: "bg-white/[0.06] text-secondary border-white/[0.1]",
-}
+export interface BadgeProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof badgeVariants> {}
 
-interface BadgeProps {
-  variant?: BadgeVariant
-  children: React.ReactNode
-  className?: string
-}
-
-export function Badge({ variant = "neutral", children, className }: BadgeProps) {
+function Badge({ className, variant, ...props }: BadgeProps) {
   return (
-    <span className={cn(
-      "inline-flex items-center px-2 py-0.5 rounded text-[0.65rem] font-semibold uppercase tracking-wider font-mono border",
-      colors[variant],
-      className
-    )}>
-      {children}
-    </span>
+    <div className={cn(badgeVariants({ variant }), className)} {...props} />
   )
 }
+
+export { Badge, badgeVariants }

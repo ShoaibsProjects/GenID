@@ -26,19 +26,25 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
-	"go.temporal.io/api/enums/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/observeid/genid/internal/activities"
 	"github.com/observeid/genid/internal/audit"
 	"github.com/observeid/genid/internal/eventbus"
+	"github.com/observeid/genid/internal/eventing"
+	"github.com/observeid/genid/internal/eventing/sources"
 	"github.com/observeid/genid/internal/graphql"
+	"github.com/observeid/genid/internal/handlers"
 	"github.com/observeid/genid/internal/middleware"
+	"github.com/observeid/genid/internal/notify"
 	"github.com/observeid/genid/internal/outbox"
-	"github.com/observeid/genid/internal/service"
+	"github.com/observeid/genid/internal/risk"
+	"github.com/observeid/genid/internal/services"
+	"github.com/observeid/genid/internal/stores"
 	"github.com/observeid/genid/internal/workflow"
 	"github.com/observeid/genid/pkg/telemetry"
 )
@@ -82,7 +88,7 @@ func main() {
 	defer shutdown()
 
 	// ─── Initialize PostgreSQL ────────────────────────────
-	pgPool, err := service.NewPostgresPool(cfg.DatabaseURL)
+	pgPool, err := stores.NewPostgresPool(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to PostgreSQL")
 	}
@@ -128,17 +134,42 @@ func main() {
 	log.Info().Msg("Temporal connected")
 
 	// ─── Initialize Services ──────────────────────────────
-	svc := service.NewIdentityService(pgPool, neo4jDriver, rdb, temporalClient)
-	auditLogStore := svc.AuditStore()
+	svc := services.NewService(pgPool, neo4jDriver, rdb, temporalClient)
+	h := handlers.NewHandler(svc)
+	auditLogStore := h.AuditStore()
 
 	// Load persisted connectors from PostgreSQL on startup
-	if err := svc.LoadConnectors(context.Background()); err != nil {
+	if err := h.LoadConnectors(context.Background()); err != nil {
 		log.Warn().Err(err).Msg("Failed to load persisted connectors")
+	}
+
+	// Schedule connector sync cron jobs per connector's ScheduleCron config.
+	if cfg.TemporalNamespace != "" && cfg.TemporalNamespace != "disabled" {
+		configs, _ := h.ConnectorManager().LoadAll(context.Background())
+		for _, cfg := range configs {
+			if cfg.ScheduleCron != "" && cfg.ScheduleCron != "disabled" && cfg.ID != "" {
+				scheduleID := fmt.Sprintf("connector-sync-%s", cfg.ID)
+				_, err := temporalClient.ExecuteWorkflow(context.Background(), client.StartWorkflowOptions{
+					ID:                    scheduleID,
+					TaskQueue:             "connector-sync-queue",
+					CronSchedule:          cfg.ScheduleCron,
+					WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+				}, workflow.ConnectorSyncScheduleWorkflow, workflow.ConnectorSyncScheduleInput{
+					ConnectorID: cfg.ID,
+					TenantID:    cfg.TenantID,
+				})
+				if err != nil {
+					log.Warn().Str("schedule", scheduleID).Str("cron", cfg.ScheduleCron).Err(err).Msg("Failed to schedule connector sync")
+				} else {
+					log.Info().Str("schedule", scheduleID).Str("cron", cfg.ScheduleCron).Str("connector", cfg.ID).Msg("Connector sync scheduled")
+				}
+			}
+		}
 	}
 
 	// ─── Start Temporal Worker ────────────────────────────
 	w := worker.New(temporalClient, cfg.TemporalNamespace, worker.Options{
-		MaxConcurrentActivityExecutionSize: 500,
+		MaxConcurrentActivityExecutionSize:     500,
 		MaxConcurrentWorkflowTaskExecutionSize: 500,
 		// StickyCacheSize: deprecated in newer SDK
 	})
@@ -154,9 +185,14 @@ func main() {
 	w.RegisterWorkflow(workflow.RevokeAccessChildWorkflow)
 	w.RegisterWorkflow(workflow.AccessCertificationWorkflow)
 	w.RegisterWorkflow(workflow.RiskRecalculationCronWorkflow)
+	w.RegisterWorkflow(workflow.FirecallAccessWorkflow)
+	w.RegisterWorkflow(workflow.ApprovalGateWorkflow)
+	w.RegisterWorkflow(workflow.ConnectorSyncScheduleWorkflow)
 
-	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient, svc.CedarEngine(), svc.OIDCProvider(), svc.AuditChain())
+	act := activities.NewActivityService(pgPool, neo4jDriver, rdb, temporalClient, h.CedarEngine(), h.OIDCProvider(), h.AuditChain())
 	w.RegisterActivity(act)
+	storeActs := workflow.NewStoreActivitiesWithNotifier(h.WorkflowStore(), notify.New())
+	w.RegisterActivity(storeActs)
 
 	if err := w.Start(); err != nil {
 		log.Fatal().Err(err).Msg("Failed to start Temporal worker")
@@ -184,18 +220,19 @@ func main() {
 	}
 
 	// ─── Start Cedar Hot Reload (30s interval) ──────────
-	svc.CedarEngine().StartHotReload(context.Background(), 30*time.Second)
+	h.CedarEngine().StartHotReload(context.Background(), 30*time.Second)
 	log.Info().Msg("Cedar hot reload started (30s interval)")
 
 	// ─── Start Outbox Processor (PG→Neo4j sync) ─────────
-	outboxProc := outbox.NewProcessor(svc.Outbox(), neo4jDriver, outbox.DefaultConfig())
+	outboxCfg := outbox.ConfigFromEnv()
+	outboxProc := outbox.NewProcessor(h.Outbox(), neo4jDriver, outboxCfg)
 	go outboxProc.Start(context.Background())
-	log.Info().Msg("Outbox processor started (500ms poll, batch 100)")
+	log.Info().Dur("poll", outboxCfg.PollInterval).Int("batch", outboxCfg.BatchSize).Msg("Outbox processor started")
 	defer outboxProc.Stop()
 
 	// ─── Backfill Tamper-Evident Audit Chain ────────────
 	// Computes SHA-256 chain hashes for any legacy audit rows (hash IS NULL).
-	if n, err := svc.AuditChain().Backfill(context.Background()); err != nil {
+	if n, err := h.AuditChain().Backfill(context.Background()); err != nil {
 		log.Warn().Err(err).Msg("Audit chain backfill failed")
 	} else if n > 0 {
 		log.Info().Int("rows", n).Msg("Audit chain backfilled legacy rows")
@@ -211,8 +248,11 @@ func main() {
 		log.Info().Msg("NATS JetStream connected")
 	}
 
+	// ─── Initialize Event Ingestion ──────────────────────
+	eventIngestHandler := eventing.NewIngestHandler(natsBus)
+
 	// ─── Initialize Security Middleware ────────────────────
-	rateLimiter := middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200
+	rateLimiter := middleware.NewRedisRateLimiter(rdb, 200, time.Second) // 200 req/s per tenant+IP
 	jwtAuth := middleware.NewJWTAuth(
 		getEnv("JWKS_URL", "http://localhost:8080/.well-known/jwks.json"),
 		loadAPIKeys(),
@@ -230,18 +270,24 @@ func main() {
 		"/device_authorization", "/device",
 		"/ui", "/ui/",
 	)
+	if pgPool != nil {
+		// DB-backed API keys (migration 007): genid_<id>_<secret>, bcrypt,
+		// scopes-as-roles, expiry enforced at auth time.
+		jwtAuth.SetAPIKeyStore(middleware.NewPGAPIKeyStore(pgPool))
+	}
 	requestValidation := middleware.NewRequestValidation()
 	workflowGuard := middleware.NewWorkflowGuard(cfg.MasterKey)
 
 	// ─── Start HTTP/gRPC Server ───────────────────────────
 	r := mux.NewRouter()
-	r.Use(securityHeadersMiddleware)
+	r.Use(middleware.SecurityHeadersMiddleware)
 	r.Use(corsMiddleware(cfg.CORSOrigin))
 	r.Use(otelhttp.NewMiddleware("genid-api"))
 	r.Use(rateLimiter.Middleware)
 	r.Use(requestValidation.Middleware)
 	r.Use(jwtAuth.Middleware)
-	r.Use(audit.LoggingMiddleware(auditLogStore, svc.AuditChain()))
+	r.Use(middleware.TenantMiddleware(pgPool))
+	r.Use(audit.LoggingMiddleware(auditLogStore, h.AuditChain()))
 
 	// Dev Login (unauthenticated) — mint a JWT for the local frontend dev experience.
 	// POST /api/v1/dev/login { username, password } -> { access_token, ... }
@@ -258,7 +304,7 @@ func main() {
 				return
 			}
 
-			userID, err := svc.OIDCProvider().AuthenticatePassword(r.Context(), req.Username, req.Password)
+			userID, err := h.OIDCProvider().AuthenticatePassword(r.Context(), req.Username, req.Password)
 			if err != nil {
 				http.Error(w, `{"error":"invalid_credentials"}`, http.StatusUnauthorized)
 				return
@@ -267,7 +313,7 @@ func main() {
 			// Dev-login users get the admin role so master-guarded workflow
 			// operations (kill switch, grant/revoke, certifications, LCM)
 			// work from the local UI. Dev-only endpoint — disabled in prod.
-			token, err := svc.OIDCProvider().SignAccessTokenWithRoles(userID, "genid-frontend", "openid profile email api", []string{"admin"})
+			token, err := h.OIDCProvider().SignAccessTokenWithRoles(userID, "genid-frontend", "openid profile email api", []string{"admin"})
 			if err != nil {
 				http.Error(w, `{"error":"token_sign_failed"}`, http.StatusInternalServerError)
 				return
@@ -670,115 +716,260 @@ func main() {
 	r.Handle("/graphql", gqlSrv).Methods("POST")
 
 	// SCIM endpoints
-	scim := r.PathPrefix("/scim/v2").Subrouter()
-	scim.HandleFunc("/Users", svc.ScimListUsers).Methods("GET")
-	scim.HandleFunc("/Users", svc.ScimCreateUser).Methods("POST")
-	scim.HandleFunc("/Users/{id}", svc.ScimGetUser).Methods("GET")
-	scim.HandleFunc("/Users/{id}", svc.ScimUpdateUser).Methods("PUT")
-	scim.HandleFunc("/Users/{id}", svc.ScimPatchUser).Methods("PATCH")
-	scim.HandleFunc("/Users/{id}", svc.ScimDeleteUser).Methods("DELETE")
-	scim.HandleFunc("/ServiceProviderConfig", svc.ScimServiceProviderConfig).Methods("GET")
-	scim.HandleFunc("/ResourceTypes", svc.ScimResourceTypes).Methods("GET")
-	scim.HandleFunc("/Schemas", svc.ScimSchemas).Methods("GET")
+	r.HandleFunc("/scim/v2/Users", h.ScimListUsers).Methods("GET")
+	
+	r.HandleFunc("/scim/v2/Users", h.ScimCreateUser).Methods("POST")
+	r.HandleFunc("/scim/v2/Users/{id}", h.ScimGetUser).Methods("GET")
+	r.HandleFunc("/scim/v2/Users/{id}", h.ScimUpdateUser).Methods("PUT")
+	r.HandleFunc("/scim/v2/Users/{id}", h.ScimPatchUser).Methods("PATCH")
+	r.HandleFunc("/scim/v2/Users/{id}", h.ScimDeleteUser).Methods("DELETE")
+	r.HandleFunc("/scim/v2/ServiceProviderConfig", h.ScimServiceProviderConfig).Methods("GET")
+	r.HandleFunc("/scim/v2/ResourceTypes", h.ScimResourceTypes).Methods("GET")
+	r.HandleFunc("/scim/v2/Schemas", h.ScimSchemas).Methods("GET")
 
 	// Identity API
 	api := r.PathPrefix("/api/v1").Subrouter()
-	api.HandleFunc("/identities", svc.ListIdentities).Methods("GET")
-	api.HandleFunc("/identities/{id}", svc.GetIdentity).Methods("GET")
-	api.HandleFunc("/identities/{id}/entitlements", svc.GetIdentityEntitlements).Methods("GET")
-	api.HandleFunc("/identities/{id}/blast-radius", svc.GetBlastRadius).Methods("GET")
-	api.HandleFunc("/identities/{id}/risk/recalculate", svc.RecalculateIdentityRisk).Methods("POST")
+	api.HandleFunc("/identities", h.ListIdentities).Methods("GET")
+	api.HandleFunc("/identities/{id}", h.GetIdentity).Methods("GET")
+	api.HandleFunc("/identities/{id}/entitlements", h.GetIdentityEntitlements).Methods("GET")
+	api.HandleFunc("/identities/{id}/blast-radius", h.GetBlastRadius).Methods("GET")
+	api.HandleFunc("/identities/{id}/risk/recalculate", h.RecalculateIdentityRisk).Methods("POST")
 
 	// NHI/Agent API
-	api.HandleFunc("/agents", svc.ListAgents).Methods("GET")
-	api.HandleFunc("/agents", svc.RegisterAgent).Methods("POST")
-	api.HandleFunc("/agents/{id}", svc.GetAgent).Methods("GET")
-	api.HandleFunc("/agents/{id}/kill-switch", workflowGuard.Protect(middleware.OpKillSwitch, svc.AgentKillSwitch)).Methods("POST")
-	api.HandleFunc("/agents/{id}/delegate", workflowGuard.Protect(middleware.OpDelegateAgent, svc.DelegateAgent)).Methods("POST")
-	api.HandleFunc("/agents/{id}/card", svc.GetAgentCard).Methods("GET")
+	api.HandleFunc("/agents", h.ListAgents).Methods("GET")
+	api.HandleFunc("/agents", h.RegisterAgent).Methods("POST")
+	api.HandleFunc("/agents/{id}", h.GetAgent).Methods("GET")
+	api.HandleFunc("/agents/{id}/kill-switch", workflowGuard.Protect(middleware.OpKillSwitch, h.AgentKillSwitch)).Methods("POST")
+	api.HandleFunc("/agents/{id}/delegate", workflowGuard.Protect(middleware.OpDelegateAgent, h.DelegateAgent)).Methods("POST")
+	api.HandleFunc("/agents/{id}/card", h.GetAgentCard).Methods("GET")
+
+	// NHI registry + JIT passports (spec: POST /api/v1/nhi)
+	api.HandleFunc("/nhi", h.ListNHI).Methods("GET")
+	api.HandleFunc("/nhi", h.RegisterNHI).Methods("POST")
+	api.HandleFunc("/nhi/passports/verify", h.VerifyPassport).Methods("GET")
+	api.HandleFunc("/nhi/{id}", h.GetNHI).Methods("GET")
+	api.HandleFunc("/nhi/{id}/passports", h.ListPassports).Methods("GET")
+	api.HandleFunc("/nhi/{id}/passports", h.IssuePassport).Methods("POST")
+	api.HandleFunc("/nhi/{id}/passports/revoke", h.RevokePassports).Methods("POST")
+	api.HandleFunc("/nhi/{id}/passports/{pid}/consume", h.ConsumePassport).Methods("POST")
+
+	// Webhook registration & dispatch
+	api.HandleFunc("/webhooks", h.ListWebhooks).Methods("GET")
+	api.HandleFunc("/webhooks", h.RegisterWebhook).Methods("POST")
+	api.HandleFunc("/webhooks/{id}", h.DeleteWebhook).Methods("DELETE")
+	api.HandleFunc("/webhooks/{id}/secret", h.GetWebhookSecret).Methods("GET")
+
+	// ZSP (Zero Standing Privilege) tenant config
+	api.HandleFunc("/tenants/{id}/zsp", h.GetZSPConfig).Methods("GET")
+	api.HandleFunc("/tenants/{id}/zsp", h.UpdateZSPConfig).Methods("PATCH")
 
 	// Access API
-	api.HandleFunc("/access/check", svc.CheckAccess).Methods("QUERY", "POST")
-	api.HandleFunc("/access/grant", workflowGuard.Protect(middleware.OpGrantAccess, svc.GrantAccess)).Methods("POST")
-	api.HandleFunc("/access/revoke", workflowGuard.Protect(middleware.OpRevokeAccess, svc.RevokeAccess)).Methods("POST")
-	api.HandleFunc("/access/jit", svc.JustInTimeAccess).Methods("POST")
-	api.HandleFunc("/access/sessions", svc.ListActiveJITSessions).Methods("GET")
+	api.HandleFunc("/access/check", h.CheckAccess).Methods("QUERY", "POST")
+	api.HandleFunc("/access/grant", workflowGuard.Protect(middleware.OpGrantAccess, h.GrantAccess)).Methods("POST")
+	api.HandleFunc("/access/revoke", workflowGuard.Protect(middleware.OpRevokeAccess, h.RevokeAccess)).Methods("POST")
+	api.HandleFunc("/access/jit", h.JustInTimeAccess).Methods("POST")
+	api.HandleFunc("/access/sessions", h.ListActiveJITSessions).Methods("GET")
+
+	// Identity Automation — Firecall (break-glass) + workflow request lifecycle
+	api.HandleFunc("/access/firecall", h.FirecallAccess).Methods("POST")
+	api.HandleFunc("/access/jit/revoke", h.RevokeJITSession).Methods("POST")
+	api.HandleFunc("/requests", h.ListRequests).Methods("GET")
+	api.HandleFunc("/requests/{id}", h.GetRequest).Methods("GET")
+	api.HandleFunc("/approvals/{approval_id}/decide", h.DecideApproval).Methods("POST")
+	api.HandleFunc("/approvals/{approval_id}/delegate", h.DelegateApproval).Methods("POST")
+	api.HandleFunc("/approvals/queue", h.ListPendingApprovals).Methods("GET")
+	api.HandleFunc("/catalog/roles", h.ListRoleCatalog).Methods("GET")
+	api.HandleFunc("/access/request-role", h.RequestRoleAccess).Methods("POST")
 
 	// AI Copilot API
-	api.HandleFunc("/copilot/query", svc.CopilotQuery).Methods("QUERY", "POST")
+	api.HandleFunc("/copilot/query", h.CopilotQuery).Methods("QUERY", "POST")
+
+	// Event Ingestion API
+	eventIngestHandler.RegisterRoutes(api)
+
+	// Ingestion Edge: per-source adapters (Entra, Okta, Jira, custom JSON config)
+	// POST /api/v1/events/ingest/{source} — see docs/architecture/ADR-001-event-backbone.md
+	sourceRegistry := sources.DefaultRegistry()
+	if cfgPath := getEnv("EVENT_SOURCES_CONFIG", ""); cfgPath != "" {
+		if err := sourceRegistry.LoadFile(cfgPath); err != nil {
+			log.Warn().Err(err).Str("path", cfgPath).Msg("Event sources config failed to load, using defaults")
+		} else {
+			log.Info().Str("path", cfgPath).Msg("Event sources config loaded")
+		}
+	}
+	sources.NewHandler(sourceRegistry, natsBus).RegisterRoutes(api)
+
+	// Risk Intelligence API
+	api.HandleFunc("/risk/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		dashboard := risk.NewDashboard(h.Neo4j())
+		data, err := dashboard.GetDashboard(r.Context())
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(data)
+	}).Methods("GET")
+
+	api.HandleFunc("/risk/score/{identityId}", func(w http.ResponseWriter, r *http.Request) {
+		identityID := mux.Vars(r)["identityId"]
+		dashboard := risk.NewDashboard(h.Neo4j())
+		data, err := dashboard.GetIdentityRisk(r.Context(), identityID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(data)
+	}).Methods("GET")
+
+	api.HandleFunc("/risk/peer/{identityId}", func(w http.ResponseWriter, r *http.Request) {
+		identityID := mux.Vars(r)["identityId"]
+		calc := risk.NewPeerDeviation(h.Neo4j())
+		score, factors, err := calc.Calculate(r.Context(), identityID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"identity_id":          identityID,
+			"peer_deviation_score": score,
+			"factors":              factors,
+		})
+	}).Methods("GET")
+
+	api.HandleFunc("/risk/calculate/{identityId}", func(w http.ResponseWriter, r *http.Request) {
+		identityID := mux.Vars(r)["identityId"]
+		calc := risk.NewCombinedRisk(h.Neo4j())
+		breakdown, err := calc.Calculate(r.Context(), identityID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		if err := calc.Persist(r.Context(), identityID, breakdown); err != nil {
+			log.Printf("[RISK] persist error: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"identity_id":    identityID,
+			"final_score":    breakdown.FinalScore,
+			"static_score":   breakdown.StaticScore,
+			"dynamic_score":  breakdown.DynamicScore,
+			"peer_score":     breakdown.PeerScore,
+			"risk_band":      breakdown.Band,
+			"static_factors": breakdown.StaticFactors,
+			"peer_factors":   breakdown.PeerFactors,
+		})
+	}).Methods("POST")
+
+	api.HandleFunc("/risk/sessions/{identityId}", func(w http.ResponseWriter, r *http.Request) {
+		identityID := mux.Vars(r)["identityId"]
+		mgr := risk.NewSessionManager(h.Neo4j())
+		sessions, err := mgr.GetActiveSessions(r.Context(), identityID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"identity_id": identityID,
+			"sessions":    sessions,
+		})
+	}).Methods("GET")
+
+	api.HandleFunc("/risk/reviews/{identityId}", func(w http.ResponseWriter, r *http.Request) {
+		identityID := mux.Vars(r)["identityId"]
+		mgr := risk.NewMicroReview(h.Neo4j())
+		reviews, err := mgr.GetPendingReviews(r.Context(), identityID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"identity_id": identityID,
+			"reviews":     reviews,
+		})
+	}).Methods("GET")
 
 	// CAEP API
-	api.HandleFunc("/caep/events", svc.ListCAEPEvents).Methods("GET")
-	api.HandleFunc("/caep/broadcast", svc.BroadcastCAEP).Methods("POST")
+	api.HandleFunc("/caep/events", h.ListCAEPEvents).Methods("GET")
+	api.HandleFunc("/caep/broadcast", h.BroadcastCAEP).Methods("POST")
 
 	// ─── Connector Management ───────────────────────
-	api.HandleFunc("/connectors", svc.ListConnectors).Methods("GET")
-	api.HandleFunc("/connectors", svc.CreateConnector).Methods("POST")
-	api.HandleFunc("/connectors/test", svc.TestConnectorConnection).Methods("QUERY", "POST")
-	api.HandleFunc("/connectors/stats", svc.GetConnectorStats).Methods("GET")
-	api.HandleFunc("/connectors/{id}", svc.GetConnector).Methods("GET")
-	api.HandleFunc("/connectors/{id}", svc.DeleteConnector).Methods("DELETE")
-	api.HandleFunc("/connectors/{id}/connect", svc.ConnectConnector).Methods("POST")
-	api.HandleFunc("/connectors/{id}/disconnect", svc.DisconnectConnector).Methods("POST")
-	api.HandleFunc("/connectors/{id}/test", svc.TestExistingConnector).Methods("QUERY", "POST")
-	api.HandleFunc("/connectors/{id}/sync", svc.SyncConnector).Methods("POST")
-	api.HandleFunc("/connectors/{id}/sync-delta", svc.SyncConnectorDelta).Methods("POST")
-	api.HandleFunc("/connectors/{id}/users", svc.GetConnectorUsers).Methods("GET")
-	api.HandleFunc("/connectors/{id}/identities", svc.GetConnectorIdentities).Methods("GET")
-	api.HandleFunc("/connectors/{id}/schema", svc.GetConnectorSchema).Methods("GET")
-	api.HandleFunc("/connectors/{id}/health", svc.GetConnectorHealth).Methods("GET")
-	api.HandleFunc("/connectors/{id}/groups", svc.GetConnectorGroups).Methods("GET")
-	api.HandleFunc("/connectors/{id}/entitlements", svc.GetConnectorEntitlements).Methods("GET")
-	api.HandleFunc("/connectors/{id}/resources", svc.GetConnectorResources).Methods("GET")
-	api.HandleFunc("/connectors/{id}/full-sync", svc.FullSyncConnector).Methods("POST")
-	api.HandleFunc("/connectors/{id}/sync-groups", svc.SyncConnectorGroups).Methods("POST")
-	api.HandleFunc("/connectors/{id}/sync-entitlements", svc.SyncConnectorEntitlements).Methods("POST")
-	api.HandleFunc("/connectors/{id}/sync-resources", svc.SyncConnectorResources).Methods("POST")
-	api.HandleFunc("/connectors/csv/upload", svc.CSVUpload).Methods("POST")
+	api.HandleFunc("/connectors", h.ListConnectors).Methods("GET")
+	api.HandleFunc("/connectors", h.CreateConnector).Methods("POST")
+	api.HandleFunc("/connectors/test", h.TestConnectorConnection).Methods("QUERY", "POST")
+	api.HandleFunc("/connectors/stats", h.GetConnectorStats).Methods("GET")
+	api.HandleFunc("/connectors/{id}", h.GetConnector).Methods("GET")
+	api.HandleFunc("/connectors/{id}", h.DeleteConnector).Methods("DELETE")
+	api.HandleFunc("/connectors/{id}/connect", h.ConnectConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/disconnect", h.DisconnectConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/test", h.TestExistingConnector).Methods("QUERY", "POST")
+	api.HandleFunc("/connectors/{id}/sync", h.SyncConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/sync-hr", h.SyncConnectorHR).Methods("POST")
+	api.HandleFunc("/connectors/{id}/sync-delta", h.SyncConnectorDelta).Methods("POST")
+	api.HandleFunc("/connectors/{id}/users", h.GetConnectorUsers).Methods("GET")
+	api.HandleFunc("/connectors/{id}/identities", h.GetConnectorIdentities).Methods("GET")
+	api.HandleFunc("/connectors/{id}/schema", h.GetConnectorSchema).Methods("GET")
+	api.HandleFunc("/connectors/{id}/health", h.GetConnectorHealth).Methods("GET")
+	api.HandleFunc("/connectors/{id}/groups", h.GetConnectorGroups).Methods("GET")
+	api.HandleFunc("/connectors/{id}/entitlements", h.GetConnectorEntitlements).Methods("GET")
+	api.HandleFunc("/connectors/{id}/resources", h.GetConnectorResources).Methods("GET")
+	api.HandleFunc("/connectors/{id}/permissions", h.GetConnectorPermissions).Methods("GET")
+	api.HandleFunc("/connectors/{id}/full-sync", h.FullSyncConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/sync-groups", h.SyncConnectorGroups).Methods("POST")
+	api.HandleFunc("/connectors/{id}/sync-entitlements", h.SyncConnectorEntitlements).Methods("POST")
+	api.HandleFunc("/connectors/{id}/sync-resources", h.SyncConnectorResources).Methods("POST")
+	api.HandleFunc("/connectors/{id}/materialize", h.MaterializeConnector).Methods("POST")
+	api.HandleFunc("/connectors/{id}/posture", h.GetConnectorPosture).Methods("GET")
+	api.HandleFunc("/connectors/{id}/sync-permissions", h.SyncConnectorPermissions).Methods("POST")
+	api.HandleFunc("/connectors/csv/upload", h.CSVUpload).Methods("POST")
 
 	// ─── IAM Lifecycle Management (LCM) ────────────
-	api.HandleFunc("/lcm", workflowGuard.Protect(middleware.OpExecuteLCM, svc.ExecuteLCM)).Methods("POST")
-	api.HandleFunc("/lcm/history", svc.GetLCMHistory).Methods("GET")
+	api.HandleFunc("/lcm", workflowGuard.Protect(middleware.OpExecuteLCM, h.ExecuteLCM)).Methods("POST")
+	api.HandleFunc("/lcm/history", h.GetLCMHistory).Methods("GET")
 
 	// ─── Access Certifications (IGA Compliance) ───
-	api.HandleFunc("/certifications/generate", workflowGuard.Protect(middleware.OpExecuteLCM, svc.GenerateCertification)).Methods("POST")
-	api.HandleFunc("/certifications", svc.ListCertifications).Methods("GET")
-	api.HandleFunc("/certifications/entries/{id}/decide", workflowGuard.Protect(middleware.OpExecuteLCM, svc.DecideCertificationEntry)).Methods("POST")
+	api.HandleFunc("/certifications/generate", workflowGuard.Protect(middleware.OpExecuteLCM, h.GenerateCertification)).Methods("POST")
+	api.HandleFunc("/certifications", h.ListCertifications).Methods("GET")
+	api.HandleFunc("/certifications/entries/{id}/decide", workflowGuard.Protect(middleware.OpExecuteLCM, h.DecideCertificationEntry)).Methods("POST")
 
 	// ─── Identity CRUD ─────────────────────────────
-	api.HandleFunc("/identities", svc.CreateIdentityRecord).Methods("POST")
-	api.HandleFunc("/identities/bulk", workflowGuard.Protect(middleware.OpBulkImport, svc.BulkImportIdentities)).Methods("POST")
-	api.HandleFunc("/identities/{id}", svc.UpdateIdentityRecord).Methods("PATCH")
-	api.HandleFunc("/identities/{id}", svc.DeleteIdentityRecord).Methods("DELETE")
+	api.HandleFunc("/identities", h.CreateIdentityRecord).Methods("POST")
+	api.HandleFunc("/identities/bulk", workflowGuard.Protect(middleware.OpBulkImport, h.BulkImportIdentities)).Methods("POST")
+	api.HandleFunc("/identities/{id}", h.UpdateIdentityRecord).Methods("PATCH")
+	api.HandleFunc("/identities/{id}", h.DeleteIdentityRecord).Methods("DELETE")
 
 	// ─── Vault / Secrets ────────────────────────────
-	api.HandleFunc("/vault/secrets", svc.ListSecrets).Methods("GET")
-	api.HandleFunc("/vault/secrets", workflowGuard.Protect(middleware.OpVaultStore, svc.StoreSecret)).Methods("POST")
-	api.HandleFunc("/vault/secrets/{id}", svc.RetrieveSecret).Methods("GET")
-	api.HandleFunc("/vault/secrets/{id}", workflowGuard.Protect(middleware.OpVaultDelete, svc.DeleteSecret)).Methods("DELETE")
+	api.HandleFunc("/vault/secrets", h.ListSecrets).Methods("GET")
+	api.HandleFunc("/vault/secrets", workflowGuard.Protect(middleware.OpVaultStore, h.StoreSecret)).Methods("POST")
+	api.HandleFunc("/vault/secrets/{id}", h.RetrieveSecret).Methods("GET")
+	api.HandleFunc("/vault/secrets/{id}", workflowGuard.Protect(middleware.OpVaultDelete, h.DeleteSecret)).Methods("DELETE")
 
 	// ─── Role / Group Management ───────────────────
-	api.HandleFunc("/groups", svc.ListGroups).Methods("GET")
-	api.HandleFunc("/groups", workflowGuard.Protect(middleware.OpCreateGroup, svc.CreateGroup)).Methods("POST")
-	api.HandleFunc("/groups/{id}", svc.GetGroup).Methods("GET")
-	api.HandleFunc("/groups/{id}", workflowGuard.Protect(middleware.OpDeleteGroup, svc.DeleteGroup)).Methods("DELETE")
-	api.HandleFunc("/roles/assign", workflowGuard.Protect(middleware.OpAssignRole, svc.AssignRole)).Methods("POST")
-	api.HandleFunc("/roles/remove", workflowGuard.Protect(middleware.OpRemoveRole, svc.RemoveRole)).Methods("POST")
+	api.HandleFunc("/groups", h.ListGroups).Methods("GET")
+	api.HandleFunc("/groups", workflowGuard.Protect(middleware.OpCreateGroup, h.CreateGroup)).Methods("POST")
+	api.HandleFunc("/groups/{id}", h.GetGroup).Methods("GET")
+	api.HandleFunc("/groups/{id}", workflowGuard.Protect(middleware.OpDeleteGroup, h.DeleteGroup)).Methods("DELETE")
+	api.HandleFunc("/roles/assign", workflowGuard.Protect(middleware.OpAssignRole, h.AssignRole)).Methods("POST")
+	api.HandleFunc("/roles/remove", workflowGuard.Protect(middleware.OpRemoveRole, h.RemoveRole)).Methods("POST")
 
-	api.HandleFunc("/groups/{id}/entitlements", svc.LinkEntitlementToRole).Methods("POST")
-	api.HandleFunc("/groups/{id}/entitlements/{entitlement_id}", svc.UnlinkEntitlementFromRole).Methods("DELETE")
+	api.HandleFunc("/groups/{id}/entitlements", h.LinkEntitlementToRole).Methods("POST")
+	api.HandleFunc("/groups/{id}/entitlements/{entitlement_id}", h.UnlinkEntitlementFromRole).Methods("DELETE")
 
 	// ─── Entitlements ───────────────────
-	api.HandleFunc("/entitlements", svc.ListEntitlements).Methods("GET")
-	api.HandleFunc("/entitlements", svc.CreateEntitlement).Methods("POST")
+	api.HandleFunc("/entitlements", h.ListEntitlements).Methods("GET")
+	api.HandleFunc("/entitlements", h.CreateEntitlement).Methods("POST")
 
 	// ─── CSV Import/Export ──────────────────────────
-	api.HandleFunc("/identities/csv/preview", svc.PreviewCSVImport).Methods("POST")
-	api.HandleFunc("/identities/csv/import", svc.ImportCSV).Methods("POST")
-	api.HandleFunc("/identities/csv/export", svc.ExportCSV).Methods("GET")
+	api.HandleFunc("/identities/csv/preview", h.PreviewCSVImport).Methods("POST")
+	api.HandleFunc("/identities/csv/import", h.ImportCSV).Methods("POST")
+	api.HandleFunc("/identities/csv/export", h.ExportCSV).Methods("GET")
 
 	// ─── OIDC / OAuth 2.0 Identity Provider ──────────
-	oidcProvider := svc.OIDCProvider()
+	oidcProvider := h.OIDCProvider()
 	if oidcProvider != nil {
 		r.HandleFunc("/.well-known/openid-configuration", oidcProvider.DiscoveryHandler).Methods("GET")
 		r.HandleFunc("/.well-known/jwks.json", oidcProvider.JWKSHandler).Methods("GET")
@@ -795,7 +986,8 @@ func main() {
 			case "GET":
 				clients, err := oidcProvider.ListClients(r.Context())
 				if err != nil {
-					http.Error(w, err.Error(), 500); return
+					http.Error(w, err.Error(), 500)
+					return
 				}
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(map[string]any{"clients": clients})
@@ -807,11 +999,13 @@ func main() {
 					IsPublic     bool     `json:"is_public"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-					http.Error(w, err.Error(), 400); return
+					http.Error(w, err.Error(), 400)
+					return
 				}
-				client, err := oidcProvider.RegisterClient(r.Context(), req.Name, req.RedirectURIs, req.GrantTypes, []string{"openid","profile","email"}, req.IsPublic)
+				client, err := oidcProvider.RegisterClient(r.Context(), req.Name, req.RedirectURIs, req.GrantTypes, []string{"openid", "profile", "email"}, req.IsPublic)
 				if err != nil {
-					http.Error(w, err.Error(), 500); return
+					http.Error(w, err.Error(), 500)
+					return
 				}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusCreated)
@@ -822,7 +1016,8 @@ func main() {
 			vars := mux.Vars(r)
 			if r.Method == "DELETE" {
 				if err := oidcProvider.DeleteClient(r.Context(), vars["client_id"]); err != nil {
-					http.Error(w, err.Error(), 500); return
+					http.Error(w, err.Error(), 500)
+					return
 				}
 				w.Header().Set("Content-Type", "application/json")
 				w.Write([]byte(`{"status":"deleted"}`))
@@ -831,16 +1026,16 @@ func main() {
 	}
 
 	// ─── Audit / Access Logs ──────────────────────
-	api.HandleFunc("/audit/logs", svc.ListAuditLogs).Methods("GET")
-	api.HandleFunc("/audit/logs/{id}", svc.GetAuditLog).Methods("GET")
-	api.HandleFunc("/audit/stats", svc.GetAuditLogStats).Methods("GET")
-	api.HandleFunc("/audit/verify", svc.VerifyAuditChain).Methods("GET")
+	api.HandleFunc("/audit/logs", h.ListAuditLogs).Methods("GET")
+	api.HandleFunc("/audit/logs/{id}", h.GetAuditLog).Methods("GET")
+	api.HandleFunc("/audit/stats", h.GetAuditLogStats).Methods("GET")
+	api.HandleFunc("/audit/verify", h.VerifyAuditChain).Methods("GET")
 
 	// Metrics
 	r.Handle("/metrics", telemetry.MetricsHandler()).Methods("GET")
 
 	srv := &http.Server{
-		Addr:              ":8080",
+		Addr:              "0.0.0.0:8080",
 		Handler:           r,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -856,7 +1051,7 @@ func main() {
 		<-sigCh
 		log.Info().Msg("Shutting down gracefully...")
 		// Save vault secrets to disk
-		if err := svc.SaveVault(); err != nil {
+		if err := h.SaveVault(); err != nil {
 			log.Warn().Err(err).Msg("Failed to save vault")
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -879,21 +1074,6 @@ func main() {
 		log.Fatal().Err(srvErr).Msg("Server failed")
 	}
 	log.Info().Msg("Server stopped")
-}
-
-// ─── Security Headers Middleware ────────────────────────────
-func securityHeadersMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("X-XSS-Protection", "0")
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-		if r.TLS != nil {
-			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 // ─── CORS Middleware ───────────────────────────────────────
@@ -939,20 +1119,20 @@ type Config struct {
 
 func loadConfig() *Config {
 	return &Config{
-		DatabaseURL:      getEnv("DATABASE_URL", "postgresql://observeid:observeid@localhost:5432/observeid?sslmode=disable"),
-		Neo4jURI:         getEnv("NEO4J_URI", "bolt://localhost:7687"),
-		Neo4jUser:        getEnv("NEO4J_USER", "neo4j"),
-		Neo4jPassword:    getEnv("NEO4J_PASSWORD", ""),
-		RedisAddr:        getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:    getEnv("REDIS_PASSWORD", ""),
-		RedisTLS:         getEnv("REDIS_TLS", "false") == "true",
-		TemporalHost:     getEnv("TEMPORAL_HOST", "localhost:7233"),
+		DatabaseURL:       getEnv("DATABASE_URL", "postgresql://observeid:observeid@localhost:5432/observeid?sslmode=disable"),
+		Neo4jURI:          getEnv("NEO4J_URI", "bolt://localhost:7687"),
+		Neo4jUser:         getEnv("NEO4J_USER", "neo4j"),
+		Neo4jPassword:     getEnv("NEO4J_PASSWORD", ""),
+		RedisAddr:         getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:     getEnv("REDIS_PASSWORD", ""),
+		RedisTLS:          getEnv("REDIS_TLS", "false") == "true",
+		TemporalHost:      getEnv("TEMPORAL_HOST", "localhost:7233"),
 		TemporalNamespace: getEnv("TEMPORAL_NAMESPACE", "critical-offboarding"),
-		CORSOrigin:       getEnv("CORS_ORIGIN", ""),
-		QdrantAddr:       getEnv("QDRANT_ADDR", "localhost:6333"),
-		MasterKey:        getEnv("MASTER_KEY", ""),
-		NATSURL:          getEnv("NATS_URL", "nats://localhost:4222"),
-		JWKSURL:          getEnv("JWKS_URL", "http://localhost:8080/.well-known/jwks.json"),
+		CORSOrigin:        getEnv("CORS_ORIGIN", ""),
+		QdrantAddr:        getEnv("QDRANT_ADDR", "localhost:6333"),
+		MasterKey:         getEnv("MASTER_KEY", ""),
+		NATSURL:           getEnv("NATS_URL", "nats://localhost:4222"),
+		JWKSURL:           getEnv("JWKS_URL", "http://localhost:8080/.well-known/jwks.json"),
 	}
 }
 
@@ -989,10 +1169,9 @@ func initTelemetry(cfg *Config) func() {
 		log.Fatal().Err(err).Msg("Failed to create telemetry resource")
 	}
 
-	// Initialize OTLP trace exporter using gRPC
-	conn, err := grpc.DialContext(context.Background(), "localhost:4317",
+	// Initialize OTLP trace exporter using gRPC (non-blocking)
+	conn, err := grpc.Dial("otel-collector:4317",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		log.Warn().Err(err).Msg("OTLP exporter not available, continuing without tracing")

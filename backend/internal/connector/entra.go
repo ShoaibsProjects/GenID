@@ -26,11 +26,13 @@ type EntraConnector struct {
 	client   *http.Client
 	token    string
 	expires  time.Time
+	vault    VaultHandle
 }
 
-func NewEntraConnector() *EntraConnector {
+func NewEntraConnector(vlt VaultHandle) *EntraConnector {
 	return &EntraConnector{
 		client: &http.Client{Timeout: 30 * time.Second},
+		vault:  vlt,
 	}
 }
 
@@ -39,8 +41,13 @@ func (c *EntraConnector) Name() string                { return c.config.Name }
 func (c *EntraConnector) GetStatus(ctx context.Context) ConnectorStatus { return c.config.Status }
 
 func (c *EntraConnector) Configure(config ConnectorConfig) error {
-	if config.ClientID == "" || config.ClientSecret == "" || config.TenantName == "" {
-		return fmt.Errorf("entra: client_id, client_secret, and tenant_name are required")
+	// If VaultSecretID is set, we'll retrieve the secret from vault at runtime.
+	// In that case, ClientSecret in config can be empty.
+	if config.ClientID == "" || config.TenantName == "" {
+		return fmt.Errorf("entra: client_id and tenant_name are required")
+	}
+	if config.ClientSecret == "" && config.VaultSecretID == "" {
+		return fmt.Errorf("entra: client_secret or vault_secret_id is required")
 	}
 	if config.Endpoint == "" {
 		config.Endpoint = "https://graph.microsoft.com/v1.0"
@@ -68,6 +75,21 @@ func (c *EntraConnector) resolveNextLink(nextLink string) string {
 	return nextLink
 }
 
+func (c *EntraConnector) getClientSecret(ctx context.Context) string {
+	if c.config.ClientSecret != "" {
+		return c.config.ClientSecret
+	}
+	if c.config.VaultSecretID != "" && c.vault != nil {
+		secret, err := c.vault.Retrieve(ctx, c.config.VaultSecretID)
+		if err != nil {
+			log.Printf("[ENTRA] Failed to retrieve secret from vault: %v", err)
+			return ""
+		}
+		return secret
+	}
+	return ""
+}
+
 func (c *EntraConnector) ensureToken(ctx context.Context) error {
 	c.mu.Lock()
 	if c.token != "" && time.Now().Before(c.expires) {
@@ -76,9 +98,14 @@ func (c *EntraConnector) ensureToken(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
+	clientSecret := c.getClientSecret(ctx)
+	if clientSecret == "" {
+		return fmt.Errorf("entra: client_secret not available (not in config or vault)")
+	}
+
 	data := url.Values{
 		"client_id":     {c.config.ClientID},
-		"client_secret": {c.config.ClientSecret},
+		"client_secret": {clientSecret},
 		"scope":         {"https://graph.microsoft.com/.default"},
 		"grant_type":    {"client_credentials"},
 	}
@@ -115,36 +142,48 @@ func (c *EntraConnector) ensureToken(ctx context.Context) error {
 }
 
 func (c *EntraConnector) graphGet(ctx context.Context, path string, params url.Values) ([]byte, error) {
-	if err := c.ensureToken(ctx); err != nil {
-		return nil, err
-	}
+	// Try up to 2 times: once with current token, once after forced refresh on 401
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := c.ensureToken(ctx); err != nil {
+			return nil, err
+		}
 
-	u := c.config.Endpoint + path
-	if params != nil {
-		u += "?" + params.Encode()
-	}
+		u := c.config.Endpoint + path
+		if params != nil {
+			u += "?" + params.Encode()
+		}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("ConsistencyLevel", "eventual")
+		req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.token)
+		req.Header.Set("ConsistencyLevel", "eventual")
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("entra: get %s: %w", path, err)
-	}
-	defer resp.Body.Close()
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("entra: get %s: %w", path, err)
+		}
+		defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == 401 && attempt == 0 {
+			// Token might be expired despite ensureToken check - force refresh and retry
+			c.mu.Lock()
+			c.token = ""
+			c.expires = time.Time{}
+			c.mu.Unlock()
+			continue
+		}
+		if resp.StatusCode >= 400 {
+			return nil, fmt.Errorf("entra: get %s returned %d: %s", path, resp.StatusCode, string(body))
+		}
+		return body, nil
 	}
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("entra: get %s returned %d: %s", path, resp.StatusCode, string(body))
-	}
-	return body, nil
+	return nil, fmt.Errorf("entra: get %s failed after retry", path)
 }
 
 func (c *EntraConnector) graphPost(ctx context.Context, path string, payload any) ([]byte, error) {
@@ -258,8 +297,61 @@ func (c *EntraConnector) TestConnection(ctx context.Context) error {
 // ─── User Operations ─────────────────────────────────────────
 
 func (c *EntraConnector) ListUsers(ctx context.Context) ([]ConnectorUser, error) {
+	// Microsoft Graph only allows ONE $expand per request.
+	// Strategy: Make 2 separate requests and merge by user ID.
+	// Request 1: Get users with manager expand
+	// Request 2: Get users with transitiveMemberOf expand
+	// Then merge by user ID.
+
+	const selectFields = "id,userPrincipalName,displayName,givenName,surname,department,jobTitle,mobilePhone,businessPhones,streetAddress,city,state,postalCode,country,employeeId,company,mail,userType,accountEnabled,createdDateTime,lastPasswordChangeDateTime"
+
+	// Request 1: with manager expand
+	usersWithManager, err := c.listUsersWithExpand(ctx, selectFields, "manager($select=id)")
+	if err != nil {
+		return nil, fmt.Errorf("entra: list users (manager): %w", err)
+	}
+
+	// Request 2: with transitiveMemberOf expand
+	usersWithGroups, err := c.listUsersWithExpand(ctx, selectFields, "transitiveMemberOf($select=id,displayName)")
+	if err != nil {
+		return nil, fmt.Errorf("entra: list users (groups): %w", err)
+	}
+
+	// Merge results by user ID
+	userMap := make(map[string]*ConnectorUser)
+	for _, u := range usersWithManager {
+		userMap[u.ExternalID] = &u
+	}
+	for _, u := range usersWithGroups {
+		if existing, ok := userMap[u.ExternalID]; ok {
+			// Merge group IDs
+			existing.Groups = append(existing.Groups, u.Groups...)
+			// Deduplicate group IDs
+			seen := make(map[string]bool)
+			var deduped []string
+			for _, gid := range existing.Groups {
+				if !seen[gid] {
+					seen[gid] = true
+					deduped = append(deduped, gid)
+				}
+			}
+			existing.Groups = deduped
+		} else {
+			userMap[u.ExternalID] = &u
+		}
+	}
+
+	// Convert map to slice
+	users := make([]ConnectorUser, 0, len(userMap))
+	for _, u := range userMap {
+		users = append(users, *u)
+	}
+	return users, nil
+}
+
+func (c *EntraConnector) listUsersWithExpand(ctx context.Context, selectFields, expand string) ([]ConnectorUser, error) {
 	var users []ConnectorUser
-	nextLink := "/users?$top=100&$select=id,userPrincipalName,displayName,givenName,surname,department,jobTitle,mobilePhone,businessPhones,streetAddress,city,state,postalCode,country,employeeId,company,mail,userType,accountEnabled,createdDateTime,lastPasswordChangeDateTime&$expand=manager($select=id)"
+	nextLink := fmt.Sprintf("/users?$top=100&$select=%s&$expand=%s", selectFields, expand)
 
 	for nextLink != "" {
 		body, err := c.graphGet(ctx, nextLink, nil)
@@ -300,6 +392,10 @@ func (c *EntraConnector) ListUsers(ctx context.Context) ([]ConnectorUser, error)
 				Manager          struct {
 					ID string `json:"id"`
 				} `json:"manager"`
+				TransitiveMemberOf []struct {
+					ID          string `json:"id"`
+					DisplayName string `json:"displayName"`
+				} `json:"transitiveMemberOf"`
 			}
 			if err := json.Unmarshal(raw, &u); err != nil {
 				continue
@@ -316,6 +412,13 @@ func (c *EntraConnector) ListUsers(ctx context.Context) ([]ConnectorUser, error)
 			}
 
 			createdAt, _ := time.Parse(time.RFC3339, u.CreatedDateTime)
+
+			var groupIDs []string
+			for _, g := range u.TransitiveMemberOf {
+				if g.ID != "" {
+					groupIDs = append(groupIDs, g.ID)
+				}
+			}
 
 			users = append(users, ConnectorUser{
 				ExternalID:    u.ID,
@@ -336,19 +439,149 @@ func (c *EntraConnector) ListUsers(ctx context.Context) ([]ConnectorUser, error)
 				EmployeeID:    u.EmployeeID,
 				Company:       u.Company,
 				Enabled:       u.AccountEnabled,
-				Manager:       u.Manager.ID,
 				CreatedAt:     createdAt,
+				Manager:       u.Manager.ID,
+				Groups:        groupIDs,
 			})
 		}
 
-		if result.NextLink != "" {
+		nextLink = c.resolveNextLink(result.NextLink)
+	}
+	return users, nil
+}
+
+// backfillRoles stamps the Roles field on each aggregated user with the
+// directory roles and app roles they hold. It uses a batched strategy —
+// two extra Graph calls total (directory role members + app role
+// assignments), NOT an N+1 per-user fan-out — matching the SailPoint
+// "entitlement aggregation feeds account aggregation" pattern.
+func (c *EntraConnector) backfillRoles(ctx context.Context, users []ConnectorUser) error {
+	if len(users) == 0 {
+		return nil
+	}
+
+	// principalID → []role names (directory + app roles)
+	roleMap := make(map[string][]string)
+
+	// 1. Legacy directory roles (directoryRoles → members)
+	{
+		nextLink := "/directoryRoles?$select=id,displayName&$expand=members($select=id)&$top=100"
+		for nextLink != "" {
+			body, err := c.graphGet(ctx, nextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] backfillRoles: directoryRoles failed: %v (continuing)", err)
+				break
+			}
+			var result struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(body, &result); err != nil {
+				break
+			}
+			for _, raw := range result.Value {
+				var role struct {
+					DisplayName string `json:"displayName"`
+					Members     []struct {
+						ID string `json:"id"`
+					} `json:"members"`
+				}
+				if err := json.Unmarshal(raw, &role); err != nil {
+					continue
+				}
+				for _, m := range role.Members {
+					roleMap[m.ID] = append(roleMap[m.ID], role.DisplayName)
+				}
+			}
 			nextLink = c.resolveNextLink(result.NextLink)
-		} else {
-			nextLink = ""
 		}
 	}
 
-	return users, nil
+	// 2. App role assignments (per-service-principal appRoleAssignedTo)
+	{
+		spNextLink := "/servicePrincipals?$select=id,displayName,appRoles&$top=100"
+		for spNextLink != "" {
+			spBody, err := c.graphGet(ctx, spNextLink, nil)
+			if err != nil {
+				log.Printf("[ENTRA] backfillRoles: servicePrincipals failed: %v (continuing)", err)
+				break
+			}
+			var spResult struct {
+				Value    []json.RawMessage `json:"value"`
+				NextLink string            `json:"@odata.nextLink"`
+			}
+			if err := json.Unmarshal(spBody, &spResult); err != nil {
+				break
+			}
+			type appRoleDef struct {
+				ID          string `json:"id"`
+				DisplayName string `json:"displayName"`
+			}
+			for _, spRaw := range spResult.Value {
+				var sp struct {
+					ID          string       `json:"id"`
+					DisplayName string       `json:"displayName"`
+					AppRoles    []appRoleDef `json:"appRoles"`
+				}
+				if err := json.Unmarshal(spRaw, &sp); err != nil {
+					continue
+				}
+				roleNameMap := make(map[string]string, len(sp.AppRoles))
+				for _, r := range sp.AppRoles {
+					roleNameMap[r.ID] = r.DisplayName
+				}
+				assignNext := "/servicePrincipals/" + url.PathEscape(sp.ID) + "/appRoleAssignedTo?$select=principalId,appRoleId&$top=100"
+				for assignNext != "" {
+					assignBody, assignErr := c.graphGet(ctx, assignNext, nil)
+					if assignErr != nil {
+						break
+					}
+					var assignResult struct {
+						Value    []json.RawMessage `json:"value"`
+						NextLink string            `json:"@odata.nextLink"`
+					}
+					if err := json.Unmarshal(assignBody, &assignResult); err != nil {
+						break
+					}
+					for _, aRaw := range assignResult.Value {
+						var a struct {
+							PrincipalID string `json:"principalId"`
+							AppRoleID   string `json:"appRoleId"`
+						}
+						if err := json.Unmarshal(aRaw, &a); err != nil {
+							continue
+						}
+						roleName := roleNameMap[a.AppRoleID]
+						if roleName == "" {
+							roleName = a.AppRoleID
+						}
+						roleMap[a.PrincipalID] = append(roleMap[a.PrincipalID], roleName)
+					}
+					assignNext = c.resolveNextLink(assignResult.NextLink)
+				}
+			}
+			spNextLink = c.resolveNextLink(spResult.NextLink)
+		}
+	}
+
+	// 3. Stamp roles onto aggregated users (dedup, stable order)
+	for i := range users {
+		roles := roleMap[users[i].ExternalID]
+		if len(roles) == 0 {
+			continue
+		}
+		seen := make(map[string]bool, len(roles))
+		uniq := make([]string, 0, len(roles))
+		for _, r := range roles {
+			if !seen[r] {
+				seen[r] = true
+				uniq = append(uniq, r)
+			}
+		}
+		users[i].Roles = uniq
+	}
+
+	return nil
 }
 
 func (c *EntraConnector) GetUser(ctx context.Context, externalID string) (*ConnectorUser, error) {
@@ -1345,6 +1578,150 @@ func (c *EntraConnector) ListResources(ctx context.Context) ([]ConnectorResource
 	}
 
 	return resources, nil
+}
+
+// ─── Permission Catalog (defined access items) ────────────────
+// ListPermissions discovers the permissions an Entra tenant DEFINES:
+//   - appRoles on every service principal (application roles / groups)
+//   - oauth2PermissionScopes on every service principal (delegated scopes)
+//
+// These form the "Managed Attributes" catalog: the requestable, governable
+// access items — independent of who currently holds them (that is ListEntitlements).
+
+func (c *EntraConnector) ListPermissions(ctx context.Context) ([]ConnectorPermission, error) {
+	var perms []ConnectorPermission
+
+	nextLink := "/servicePrincipals?$select=id,displayName,appRoles,oauth2PermissionScopes&$top=100"
+	for nextLink != "" {
+		body, err := c.graphGet(ctx, nextLink, nil)
+		if err != nil {
+			log.Printf("[ENTRA] ListPermissions: servicePrincipals failed: %v (continuing)", err)
+			break
+		}
+		var result struct {
+			Value    []json.RawMessage `json:"value"`
+			NextLink string            `json:"@odata.nextLink"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			log.Printf("[ENTRA] decode servicePrincipals (permissions): %v", err)
+			break
+		}
+
+		for _, raw := range result.Value {
+			var sp struct {
+				ID                   string `json:"id"`
+				DisplayName          string `json:"displayName"`
+				AppRoles             []struct {
+					ID                 string `json:"id"`
+					AllowedMemberTypes []string `json:"allowedMemberTypes"`
+					Description        string `json:"description"`
+					DisplayName        string `json:"displayName"`
+					IsEnabled          bool   `json:"isEnabled"`
+					Value              string `json:"value"`
+					Origin             string `json:"origin"`
+				} `json:"appRoles"`
+				OAuth2PermissionScopes []struct {
+					ID                      string `json:"id"`
+					AdminConsentDescription string `json:"adminConsentDescription"`
+					AdminConsentDisplayName string `json:"adminConsentDisplayName"`
+					UserConsentDescription  string `json:"userConsentDescription"`
+					UserConsentDisplayName  string `json:"userConsentDisplayName"`
+					IsEnabled               bool   `json:"isEnabled"`
+					Type                    string `json:"type"`
+					Value                   string `json:"value"`
+				} `json:"oauth2PermissionScopes"`
+			}
+			if err := json.Unmarshal(raw, &sp); err != nil {
+				continue
+			}
+			if sp.DisplayName == "" {
+				sp.DisplayName = sp.ID
+			}
+
+			for _, r := range sp.AppRoles {
+				if !r.IsEnabled {
+					continue
+				}
+				perms = append(perms, ConnectorPermission{
+					PermissionID: r.ID,
+					Name:         r.DisplayName,
+					PermissionType: "app_role",
+					AppID:        sp.ID,
+					AppName:      sp.DisplayName,
+					Description:  r.Description,
+					IsAdmin:      isAdminAppRole(r.DisplayName, r.Value, r.Origin),
+					RawAttributes: map[string]any{
+						"value":               r.Value,
+						"allowed_member_types": r.AllowedMemberTypes,
+						"origin":              r.Origin,
+					},
+				})
+			}
+
+			for _, s := range sp.OAuth2PermissionScopes {
+				if !s.IsEnabled {
+					continue
+				}
+				perms = append(perms, ConnectorPermission{
+					PermissionID: s.ID,
+					Name:         s.Value,
+					PermissionType: "oauth2_scope",
+					AppID:        sp.ID,
+					AppName:      sp.DisplayName,
+					Description:  s.AdminConsentDescription,
+					IsAdmin:      isAdminOAuth2Scope(s.Type, s.Value),
+					RawAttributes: map[string]any{
+						"value":                   s.Value,
+						"user_consent_name":       s.UserConsentDisplayName,
+						"admin_consent_name":      s.AdminConsentDisplayName,
+						"type":                    s.Type,
+						"user_consent_desc":       s.UserConsentDescription,
+					},
+				})
+			}
+		}
+
+		nextLink = c.resolveNextLink(result.NextLink)
+	}
+
+	return perms, nil
+}
+
+// isAdminAppRole flags high-privilege app roles so the catalog can surface
+// "admin" permissions for toxic-combination analysis. SailPoint marks these
+// as "SOD-sensitive" managed attributes.
+func isAdminAppRole(displayName, value, origin string) bool {
+	names := []string{
+		"administrator", "admin", "owner", "super admin", "superadmin",
+		"global admin", "service administrator", "full access", "god mode",
+	}
+	lower := strings.ToLower(displayName + " " + value + " " + origin)
+	for _, n := range names {
+		if strings.Contains(lower, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAdminOAuth2Scope flags admin-only oauth2 scopes. "Role" scopes are
+// application permissions (admin-consent only); "User" scopes are delegable.
+func isAdminOAuth2Scope(scopeType, value string) bool {
+	if strings.EqualFold(scopeType, "Role") {
+		return true
+	}
+	adminScopes := []string{
+		"directory.readwrite.all", "directory.read.all", "approleassignment.readwrite.all",
+		"rolemanagement.readwrite.directory", "user.readwrite.all", "device.readwrite.all",
+		"application.readwrite.all", "group.readwrite.all",
+	}
+	lower := strings.ToLower(value)
+	for _, s := range adminScopes {
+		if strings.Contains(lower, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // ─── Helpers ─────────────────────────────────────────────────

@@ -6,6 +6,12 @@
       "sourceType": "github",
       "skillPath": "skills/find-skills/SKILL.md",
       "computedHash": "b146008599c31057cef1c145774cea5d5afb30e8f43fa802e47a4b461419aaaf"
+    },
+    "nextjs-server-navigation": {
+      "source": "wsimmonds/claude-nextjs-skills",
+      "sourceType": "github",
+      "skillPath": "nextjs-server-navigation/SKILL.md",
+      "computedHash": "d869f3a28c60b706c82ab968b32e550575fad182b5cf6d16db5bbe94f0e9977f"
     }
   }
 }

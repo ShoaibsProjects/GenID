@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/observeid/genid/internal/middleware"
 )
 
 // ─── Connector Manager (PG-persistent) ───────────────────────
@@ -20,8 +21,9 @@ import (
 type Manager struct {
 	mu         sync.RWMutex
 	pgPool     *pgxpool.Pool
+	vault      VaultHandle
 	connectors map[string]Connector
-	v2conns    map[string]ConnectorV2 // V2 view (native or adapted from V1)
+	v2conns    map[string]ConnectorV2
 	configs    map[string]ConnectorConfig
 	results    map[string]*SyncResult
 	health     map[string]*HealthReport
@@ -36,6 +38,23 @@ func NewManager(pgPool *pgxpool.Pool) *Manager {
 		results:    make(map[string]*SyncResult),
 		health:     make(map[string]*HealthReport),
 	}
+}
+
+// WithVault attaches a credential vault. When set, RegisterSecure() can
+// move plaintext secrets (Password/ClientSecret/Cert) into AES-256-GCM
+// encrypted storage and replace them with a vault_secret_id reference.
+// The vault is optional — absence just disables the secure registration path.
+func (m *Manager) WithVault(v VaultHandle) *Manager {
+	m.vault = v
+	return m
+}
+
+// VaultHandle is the minimal contract RegisterSecure needs from the vault.
+// It mirrors *vault.Vault's Store/Retrieve methods so manager.go doesn't
+// need to import the vault package (avoids an import cycle in tests).
+type VaultHandle interface {
+	Store(ctx context.Context, name, secretType, reference, plaintext string) (string, error)
+	Retrieve(ctx context.Context, id string) (string, error)
 }
 
 // asV2 returns the ConnectorV2 for a connector ID, caching the
@@ -75,8 +94,25 @@ func (m *Manager) asV2(id string) ConnectorV2 {
 // LoadAll loads all persisted connectors from PostgreSQL into memory.
 // Call this once on startup.
 func (m *Manager) LoadAll(ctx context.Context) ([]ConnectorConfig, error) {
-	rows, err := m.pgPool.Query(ctx, `
-		SELECT id, tenant_id, name, connector_type, status, config, last_sync_at, last_error
+	// Use a transaction to set tenant context for RLS bypass
+	tx, err := m.pgPool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("manager: load connectors begin: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Set tenant context to default tenant to bypass RLS policies
+	// This allows loading all connectors regardless of tenant isolation
+	const defaultTenant = "00000000-0000-0000-0000-000000000001"
+	if _, err := tx.Exec(ctx, "SET LOCAL app.current_tenant = '"+defaultTenant+"'"); err != nil {
+		return nil, fmt.Errorf("manager: set tenant context: %w", err)
+	}
+
+	rows, err := tx.Query(ctx, `
+		SELECT id, tenant_id, name, connector_type, status, config, last_sync_at, last_error,
+		       COALESCE(schedule_cron, ''), COALESCE(owner_identity_id::text, ''),
+		       COALESCE(risk_weight, 0), COALESCE(connector_governance_status, 'active'),
+		       COALESCE(vault_secret_id::text, ''), COALESCE(last_sync_duration_ms, 0)
 		FROM connectors ORDER BY created_at
 	`)
 	if err != nil {
@@ -90,8 +126,11 @@ func (m *Manager) LoadAll(ctx context.Context) ([]ConnectorConfig, error) {
 		var configJSON []byte
 		var lastSync *time.Time
 		var lastError *string
+		var scheduleCron, ownerID, governanceStatus, vaultSecretID string
+		var riskWeight, lastSyncDurMS int
 
-		if err := rows.Scan(&id, &tenantID, &name, &ctype, &status, &configJSON, &lastSync, &lastError); err != nil {
+		if err := rows.Scan(&id, &tenantID, &name, &ctype, &status, &configJSON, &lastSync, &lastError,
+			&scheduleCron, &ownerID, &riskWeight, &governanceStatus, &vaultSecretID, &lastSyncDurMS); err != nil {
 			log.Printf("[CONNECTOR] scan error: %v", err)
 			continue
 		}
@@ -114,9 +153,16 @@ func (m *Manager) LoadAll(ctx context.Context) ([]ConnectorConfig, error) {
 		if lastError != nil {
 			cfg.LastError = *lastError
 		}
+		// New platform fields
+		cfg.ScheduleCron = scheduleCron
+		cfg.OwnerIdentityID = ownerID
+		cfg.RiskWeight = riskWeight
+		cfg.ConnectorGovernanceStatus = governanceStatus
+		cfg.VaultSecretID = vaultSecretID
+		cfg.LastSyncDurationMS = lastSyncDurMS
 
 		// Create the connector instance
-		conn, err := NewConnector(cfg.Type)
+		conn, err := m.newConnector(cfg.Type)
 		if err != nil {
 			log.Printf("[CONNECTOR] skip %s: %v", cfg.Name, err)
 			continue
@@ -174,13 +220,22 @@ func (m *Manager) Register(ctx context.Context, config ConnectorConfig) (string,
 	if config.SyncIntervalMinutes <= 0 {
 		config.SyncIntervalMinutes = 60
 	}
+	if config.ScheduleCron == "" {
+		config.ScheduleCron = "*/20 * * * *"
+	}
+	if config.RiskWeight == 0 {
+		config.RiskWeight = 50
+	}
+	if config.ConnectorGovernanceStatus == "" {
+		config.ConnectorGovernanceStatus = "active"
+	}
 	if config.TenantID == "" {
 		config.TenantID = "00000000-0000-0000-0000-000000000001"
 	}
 	config.CreatedAt = time.Now()
 	config.UpdatedAt = time.Now()
 
-	conn, err := NewConnector(config.Type)
+	conn, err := m.newConnector(config.Type)
 	if err != nil {
 		return "", fmt.Errorf("manager: create connector: %w", err)
 	}
@@ -188,20 +243,32 @@ func (m *Manager) Register(ctx context.Context, config ConnectorConfig) (string,
 		return "", fmt.Errorf("manager: configure connector: %w", err)
 	}
 
-	// Persist to PostgreSQL
+	// Persist to PostgreSQL — write config JSONB plus the new platform columns.
+	// Use TenantDB to get the transaction from context (set by TenantMiddleware)
+	// so FK constraints can see rows inserted in the same transaction.
+	db := middleware.TenantDB(ctx, m.pgPool)
 	cfgJSON, err := json.Marshal(config)
 	if err != nil {
 		return "", fmt.Errorf("manager: marshal config: %w", err)
 	}
-	_, err = m.pgPool.Exec(ctx, `
-		INSERT INTO connectors (id, tenant_id, name, connector_type, status, config)
-		VALUES ($1, $2, $3, $4, $5, $6)
+	_, err = db.Exec(ctx, `
+		INSERT INTO connectors (id, tenant_id, name, connector_type, status, config,
+		                        schedule_cron, owner_identity_id, risk_weight,
+		                        connector_governance_status, vault_secret_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULLIF($11, '')::uuid)
 		ON CONFLICT (tenant_id, name) DO UPDATE SET
-			connector_type = EXCLUDED.connector_type,
-			config         = EXCLUDED.config,
-			status         = EXCLUDED.status,
-			updated_at     = NOW()
-	`, config.ID, config.TenantID, config.Name, string(config.Type), string(config.Status), cfgJSON)
+			connector_type             = EXCLUDED.connector_type,
+			config                     = EXCLUDED.config,
+			status                     = EXCLUDED.status,
+			schedule_cron              = EXCLUDED.schedule_cron,
+			owner_identity_id          = EXCLUDED.owner_identity_id,
+			risk_weight                = EXCLUDED.risk_weight,
+			connector_governance_status = EXCLUDED.connector_governance_status,
+			vault_secret_id            = EXCLUDED.vault_secret_id,
+			updated_at                 = NOW()
+	`, config.ID, config.TenantID, config.Name, string(config.Type), string(config.Status), cfgJSON,
+		config.ScheduleCron, nullableUUID(config.OwnerIdentityID), config.RiskWeight,
+		config.ConnectorGovernanceStatus, config.VaultSecretID)
 	if err != nil {
 		return "", fmt.Errorf("manager: persist connector: %w", err)
 	}
@@ -221,6 +288,69 @@ func (m *Manager) Register(ctx context.Context, config ConnectorConfig) (string,
 
 	log.Printf("[CONNECTOR] Registered: %s (%s) as %s", config.Name, config.Type, config.ID)
 	return config.ID, nil
+}
+
+// RegisterSecure is the production path: it takes plaintext credentials from
+// the supplied config, vaults them via the attached SecretStore, and persists
+// only the ciphertext handle (vault_secret_id) — the plaintext never lands
+// in the connectors.config JSONB column. Caller passes the request context
+// so the vault can read the tenant_id for RLS-scoped storage.
+//
+// The vault is required (WithVault). If no vault is attached, RegisterSecure
+// falls back to the standard Register path with a warning log.
+func (m *Manager) RegisterSecure(ctx context.Context, config ConnectorConfig) (string, error) {
+	if m.vault == nil {
+		log.Printf("[CONNECTOR] RegisterSecure called without a vault — falling back to plaintext Register (not for production)")
+		return m.Register(ctx, config)
+	}
+
+	// Collect the cleartext secret value to vault. Preference order:
+	// ClientSecret (OAuth client_credentials, most common in cloud apps),
+	// Password (HTTP basic / LDAP bind), Cert (mTLS), API key in Properties.
+	plaintext := config.ClientSecret
+	secretType := "client_secret"
+	if plaintext == "" && config.Password != "" {
+		plaintext = config.Password
+		secretType = "connector_password"
+	}
+	if plaintext == "" && config.Cert != "" {
+		plaintext = config.Cert
+		secretType = "tls_cert"
+	}
+
+	if plaintext == "" {
+		// No credentials to vault — register normally with vault_secret_id=NULL.
+		return m.Register(ctx, config)
+	}
+
+	// Vault the secret. Always generate a fresh UUID as the reference
+	// so the vault store receives a valid UUID format regardless of what
+	// ID value was supplied in the connector config.
+	connectorID := uuid.New().String()
+	secretName := fmt.Sprintf("connector-%s-%s", config.Name, secretType)
+	vaultID, err := m.vault.Store(ctx, secretName, secretType, connectorID, plaintext)
+	if err != nil {
+		return "", fmt.Errorf("manager: RegisterSecure: vault secret: %w", err)
+	}
+
+	// Replace plaintext + record the vault handle, then register normally.
+	// Storing cleared fields + VaultSecretID in config JSONB means any
+	// caller that loads the config later sees only the vault reference.
+	config.VaultSecretID = vaultID
+	config.ClientSecret = ""
+	config.Password = ""
+	config.Cert = ""
+	log.Printf("[CONNECTOR] RegisterSecure: vaulted %s for connector %s (vault_id=%s)", secretType, config.Name, vaultID)
+	return m.Register(ctx, config)
+}
+
+// nullableUUID returns a *string suitable for pgx pgxpool.Exec: empty → nil
+// so Postgres writes NULL instead of failing on ''::uuid.
+func nullableUUID(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func (m *Manager) Unregister(ctx context.Context, id string) error {
@@ -571,6 +701,49 @@ func (m *Manager) SyncResources(ctx context.Context, id string) ([]ConnectorReso
 	return resources, nil
 }
 
+// ─── Permission Catalog Sync ─────────────────────────────
+
+func (m *Manager) SyncPermissions(ctx context.Context, id string) ([]ConnectorPermission, error) {
+	conn, err := m.GetConnector(id)
+	if err != nil {
+		return nil, err
+	}
+
+	enumerator, ok := conn.(PermissionEnumerator)
+	if !ok {
+		log.Printf("[CONNECTOR] %s: permissions not supported", m.configs[id].Name)
+		return nil, nil
+	}
+
+	m.mu.RLock()
+	config := m.configs[id]
+	m.mu.RUnlock()
+
+	start := time.Now()
+	permissions, err := enumerator.ListPermissions(ctx)
+	elapsed := time.Since(start)
+
+	if err == ErrNotSupported {
+		log.Printf("[CONNECTOR] %s: permissions not supported", config.Name)
+		return nil, nil
+	}
+	if err != nil {
+		config.LastError = fmt.Sprintf("permission sync: %v", err)
+		config.Status = ConnectorStatusError
+		m.updateConfig(ctx, config)
+		m.updateHealthWithDuration(id, ConnectorStatusError, err.Error(), elapsed)
+		return nil, err
+	}
+
+	config.Status = ConnectorStatusConnected
+	config.LastError = ""
+	m.updateConfig(ctx, config)
+	m.updateHealthWithDuration(id, ConnectorStatusConnected, "", elapsed)
+
+	log.Printf("[CONNECTOR] Permission sync for %s: %d permissions in %s", config.Name, len(permissions), elapsed.Round(time.Millisecond))
+	return permissions, nil
+}
+
 // FullSync performs a complete sync: users, groups, entitlements, and resources.
 func (m *Manager) FullSync(ctx context.Context, id string) (*FullSyncResult, error) {
 	result := &FullSyncResult{ConnectorID: id}
@@ -700,8 +873,8 @@ func (m *Manager) updateHealthWithDuration(id string, status ConnectorStatus, la
 }
 
 // TestConnection tests a connector configuration without registering it.
-func TestConnection(ctx context.Context, config ConnectorConfig) error {
-	conn, err := NewConnector(config.Type)
+func (m *Manager) TestConnection(ctx context.Context, config ConnectorConfig) error {
+	conn, err := m.newConnector(config.Type)
 	if err != nil {
 		return err
 	}
@@ -711,11 +884,11 @@ func TestConnection(ctx context.Context, config ConnectorConfig) error {
 	return conn.TestConnection(ctx)
 }
 
-// NewConnector creates a connector of the given type.
-func NewConnector(connType ConnectorType) (Connector, error) {
+// newConnector creates a connector of the given type with the manager's vault.
+func (m *Manager) newConnector(connType ConnectorType) (Connector, error) {
 	switch connType {
 	case ConnectorTypeEntraID:
-		return NewEntraConnector(), nil
+		return NewEntraConnector(m.vault), nil
 	case ConnectorTypeLDAP, ConnectorTypeAD:
 		return NewLDAPConnector(), nil
 	case ConnectorTypeSCIM, ConnectorTypeOkta, ConnectorTypeGeneric:

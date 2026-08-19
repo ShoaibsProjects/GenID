@@ -228,13 +228,29 @@ func persistRiskScore(
 	factors []string,
 ) error {
 	if pgPool != nil {
-		_, err := pgPool.Exec(ctx, `
+		tx, err := pgPool.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("persist identity risk begin: %w", err)
+		}
+		defer tx.Rollback(ctx)
+
+		if tenantID != "" {
+			if _, err := tx.Exec(ctx, `SELECT set_config('app.current_tenant', $1, true)`, tenantID); err != nil {
+				return fmt.Errorf("persist identity risk set tenant: %w", err)
+			}
+		}
+
+		_, err = tx.Exec(ctx, `
 			UPDATE identities
 			SET risk_score = $1, risk_factors = $2, updated_at = NOW()
 			WHERE id = $3 AND tenant_id = $4
 		`, score, factors, identityID, tenantID)
 		if err != nil {
 			return fmt.Errorf("persist identity risk: %w", err)
+		}
+
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("persist identity risk commit: %w", err)
 		}
 	}
 

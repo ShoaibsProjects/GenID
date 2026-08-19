@@ -1,6 +1,12 @@
-import "@testing-library/jest-dom/jest-globals"
 import { render, screen, fireEvent } from "@testing-library/react"
-import { Card, CardHeader, CardBody, CardFooter } from "../Card"
+import {
+  Card,
+  CardHeader,
+  CardFooter,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "../Card"
 
 describe("Card", () => {
   it("renders children", () => {
@@ -8,19 +14,9 @@ describe("Card", () => {
     expect(screen.getByText("Card content")).toBeInTheDocument()
   })
 
-  it("applies default variant border", () => {
+  it("applies default border", () => {
     const { container } = render(<Card>Test</Card>)
-    expect(container.firstChild).toHaveClass("border-border")
-  })
-
-  it("applies accent variant with left border", () => {
-    const { container } = render(<Card variant="accent">Accent</Card>)
-    expect(container.firstChild).toHaveClass("border-l-[3px]")
-  })
-
-  it("applies error variant with red left border", () => {
-    const { container } = render(<Card variant="error">Error</Card>)
-    expect(container.firstChild).toHaveClass("border-l-[3px]")
+    expect(container.firstChild).toHaveClass("border")
   })
 
   it("calls onClick when clickable", () => {
@@ -30,33 +26,34 @@ describe("Card", () => {
     expect(onClick).toHaveBeenCalledTimes(1)
   })
 
-  it("applies hover styles when hover prop is true", () => {
-    const { container } = render(<Card hover>Hoverable</Card>)
-    expect(container.firstChild).toHaveClass("hover:bg-white/[0.02]")
-  })
-
   it("applies custom className", () => {
     const { container } = render(<Card className="custom">Test</Card>)
     expect(container.firstChild).toHaveClass("custom")
   })
 })
 
-describe("CardHeader", () => {
-  it("renders children", () => {
+describe("Card sections", () => {
+  it("CardHeader renders children", () => {
     render(<Card><CardHeader>Header</CardHeader></Card>)
     expect(screen.getByText("Header")).toBeInTheDocument()
   })
-})
 
-describe("CardBody", () => {
-  it("renders children", () => {
-    render(<Card><CardBody>Body</CardBody></Card>)
-    expect(screen.getByText("Body")).toBeInTheDocument()
+  it("CardTitle renders children", () => {
+    render(<Card><CardTitle>Title</CardTitle></Card>)
+    expect(screen.getByText("Title")).toBeInTheDocument()
   })
-})
 
-describe("CardFooter", () => {
-  it("renders children", () => {
+  it("CardDescription renders children", () => {
+    render(<Card><CardDescription>Description</CardDescription></Card>)
+    expect(screen.getByText("Description")).toBeInTheDocument()
+  })
+
+  it("CardContent renders children", () => {
+    render(<Card><CardContent>Content</CardContent></Card>)
+    expect(screen.getByText("Content")).toBeInTheDocument()
+  })
+
+  it("CardFooter renders children", () => {
     render(<Card><CardFooter>Footer</CardFooter></Card>)
     expect(screen.getByText("Footer")).toBeInTheDocument()
   })

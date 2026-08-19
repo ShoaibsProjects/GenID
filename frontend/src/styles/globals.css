@@ -1,9 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ─── Fonts ────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 /* ─── Design Tokens ──────────────────────────────────────── */
 :root {
@@ -23,10 +24,10 @@
   --obsidian-border-accent: rgba(245, 158, 11, 0.15);
 
   /* Glass Depths */
-  --glass-1: rgba(255, 255, 255, 0.02);  /* subtlest */
-  --glass-2: rgba(255, 255, 255, 0.04);  /* card bg */
-  --glass-3: rgba(255, 255, 255, 0.06);  /* hover state */
-  --glass-4: rgba(255, 255, 255, 0.08);  /* active state */
+  --glass-1: rgba(255, 255, 255, 0.02);
+  --glass-2: rgba(255, 255, 255, 0.04);
+  --glass-3: rgba(255, 255, 255, 0.06);
+  --glass-4: rgba(255, 255, 255, 0.08);
 
   /* Text */
   --text-primary: #F0EFEC;
@@ -47,6 +48,45 @@
   --radius-md: 10px;
   --radius-lg: 16px;
   --radius-xl: 20px;
+}
+
+/* ─── Light Theme ────────────────────────────────────────── */
+.light,
+html:not(.dark) {
+  --accent: #D97706;
+  --accent-light: #F59E0B;
+  --accent-dim: rgba(217, 119, 6, 0.08);
+  --accent-glow: rgba(217, 119, 6, 0.15);
+  --accent-strong: rgba(217, 119, 6, 0.25);
+
+  --obsidian: #F8F7F4;
+  --obsidian-raised: #FFFFFF;
+  --obsidian-elevated: #F3F2EE;
+  --obsidian-floating: #EBEAE6;
+  --obsidian-border: rgba(0, 0, 0, 0.08);
+  --obsidian-border-accent: rgba(217, 119, 6, 0.20);
+
+  --glass-1: rgba(0, 0, 0, 0.02);
+  --glass-2: rgba(0, 0, 0, 0.04);
+  --glass-3: rgba(0, 0, 0, 0.06);
+  --glass-4: rgba(0, 0, 0, 0.08);
+
+  --text-primary: #1A1A1F;
+  --text-secondary: #6B6B70;
+  --text-muted: #9C9CA0;
+  --text-accent: #D97706;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
+  --shadow-glow-sm: 0 0 12px rgba(217, 119, 6, 0.06);
+  --shadow-glow-md: 0 0 24px rgba(217, 119, 6, 0.10);
+}
+
+.light body,
+html:not(.dark) body {
+  background: var(--obsidian);
+  color: var(--text-primary);
 }
 
 /* ─── Base ────────────────────────────────────────────────── */
@@ -84,8 +124,8 @@ body::before {
   position: fixed; inset: 0;
   background:
     /* Subtle grid */
-    linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
+    linear-gradient(rgba(0,0,0,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.015) 1px, transparent 1px);
   background-size: 64px 64px;
   pointer-events: none;
   z-index: 0;
@@ -103,6 +143,21 @@ body::after {
     radial-gradient(ellipse 40% 50% at 5% 20%, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
+}
+
+.light body::before,
+html:not(.dark) body::before {
+  background:
+    linear-gradient(rgba(0,0,0,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.02) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+.light body::after,
+html:not(.dark) body::after {
+  background:
+    radial-gradient(ellipse 60% 40% at 75% -10%, rgba(245, 158, 11, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 30% at 50% 110%, rgba(245, 158, 11, 0.04) 0%, transparent 50%);
 }
 
 /* ─── Animations ──────────────────────────────────────────── */

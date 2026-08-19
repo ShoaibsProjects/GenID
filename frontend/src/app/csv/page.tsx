@@ -1,5 +1,6 @@
 "use client"
 import { useState, useRef } from "react"
+import { authFetch } from "@/lib/api"
 
 const FIELD_OPTIONS = [
   { value: "email", label: "Email *", required: true },
@@ -38,7 +39,7 @@ export default function CSVPage() {
   async function previewCSV(data: string) {
     setLoading(true)
     try {
-      const res = await fetch("/api/v1/identities/csv/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv_data: data }) })
+      const res = await authFetch("/api/v1/identities/csv/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv_data: data }) })
       const d = await res.json()
       setPreview(d)
       setMapping(d.suggested_mapping || {})
@@ -50,7 +51,7 @@ export default function CSVPage() {
     if (!csvData) return
     setLoading(true); setResult(null)
     try {
-      const res = await fetch("/api/v1/identities/csv/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv_data: csvData, column_mapping: mapping }) })
+      const res = await authFetch("/api/v1/identities/csv/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv_data: csvData, column_mapping: mapping }) })
       const d = await res.json()
       setResult(d)
     } catch (e: any) { setResult({ status: "error", errors: [e.message] }) }
@@ -58,7 +59,8 @@ export default function CSVPage() {
   }
 
   function handleExport() {
-    window.open("/api/v1/identities/csv/export", "_blank")
+    const token = localStorage.getItem("genid_access_token") || ""
+    window.open("/api/v1/identities/csv/export" + (token ? "?token=" + encodeURIComponent(token) : ""), "_blank")
   }
 
   function handleDragOver(e: React.DragEvent) { e.preventDefault(); setDragging(true) }

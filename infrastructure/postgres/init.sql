@@ -557,7 +557,7 @@ VALUES (
     '00000000-0000-0000-0000-000000000002',
     '00000000-0000-0000-0000-000000000001',
     'human', 'active',
-    'admin@genid.us', 'System Admin', 'ADMIN-001',
+    'admin@genid.io', 'System Admin', 'ADMIN-001',
     'manual', 'aal2'
 );
 

@@ -1,11 +1,11 @@
 package graphql
 
 import (
-	"github.com/observeid/genid/internal/service"
+	"github.com/observeid/genid/internal/services"
 )
 
 type Resolver struct {
-	Svc *service.IdentityService
+	Svc *services.Service
 }
 
 func (r *Resolver) Mutation() MutationResolver {

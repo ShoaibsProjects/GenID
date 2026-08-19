@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,7 +22,7 @@ func TestStoreAndRetrieve(t *testing.T) {
 
 	id, err := v.Store(ctx, "my-secret", "api_key", "connector-1", "supersecretvalue")
 	require.NoError(t, err)
-	assert.Contains(t, id, "sec-")
+	assert.NoError(t, uuid.Validate(id))
 
 	plaintext, err := v.Retrieve(ctx, id)
 	require.NoError(t, err)

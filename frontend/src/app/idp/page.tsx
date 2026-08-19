@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
+import { authFetch } from "@/lib/api"
 
 const API = process.env.NEXT_PUBLIC_API_URL || ""
 
@@ -42,7 +43,7 @@ export default function IDPPage() {
   const fetchData = useCallback(async () => {
     try {
       const [cRes, dRes] = await Promise.all([
-        fetch(`${API}/api/v1/oidc/clients`).catch(() => null),
+        authFetch(`/api/v1/oidc/clients`).catch(() => null),
         fetch(`${API}/.well-known/openid-configuration`).catch(() => null),
       ])
       if (cRes?.ok) { const d = await cRes.json(); setClients(d.clients || []) }
@@ -56,7 +57,7 @@ export default function IDPPage() {
   const registerClient = async () => {
     setError("")
     try {
-      const res = await fetch(`${API}/api/v1/oidc/clients`, {
+      const res = await authFetch(`/api/v1/oidc/clients`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -77,7 +78,7 @@ export default function IDPPage() {
 
   const deleteClient = async (id: string) => {
     if (!confirm(`Delete client ${id}?`)) return
-    await fetch(`${API}/api/v1/oidc/clients/${id}`, { method: "DELETE" })
+    await authFetch(`/api/v1/oidc/clients/${id}`, { method: "DELETE" })
     fetchData()
   }
 

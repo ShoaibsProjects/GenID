@@ -107,6 +107,21 @@ func (b *NatsBus) Publish(ctx context.Context, event Event) error {
 	return nil
 }
 
+// JetStream exposes the JetStream context for consumers that need to subscribe.
+func (b *NatsBus) JetStream() nats.JetStreamContext {
+	return b.js
+}
+
+// Conn exposes the underlying NATS connection.
+func (b *NatsBus) Conn() *nats.Conn {
+	return b.nc
+}
+
+// StreamName returns the stream name used by this bus.
+func (b *NatsBus) StreamName() string {
+	return b.stream
+}
+
 // Close gracefully closes the NATS connection.
 func (b *NatsBus) Close() {
 	if b != nil && b.nc != nil {

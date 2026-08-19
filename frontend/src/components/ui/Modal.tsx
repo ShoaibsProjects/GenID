@@ -1,6 +1,6 @@
 "use client"
 
-import { Card, CardHeader, CardBody, CardFooter } from "./Card"
+import { Card, CardHeader, CardContent, CardFooter } from "./Card"
 import { Button } from "./Button"
 
 interface ModalProps {
@@ -46,7 +46,7 @@ export function Modal({ open, onClose, title, description, children, footer, siz
               </button>
             </div>
           </CardHeader>
-          <CardBody>{children}</CardBody>
+          <CardContent>{children}</CardContent>
           {footer && <CardFooter>{footer}</CardFooter>}
         </Card>
       </div>

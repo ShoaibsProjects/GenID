@@ -9,8 +9,8 @@ import (
 func TestProcessorConfig_Defaults(t *testing.T) {
 	config := DefaultConfig()
 
-	if config.PollInterval != 500*time.Millisecond {
-		t.Errorf("expected PollInterval 500ms, got %v", config.PollInterval)
+	if config.PollInterval != 100*time.Millisecond {
+		t.Errorf("expected PollInterval 100ms, got %v", config.PollInterval)
 	}
 	if config.BatchSize != 100 {
 		t.Errorf("expected BatchSize 100, got %d", config.BatchSize)
@@ -20,6 +20,44 @@ func TestProcessorConfig_Defaults(t *testing.T) {
 	}
 	if config.Neo4jTimeout != 30*time.Second {
 		t.Errorf("expected Neo4jTimeout 30s, got %v", config.Neo4jTimeout)
+	}
+}
+
+func TestConfigFromEnv(t *testing.T) {
+	t.Setenv("OUTBOX_POLL_INTERVAL_MS", "250")
+	t.Setenv("OUTBOX_BATCH_SIZE", "50")
+	t.Setenv("OUTBOX_MAX_RETRIES", "10")
+	t.Setenv("OUTBOX_NEO4J_TIMEOUT_MS", "60000")
+
+	cfg := ConfigFromEnv()
+	if cfg.PollInterval != 250*time.Millisecond {
+		t.Errorf("expected PollInterval 250ms from env, got %v", cfg.PollInterval)
+	}
+	if cfg.BatchSize != 50 {
+		t.Errorf("expected BatchSize 50 from env, got %d", cfg.BatchSize)
+	}
+	if cfg.MaxRetries != 10 {
+		t.Errorf("expected MaxRetries 10 from env, got %d", cfg.MaxRetries)
+	}
+	if cfg.Neo4jTimeout != 60*time.Second {
+		t.Errorf("expected Neo4jTimeout 60s from env, got %v", cfg.Neo4jTimeout)
+	}
+}
+
+func TestConfigFromEnv_Fallbacks(t *testing.T) {
+	// Unset all env vars → must fall back to DefaultConfig values.
+	t.Setenv("OUTBOX_POLL_INTERVAL_MS", "")
+	t.Setenv("OUTBOX_BATCH_SIZE", "")
+	t.Setenv("OUTBOX_MAX_RETRIES", "")
+	t.Setenv("OUTBOX_NEO4J_TIMEOUT_MS", "")
+
+	cfg := ConfigFromEnv()
+	def := DefaultConfig()
+	if cfg.PollInterval != def.PollInterval {
+		t.Errorf("expected fallback PollInterval %v, got %v", def.PollInterval, cfg.PollInterval)
+	}
+	if cfg.BatchSize != def.BatchSize {
+		t.Errorf("expected fallback BatchSize %d, got %d", def.BatchSize, cfg.BatchSize)
 	}
 }
 

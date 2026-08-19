@@ -232,7 +232,13 @@ func LoggingMiddleware(store *Store, chain *Chain) func(http.Handler) http.Handl
 					"method": r.Method, "path": r.URL.Path,
 					"status": rw.status, "latency": entry.Latency,
 				})
+				// Resolve tenant: prefer X-Tenant-ID header, fallback to JWT claim.
+				tenantID := r.Header.Get("X-Tenant-ID")
+				if tenantID == "" {
+					tenantID = middleware.TenantIDFromContext(r.Context())
+				}
 				_, hash, err := chain.Append(r.Context(), ChainEntry{
+					TenantID:  tenantID,
 					EventType: "http_request",
 					ActorID:   actorFromRequest(r),
 					ActorType: "http",

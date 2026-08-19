@@ -59,6 +59,17 @@ type Connector interface {
 	DiscoverSchema(ctx context.Context) (*SchemaResult, error)
 }
 
+// PermissionEnumerator is an OPTIONAL capability interface implemented by
+// connectors that can enumerate the permission CATALOG a source defines
+// (e.g. appRoles / oauth2PermissionScopes on Entra service principals).
+// It is separate from ListEntitlements, which returns the ASSIGNMENTS of
+// those permissions to principals. The Manager uses a type assertion, so
+// connectors that don't implement it simply report "permissions not
+// supported" without breaking the interface contract.
+type PermissionEnumerator interface {
+	ListPermissions(ctx context.Context) ([]ConnectorPermission, error)
+}
+
 // Sentinel errors for optional connector features
 var (
 	ErrDeltaNotSupported  = &DeltaNotSupportedError{}

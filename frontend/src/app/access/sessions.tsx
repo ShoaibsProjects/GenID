@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { authFetch } from "@/lib/api"
 
 interface JITSession {
   identity_id: string
@@ -18,7 +19,7 @@ export default function JITSessions() {
   async function load() {
     setLoading(true)
     try {
-      const res = await fetch("/api/v1/access/sessions")
+      const res = await authFetch("/api/v1/access/sessions")
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setSessions(data.sessions || [])

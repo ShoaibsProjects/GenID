@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
+import { authFetch } from "@/lib/api"
 
 interface SecretEntry { id: string; name: string; secret_type: string; created_at: string; updated_at: string }
 
@@ -15,7 +16,7 @@ export default function VaultPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/v1/vault/secrets")
+      const res = await authFetch("/api/v1/vault/secrets")
       const data = await res.json()
       setSecrets(data.secrets || [])
     } catch { setSecrets([]) } finally { setLoading(false) }
@@ -27,7 +28,7 @@ export default function VaultPage() {
 
   async function handleStore() {
     try {
-      await fetch("/api/v1/vault/secrets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
+      await authFetch("/api/v1/vault/secrets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
       setShowAdd(false)
       setForm({ name: "", value: "", secret_type: "api_key" })
       load()
@@ -37,7 +38,7 @@ export default function VaultPage() {
   async function handleRetrieve(id: string) {
     setShowRetrieve(id)
     try {
-      const res = await fetch(`/api/v1/vault/secrets/${id}`)
+      const res = await authFetch(`/api/v1/vault/secrets/${id}`)
       const data = await res.json()
       setRetrieved(data)
     } catch { setRetrieved({ error: "Retrieve failed" }) }
@@ -45,7 +46,7 @@ export default function VaultPage() {
 
   async function handleDelete(id: string) {
     if (!confirm("Permanently delete this secret?")) return
-    try { await fetch(`/api/v1/vault/secrets/${id}`, { method: "DELETE" }); load() } catch (e: any) { alert(e.message) }
+    try { await authFetch(`/api/v1/vault/secrets/${id}`, { method: "DELETE" }); load() } catch (e: any) { alert(e.message) }
   }
 
   const SECRET_TYPES = ["api_key", "database_password", "tls_cert", "oauth_token", "ssh_key", "encryption_key", "other"]

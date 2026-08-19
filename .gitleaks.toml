@@ -35,8 +35,9 @@
   keywords = ["smtp", "password", "pass"]
 
 # Generic SMTP credentials block — catches non-Gmail mail servers too.
+# Value must be a real string (excludes bare env-var self-references like ${SMTP_PASS}).
 [[rules]]
   id = "smtp-credentials-block"
   description = "SMTP credentials set (user + password in env context)"
-  regex = '''(?i)SMTP_(?:USER|PASS)\s*[:=]\s*["']?[^\s"']+'''
+  regex = '''(?i)SMTP_(?:USER|PASS)\s*[:=]\s*["']?[A-Za-z0-9_@.:#/+\-]{2,}'''
   keywords = ["smtp"]

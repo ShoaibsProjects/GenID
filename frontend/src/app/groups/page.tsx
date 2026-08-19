@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
+import { authFetch } from "@/lib/api"
 
 interface Role {
   id: string; name: string; description: string; role_type: string
@@ -50,7 +51,7 @@ export default function GroupsPage() {
       const params = new URLSearchParams()
       if (search) params.set("search", search)
       if (roleFilter) params.set("role_type", roleFilter)
-      const res = await fetch("/api/v1/groups?" + params.toString())
+      const res = await authFetch("/api/v1/groups?" + params.toString())
       const d = await res.json()
       setRoles(d.groups || [])
     } catch { setRoles([]) } finally { setLoading(false) }
@@ -62,7 +63,7 @@ export default function GroupsPage() {
   async function openDetail(id: string) {
     setSelectedId(id); setDetailTab("members"); setDetailLoad(true)
     try {
-      const res = await fetch(`/api/v1/groups/${id}`)
+      const res = await authFetch(`/api/v1/groups/${id}`)
       const d = await res.json()
       setDetail(d)
     } catch { setDetail(null) } finally { setDetailLoad(false) }
@@ -72,7 +73,7 @@ export default function GroupsPage() {
   async function handleCreate() {
     if (!form.name.trim()) return
     try {
-      await fetch("/api/v1/groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
+      await authFetch("/api/v1/groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
       setShowAdd(false); load()
     } catch (e: any) { alert("Create failed: " + e.message) }
   }
@@ -80,14 +81,14 @@ export default function GroupsPage() {
   // Delete role
   async function handleDelete(id: string) {
     if (!confirm("Delete this role?")) return
-    try { await fetch(`/api/v1/groups/${id}`, { method: "DELETE" }); if (selectedId === id) setSelectedId(null); load() } catch (e: any) { alert(e.message) }
+    try { await authFetch(`/api/v1/groups/${id}`, { method: "DELETE" }); if (selectedId === id) setSelectedId(null); load() } catch (e: any) { alert(e.message) }
   }
 
   // Assign role to identity
   async function handleAssign(identityId: string) {
     if (!selectedId) return
     try {
-      await fetch("/api/v1/roles/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identity_id: identityId, role_id: selectedId, assigned_by: "admin", source: "direct" }) })
+      await authFetch("/api/v1/roles/assign", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identity_id: identityId, role_id: selectedId, assigned_by: "admin", source: "direct" }) })
       setShowAssign(false)
       openDetail(selectedId) // refresh detail
     } catch (e: any) { alert("Assign failed: " + e.message) }
@@ -97,7 +98,7 @@ export default function GroupsPage() {
   async function handleRemoveMember(identityId: string) {
     if (!selectedId) return
     try {
-      await fetch("/api/v1/roles/remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identity_id: identityId, role_id: selectedId }) })
+      await authFetch("/api/v1/roles/remove", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identity_id: identityId, role_id: selectedId }) })
       openDetail(selectedId)
     } catch (e: any) { alert("Remove failed: " + e.message) }
   }
@@ -106,7 +107,7 @@ export default function GroupsPage() {
   async function handleAttachEntitlement(entId: string) {
     if (!selectedId) return
     try {
-      await fetch(`/api/v1/groups/${selectedId}/entitlements`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entitlement_id: entId }) })
+      await authFetch(`/api/v1/groups/${selectedId}/entitlements`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entitlement_id: entId }) })
       setShowAttachEnt(false)
       openDetail(selectedId)
     } catch (e: any) { alert("Link failed: " + e.message) }
@@ -116,7 +117,7 @@ export default function GroupsPage() {
   async function handleDetachEntitlement(entId: string) {
     if (!selectedId) return
     try {
-      await fetch(`/api/v1/groups/${selectedId}/entitlements/${entId}`, { method: "DELETE" })
+      await authFetch(`/api/v1/groups/${selectedId}/entitlements/${entId}`, { method: "DELETE" })
       openDetail(selectedId)
     } catch (e: any) { alert("Unlink failed: " + e.message) }
   }
@@ -124,7 +125,7 @@ export default function GroupsPage() {
   // Create new entitlement
   async function handleCreateEntitlement() {
     try {
-      await fetch("/api/v1/entitlements", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newEnt) })
+      await authFetch("/api/v1/entitlements", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newEnt) })
       setCreatingEnt(false)
       setNewEnt({ app_name: "", permission_level: "read", entitlement_type: "application", resource_id: "" })
       // Re-search entitlements
@@ -136,7 +137,7 @@ export default function GroupsPage() {
   async function searchEntitlements() {
     try {
       const params = new URLSearchParams({ search: entSearch, limit: "30" })
-      const res = await fetch("/api/v1/entitlements?" + params.toString())
+      const res = await authFetch("/api/v1/entitlements?" + params.toString())
       const d = await res.json()
       setEntResults(d.entitlements || [])
     } catch { setEntResults([]) }
@@ -147,7 +148,7 @@ export default function GroupsPage() {
   async function searchIdentities() {
     try {
       const params = new URLSearchParams({ search: assignSearch, limit: "20" })
-      const res = await fetch("/api/v1/identities?" + params.toString())
+      const res = await authFetch("/api/v1/identities?" + params.toString())
       const d = await res.json()
       setAssignResults(d.identities || [])
     } catch { setAssignResults([]) }

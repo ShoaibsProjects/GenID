@@ -35,13 +35,14 @@ type JWTClaims struct {
 
 // JWTAuth validates JWTs using JWKS fetched from the OIDC provider.
 type JWTAuth struct {
-	jwksURL    string
-	jwksCache  *jwksKeySet
-	cacheMu    sync.RWMutex
-	cacheTTL   time.Duration
-	lastFetch  time.Time
-	skipPaths  map[string]bool
-	apiKeys    map[string]string // internal Temporal worker keys
+	jwksURL   string
+	jwksCache *jwksKeySet
+	cacheMu   sync.RWMutex
+	cacheTTL  time.Duration
+	lastFetch time.Time
+	skipPaths map[string]bool
+	apiKeys   map[string]string // internal Temporal worker keys
+	keyStore  APIKeyStore       // optional DB-backed API keys (migration 007)
 }
 
 // jwksKeySet caches the JWKS response.
@@ -74,8 +75,15 @@ func NewJWTAuth(jwksURL string, apiKeys map[string]string, skipPaths ...string) 
 	}
 }
 
+// SetAPIKeyStore enables DB-backed API key verification (bcrypt, scopes,
+// expiry). Keys formatted "genid_<id>_<secret>" resolve via the store and
+// inject their scopes/tenant like the internal-worker path.
+func (j *JWTAuth) SetAPIKeyStore(store APIKeyStore) {
+	j.keyStore = store
+}
+
 // Middleware validates JWT Bearer tokens and injects claims into context.
-// Falls back to X-API-Key for internal Temporal workers.
+// Falls back to X-API-Key for internal Temporal workers and DB API keys.
 func (j *JWTAuth) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip auth for health/readiness endpoints
@@ -109,15 +117,30 @@ func (j *JWTAuth) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Path 2: X-API-Key (internal Temporal workers only)
-		if apiKey := r.Header.Get("X-API-Key"); apiKey != "" && j.apiKeys != nil {
-			if name, ok := j.apiKeys[apiKey]; ok {
-				// Inject system tenant context for internal workers
-				ctx := context.WithValue(r.Context(), ContextKeyTenantID, "00000000-0000-0000-0000-000000000001")
-				ctx = context.WithValue(ctx, ContextKeyUserID, "system:"+name)
-				ctx = context.WithValue(ctx, ContextKeyRoles, []string{"system", "worker"})
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
+		// Path 2: X-API-Key (internal Temporal workers, then DB-backed keys)
+		if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
+			if j.apiKeys != nil {
+				if name, ok := j.apiKeys[apiKey]; ok {
+					// Inject system tenant context for internal workers
+					ctx := context.WithValue(r.Context(), ContextKeyTenantID, "00000000-0000-0000-0000-000000000001")
+					ctx = context.WithValue(ctx, ContextKeyUserID, "system:"+name)
+					ctx = context.WithValue(ctx, ContextKeyRoles, []string{"system", "worker"})
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+			if j.keyStore != nil {
+				if rec, err := VerifyAPIKey(r.Context(), j.keyStore, apiKey); err == nil {
+					roles := rec.Scopes
+					if len(roles) == 0 {
+						roles = []string{"api"}
+					}
+					ctx := context.WithValue(r.Context(), ContextKeyTenantID, rec.TenantID)
+					ctx = context.WithValue(ctx, ContextKeyUserID, "apikey:"+rec.Name)
+					ctx = context.WithValue(ctx, ContextKeyRoles, roles)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
 			}
 		}
 

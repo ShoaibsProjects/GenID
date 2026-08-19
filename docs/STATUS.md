@@ -9,19 +9,22 @@
 
 ![Architecture Diagram](../media/architecture.svg)
 
-**Deployment flow:** Cloudflare Pages (Frontend) → HTTPS → Cloudflare Tunnel → `localhost:8080` → Go Backend (HTTP Router, Temporal Workflows, Connector Framework, Vault) → PostgreSQL 16, Neo4j 5, Redis 7, Kafka 7.6, Temporal 1.25, Qdrant 1.10, Grafana 11.1, OpenTelemetry Collector.
+**Deployment flow:** Cloudflare Pages (Frontend) → HTTPS → Cloudflare Tunnel → `localhost:8080` → Go Backend (HTTP Router, Temporal Workflows, Connector Framework, Vault) → PostgreSQL 16, Neo4j 5, Redis 7, **NATS JetStream 2.10** (event fabric — see [ADR-001](architecture/ADR-001-event-backbone.md)), Temporal 1.25, OpenFGA, Grafana 11.1, OpenTelemetry Collector.
+
+> **Event backbone:** NATS JetStream is the internal hub. Kafka/Qdrant are **not** part of the stack (Qdrant replaced by Neo4j 5 native vector search). External brokers attach only as edge adapters.
 
 ##  What's Running
 
 | Component | Status | Port |
 |-----------|--------|------|
 | Go Backend (identity-service) | ✅ Running | `:8080` |
+| Event Processor (risk consumer) | ✅ Docker | — |
 | PostgreSQL 16 | ✅ Docker | `:5432` |
-| Neo4j 5 Enterprise | ✅ Docker | `:7474` `:7687` |
+| Neo4j 5 Community | ✅ Docker | `:7474` `:7687` |
 | Redis 7 | ✅ Docker | `:6379` |
-| Kafka 7.6.1 | ✅ Docker | `:9092` |
+| NATS JetStream 2.10 | ✅ Docker | `:4222` |
+| OpenFGA | ✅ Docker | `:8081` |
 | Temporal Server 1.25 | ✅ Docker | `:7233` |
-| Qdrant v1.10.1 | ✅ Docker | `:6333` |
 | Grafana 11.1 | ✅ Docker | `:3000` |
 | OpenTelemetry Collector | ✅ Docker | `:4317` |
 | Cloudflare Quick Tunnel | ✅ Running | — |

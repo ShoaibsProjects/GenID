@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { fetchAgents, getAuthToken, Agent } from "@/lib/api"
+import { fetchAgents, Agent, authFetch } from "@/lib/api"
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -60,9 +60,7 @@ export default function AgentsPage() {
     setKilling(agentId)
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" }
-      const token = getAuthToken()
-      if (token) headers["Authorization"] = "Bearer " + token
-      const res = await fetch(`/api/v1/agents/${agentId}/kill-switch`, { method: "POST", headers })
+      const res = await authFetch(`/api/v1/agents/${agentId}/kill-switch`, { method: "POST", headers })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
         notify(`Kill switch failed: ${body.detail || body.error || res.status}`)
@@ -219,9 +217,7 @@ function RegisterAgentModal({ onClose, onCreated }: { onClose: () => void; onCre
     setErr("")
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" }
-      const token = getAuthToken()
-      if (token) headers["Authorization"] = "Bearer " + token
-      const res = await fetch("/api/v1/agents", {
+      const res = await authFetch("/api/v1/agents", {
         method: "POST",
         headers,
         body: JSON.stringify({ name: name.trim(), type, owner_name: owner.trim() || undefined }),

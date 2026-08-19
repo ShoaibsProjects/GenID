@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { checkAccess as apiCheckAccess, requestJITAccess } from "@/lib/api"
+import { useState, useEffect, useCallback } from "react"
+import { checkAccess as apiCheckAccess, requestJITAccess, getRequest } from "@/lib/api"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { Button } from "@/components/ui/Button"
-import { Card, CardBody, CardHeader } from "@/components/ui/Card"
-import { Input, Select } from "@/components/ui/Input"
-import { Tabs } from "@/components/ui/Tabs"
+import { Card, CardContent, CardHeader } from "@/components/ui/Card"
+import { Input } from "@/components/ui/Input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs"
 import { Badge } from "@/components/ui/Badge"
 
 const actions = ["read", "write", "admin", "delete"]
@@ -78,9 +79,15 @@ export default function AccessPage() {
       />
 
       <Card>
-        <CardBody>
-          <Tabs tabs={tabs} active={tab} onChange={setTab} />
-        </CardBody>
+        <CardContent>
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList>
+              {tabs.map((t) => (
+                <TabsTrigger key={t.id} value={t.id}>{t.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </CardContent>
       </Card>
 
       {tab === "check" && <CheckAccessTab />}
@@ -121,26 +128,45 @@ function CheckAccessTab() {
         <h2 className="text-sm font-semibold text-primary">Check Access</h2>
         <p className="text-xs text-secondary mt-0.5">Evaluate whether an identity has access to a resource</p>
       </CardHeader>
-      <CardBody>
+      <CardContent>
         <div className="grid grid-cols-3 gap-4 mb-4">
-          <Input label="Identity ID" placeholder="e.g. user-001" value={identityId} onChange={(e) => setIdentityId(e.target.value)} />
-          <Input label="Resource ID" placeholder="e.g. s3-bucket-prod" value={resourceId} onChange={(e) => setResourceId(e.target.value)} />
-          <Select label="Action" value={action} onChange={(e) => setAction(e.target.value)} options={actions.map(a => ({ value: a, label: a.charAt(0).toUpperCase() + a.slice(1) }))} />
+          <div>
+            <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-2">Identity ID</label>
+            <Input placeholder="e.g. user-001" value={identityId} onChange={(e) => setIdentityId(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-2">Resource ID</label>
+            <Input placeholder="e.g. s3-bucket-prod" value={resourceId} onChange={(e) => setResourceId(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-2">Action</label>
+            <Select value={action} onValueChange={setAction}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {actions.map((a) => (
+                  <SelectItem key={a} value={a}>{a.charAt(0).toUpperCase() + a.slice(1)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <Button variant="primary" size="sm" onClick={check} loading={loading} icon={<ShieldIcon />}>
-          Check
+        <Button variant="default" size="sm" onClick={check} disabled={loading}>
+          <ShieldIcon />
+          {loading ? "Checking..." : "Check"}
         </Button>
 
         {result && (
           <div className="mt-4 p-4 rounded border border-border bg-white/[0.02]">
             <div className="flex items-center gap-2 mb-2">
-              <Badge variant={result.allowed ? "success" : "danger"}>{result.allowed ? "ALLOWED" : "DENIED"}</Badge>
+              <Badge className={result.allowed ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" : "border-red-500/40 bg-red-500/10 text-red-400"}>
+                {result.allowed ? "ALLOWED" : "DENIED"}
+              </Badge>
               {result.latency_ms && <span className="text-xs text-muted">{result.latency_ms}ms</span>}
             </div>
             <pre className="text-xs text-secondary font-mono whitespace-pre-wrap">{JSON.stringify(result, null, 2)}</pre>
           </div>
         )}
-      </CardBody>
+      </CardContent>
     </Card>
   )
 }
@@ -157,6 +183,25 @@ function JITAccessTab() {
   const [result, setResult] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [liveStatus, setLiveStatus] = useState("")
+  const [liveDetail, setLiveDetail] = useState<any>(null)
+
+  const poll = useCallback(async (workflowId: string) => {
+    try {
+      const res = await getRequest(workflowId)
+      const req = res?.request
+      if (!req) return
+      setLiveStatus(req.status)
+      setLiveDetail(req)
+    } catch { /* backend offline — keep last known state */ }
+  }, [])
+
+  useEffect(() => {
+    if (!result?.workflow_id) return
+    setLiveStatus(result.status || "pending")
+    const id = setInterval(() => poll(result.workflow_id), 5000)
+    return () => clearInterval(id)
+  }, [result?.workflow_id, poll, result?.status])
 
   async function submit() {
     setError("")
@@ -200,14 +245,43 @@ function JITAccessTab() {
               Request time-bounded, policy-evaluated access to a resource
             </p>
           </CardHeader>
-          <CardBody>
+          <CardContent>
             {result ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <CheckIcon />
                   <span className="text-sm font-semibold text-emerald-400">Access Request Submitted</span>
-                  <Badge variant="success">{result.status}</Badge>
+                  <Badge className={
+                    liveStatus === "approved" || liveStatus === "active"
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                      : liveStatus === "denied" || liveStatus === "rejected"
+                        ? "border-red-500/40 bg-red-500/10 text-red-400"
+                        : "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                  }>
+                    {liveStatus || "pending"}
+                  </Badge>
                 </div>
+
+                {(liveStatus === "pending" || liveStatus === "active" || liveStatus === "") && (
+                  <div className="flex items-center gap-2 text-xs text-muted">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    Polling workflow status every 5s...
+                  </div>
+                )}
+
+                {liveDetail?.expires_at && (liveStatus === "approved" || liveStatus === "active") && (
+                  <div className="p-3 rounded border border-emerald-500/40 bg-emerald-500/10 flex items-center justify-between">
+                    <span className="text-xs text-secondary uppercase tracking-wider">Auto-revoke</span>
+                    <span className="text-xs font-mono text-emerald-400">
+                      {new Date(liveDetail.expires_at).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                {liveDetail?.failure_reason && (
+                  <div className="p-3 rounded border border-red-900/50 bg-red-900/10">
+                    <p className="text-xs text-red-400">{liveDetail.failure_reason}</p>
+                  </div>
+                )}
 
                 <div className="p-4 rounded border border-border bg-white/[0.02] space-y-3">
                   <div className="flex items-center justify-between">
@@ -243,34 +317,33 @@ function JITAccessTab() {
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Identity ID *"
-                    placeholder="e.g. user-001"
-                    value={identityId}
-                    onChange={(e) => setIdentityId(e.target.value)}
-                  />
-                  <Input
-                    label="Resource ID *"
-                    placeholder="e.g. s3-bucket-prod"
-                    value={resourceId}
-                    onChange={(e) => setResourceId(e.target.value)}
-                  />
+                  <div>
+                    <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-2">Identity ID *</label>
+                    <Input placeholder="e.g. user-001" value={identityId} onChange={(e) => setIdentityId(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-2">Resource ID *</label>
+                    <Input placeholder="e.g. s3-bucket-prod" value={resourceId} onChange={(e) => setResourceId(e.target.value)} />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Resource Type"
-                    placeholder="e.g. s3_bucket, database, api"
-                    value={resourceType}
-                    onChange={(e) => setResourceType(e.target.value)}
-                    hint="Optional"
-                  />
-                  <Select
-                    label="Action"
-                    value={action}
-                    onChange={(e) => setAction(e.target.value)}
-                    options={actions.map(a => ({ value: a, label: a.charAt(0).toUpperCase() + a.slice(1) }))}
-                  />
+                  <div>
+                    <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-2">Resource Type</label>
+                    <Input placeholder="e.g. s3_bucket, database, api" value={resourceType} onChange={(e) => setResourceType(e.target.value)} />
+                    <p className="text-xs text-muted mt-1">Optional</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-secondary uppercase tracking-wider block mb-2">Action</label>
+                    <Select value={action} onValueChange={setAction}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {actions.map((a) => (
+                          <SelectItem key={a} value={a}>{a.charAt(0).toUpperCase() + a.slice(1)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div>
@@ -314,8 +387,9 @@ function JITAccessTab() {
                 )}
 
                 <div className="flex items-center gap-3 pt-2">
-                  <Button variant="primary" size="sm" onClick={submit} loading={loading} icon={<ZapIcon />}>
-                    Request Access
+                  <Button variant="default" size="sm" onClick={submit} disabled={loading}>
+                    <ZapIcon />
+                    {loading ? "Submitting..." : "Request Access"}
                   </Button>
                   <span className="text-xs text-muted">
                     Policy-checked · Time-bounded · Audited
@@ -323,13 +397,13 @@ function JITAccessTab() {
                 </div>
               </div>
             )}
-          </CardBody>
+          </CardContent>
         </Card>
       </div>
 
       <div className="col-span-2 space-y-4">
-        <Card variant="accent">
-          <CardBody>
+        <Card className="border-accent/40 bg-accent/[0.03]">
+          <CardContent>
             <h3 className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">How JIT Works</h3>
             <ol className="space-y-2">
               {[
@@ -349,11 +423,11 @@ function JITAccessTab() {
                 </li>
               ))}
             </ol>
-          </CardBody>
+          </CardContent>
         </Card>
 
         <Card>
-          <CardBody>
+          <CardContent>
             <h3 className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">Workflow Phases</h3>
             <div className="space-y-1.5">
               {[
@@ -368,7 +442,7 @@ function JITAccessTab() {
                 </div>
               ))}
             </div>
-          </CardBody>
+          </CardContent>
         </Card>
       </div>
     </div>

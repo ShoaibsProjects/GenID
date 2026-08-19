@@ -41,6 +41,10 @@ export function getApiUrl(): string {
 const TOKEN_KEY = "genid_access_token"
 const USER_KEY  = "genid_user_email"
 
+// Dev login used for JWT auto-recovery on 401 (stale signing key).
+const DEV_LOGIN_USER = "admin@genid.io"
+const DEV_LOGIN_PASS = "dev-login"
+
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null
   return localStorage.getItem(TOKEN_KEY)
@@ -65,6 +69,26 @@ export function getStoredUserEmail(): string | null {
 
 export function isLoggedIn(): boolean {
   return !!getAuthToken()
+}
+
+// ─── Tenant Management ─────────────────────────────────────
+const TENANT_KEY = "genid_tenant"
+const TENANT_MAP: Record<string, string> = {
+  default: "00000000-0000-0000-0000-000000000001",
+  acme:    "11111111-1111-1111-1111-111111111111",
+  globex:  "22222222-2222-2222-2222-222222222222",
+  umbrella:"33333333-3333-3333-3333-333333333333",
+}
+
+export function getTenantId(): string {
+  if (typeof window === "undefined") return TENANT_MAP.default
+  const slug = localStorage.getItem(TENANT_KEY) || "default"
+  return TENANT_MAP[slug] || TENANT_MAP.default
+}
+
+export function getTenantSlug(): string {
+  if (typeof window === "undefined") return "default"
+  return localStorage.getItem(TENANT_KEY) || "default"
 }
 
 // Login via the dev login endpoint. Returns true on success.
@@ -92,13 +116,33 @@ interface RequestOptions {
 
 // authFetch is a drop-in replacement for fetch() that attaches the JWT
 // to same-origin API calls. Use for all /api/*, /scim/*, /graphql calls.
+// On 401 (stale/rotated JWT) it clears the token, re-logins once, and retries.
 export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  const token = getAuthToken()
+  let token = getAuthToken()
   const headers = new Headers(init.headers || {})
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`)
   }
-  return fetch(input, { ...init, headers })
+  const tenantId = getTenantId()
+  if (tenantId && !headers.has("X-Tenant-ID")) {
+    headers.set("X-Tenant-ID", tenantId)
+  }
+  let res = await fetch(input, { ...init, headers })
+
+  // Auto-recover from stale JWT (e.g. signing key rotated on deploy):
+  // clear + re-login + retry once. Skip the login endpoint itself.
+  if (res.status === 401 && token && !input.includes("/api/v1/dev/login")) {
+    clearAuthToken()
+    const fresh = await devLogin(DEV_LOGIN_USER, DEV_LOGIN_PASS)
+    if (fresh) {
+      const retryHeaders = new Headers(init.headers || {})
+      retryHeaders.set("Authorization", `Bearer ${fresh.token}`)
+      const t = getTenantId()
+      if (t && !retryHeaders.has("X-Tenant-ID")) retryHeaders.set("X-Tenant-ID", t)
+      res = await fetch(input, { ...init, headers: retryHeaders })
+    }
+  }
+  return res
 }
 
 // ─── Audit Chain Verification ────────────────────────────
@@ -119,22 +163,18 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
   const { method = "GET", body, headers = {} } = options
   const base = getApiBase()
 
-  // Auto-attach Authorization header if token present
-  const authHeaders: Record<string, string> = {}
-  const token = getAuthToken()
-  if (token) {
-    authHeaders["Authorization"] = `Bearer ${token}`
-  }
+  let token = getAuthToken()
+  let res = await rawFetch(base, path, method, body, token, headers)
 
-  const res = await fetch(`${base}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders,
-      ...headers,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  // Auto-recover from stale JWT: clear + re-login + retry once
+  if (res.status === 401 && token && path !== "/api/v1/dev/login") {
+    clearAuthToken()
+    const fresh = await devLogin(DEV_LOGIN_USER, DEV_LOGIN_PASS)
+    if (fresh) {
+      token = fresh.token
+      res = await rawFetch(base, path, method, body, token, headers)
+    }
+  }
 
   if (!res.ok) {
     const text = await res.text()
@@ -142,6 +182,26 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
   }
 
   return res.json()
+}
+
+async function rawFetch(
+  base: string,
+  path: string,
+  method: string,
+  body: any,
+  token: string | null,
+  headers: Record<string, string>
+): Promise<Response> {
+  const authHeaders: Record<string, string> = {}
+  if (token) authHeaders["Authorization"] = `Bearer ${token}`
+  // Inject tenant header for RLS filtering
+  const tenantId = getTenantId()
+  if (tenantId) authHeaders["X-Tenant-ID"] = tenantId
+  return fetch(`${base}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", ...authHeaders, ...headers },
+    body: body ? JSON.stringify(body) : undefined,
+  })
 }
 
 // ─── Identities ───────────────────────────────────────────
@@ -311,6 +371,13 @@ export function syncConnector(id: string): Promise<any> {
   return apiRequest<any>(`/api/v1/connectors/${id}/sync`, { method: "POST" })
 }
 
+// syncHRConnector runs an HR-source sync that diffs the connector roster
+// against the canonical identities table: creates new, updates moved,
+// terminates removed, reinstates re-added.
+export function syncHRConnector(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/connectors/${id}/sync-hr`, { method: "POST", body: {} })
+}
+
 export function fetchConnectorUsers(id: string): Promise<any> {
   return apiRequest<any>(`/api/v1/connectors/${id}/users`)
 }
@@ -321,6 +388,14 @@ export function fetchConnectorIdentities(id: string): Promise<any> {
 
 export function deleteConnector(id: string): Promise<any> {
   return apiRequest<any>(`/api/v1/connectors/${id}`, { method: "DELETE" })
+}
+
+export function getConnector(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/connectors/${id}`)
+}
+
+export function testConnector(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/connectors/${id}/test`, { method: "POST" })
 }
 
 // ─── Connector: Groups / Entitlements / Resources / Full Sync ──
@@ -410,6 +485,246 @@ export function requestJITAccess(data: {
   return apiRequest<any>("/api/v1/access/jit", { method: "POST", body: data })
 }
 
+// ─── NHI Registry / JIT Passports ──────────────────────────────
+
+export interface NHIRecord {
+  id: string
+  name: string
+  type: string
+  status: string
+  agent_card_id?: string
+  owner_id?: string
+  team_id?: string
+  framework?: string
+  parent_agent_id?: string
+  is_governed?: boolean
+  risk_score?: number
+  deployment_environment?: string
+  created_at?: string
+}
+
+export interface NHIPassport {
+  id: string
+  scope: string
+  resource_id?: string
+  grant_id?: string
+  status: string
+  issued_at: string
+  expires_at: string
+  revoked_at?: string | null
+  consumed_at?: string | null
+  parent_passport_id?: string
+}
+
+export function fetchNHI(): Promise<{ nhi: NHIRecord[]; total: number }> {
+  return apiRequest<{ nhi: NHIRecord[]; total: number }>("/api/v1/nhi")
+}
+
+export function fetchNHIRecord(id: string): Promise<any> {
+  return apiRequest<any>(`/api/v1/nhi/${id}`)
+}
+
+export function registerNHI(data: {
+  name: string
+  type?: string
+  protocols?: string[]
+  owner_id?: string
+  team_id?: string
+  deployment_environment?: string
+  framework?: string
+  capabilities?: string[]
+  parent_agent_id?: string
+  expires_at?: string
+  attributes?: Record<string, any>
+}): Promise<any> {
+  return apiRequest<any>("/api/v1/nhi", { method: "POST", body: data })
+}
+
+export function fetchPassports(nhiId: string): Promise<{ passports: NHIPassport[]; total: number }> {
+  return apiRequest<any>(`/api/v1/nhi/${nhiId}/passports`)
+}
+
+export function issuePassport(nhiId: string, data: {
+  scope?: string
+  resource_id?: string
+  grant_id?: string
+  ttl_minutes?: number
+  issued_by?: string
+}): Promise<{ passport_id: string; token: string; nhi_id: string; scope: string; status: string; issued_at: string; expires_at: string }> {
+  return apiRequest<any>(`/api/v1/nhi/${nhiId}/passports`, { method: "POST", body: data })
+}
+
+export function revokePassports(nhiId: string): Promise<{ revoked: number }> {
+  return apiRequest<any>(`/api/v1/nhi/${nhiId}/passports/revoke`, { method: "POST" })
+}
+
+export function consumePassport(nhiId: string, pid: string): Promise<{ status: string }> {
+  return apiRequest<any>(`/api/v1/nhi/${nhiId}/passports/${pid}/consume`, { method: "POST" })
+}
+
+// ─── Events (real-time) ─────────────────────────────────────────
+
+export interface PlatformEvent {
+  id?: string
+  type: string
+  summary: string
+  timestamp?: string
+  [key: string]: any
+}
+
+export function listEvents(params?: { limit?: number }): Promise<{ events: PlatformEvent[]; total: number }> {
+  const q = new URLSearchParams()
+  if (params?.limit) q.set("limit", String(params.limit))
+  const qs = q.toString() ? `?${q.toString()}` : ""
+  return apiRequest<{ events: PlatformEvent[]; total: number }>(`/api/v1/events${qs}`).catch(() => ({ events: [], total: 0 }))
+}
+
+// ─── Firecall (Break-Glass) ─────────────────────────────────────
+export function requestFirecallAccess(data: {
+  identity_id: string;
+  resource_id: string;
+  resource_type?: string;
+  action?: string;
+  reason: string;
+  justification: string;
+  duration_mins: number;
+  incident_id?: string;
+  idempotency_key?: string;
+}): Promise<any> {
+  const headers: Record<string, string> = {}
+  if (data.idempotency_key) headers["Idempotency-Key"] = data.idempotency_key
+  return apiRequest<any>("/api/v1/access/firecall", {
+    method: "POST",
+    body: {
+      identity_id: data.identity_id,
+      resource_id: data.resource_id,
+      resource_type: data.resource_type || "system",
+      action: data.action || "admin",
+      reason: data.reason,
+      justification: data.justification,
+      duration_mins: data.duration_mins,
+      incident_id: data.incident_id || "",
+    },
+    headers,
+  })
+}
+
+export function revokeJITSession(data: {
+  identity_id: string;
+  resource_id: string;
+  reason?: string;
+}): Promise<any> {
+  return apiRequest<any>("/api/v1/access/jit/revoke", { method: "POST", body: data })
+}
+
+// ─── Workflow Request Lifecycle ──────────────────────────────────
+
+export interface WorkflowRequest {
+  id: string
+  tenant_id: string
+  type: string
+  status: string
+  requester_id: string
+  target_id: string
+  payload: any
+  idempotency_key?: string
+  temporal_workflow_id?: string
+  created_at: string
+  updated_at: string
+  expires_at?: string
+  completed_at?: string
+  failure_reason?: string
+}
+
+export interface WorkflowAuditEntry {
+  id: number
+  request_id: string
+  step: string
+  actor: string
+  details: any
+  ts: string
+}
+
+export function listRequests(params?: {
+  status?: string
+  type?: string
+  limit?: number
+}): Promise<{ requests: WorkflowRequest[]; total: number }> {
+  const q = new URLSearchParams()
+  if (params?.status) q.set("status", params.status)
+  if (params?.type) q.set("type", params.type)
+  if (params?.limit) q.set("limit", String(params.limit))
+  const qs = q.toString() ? `?${q.toString()}` : ""
+  return apiRequest<{ requests: WorkflowRequest[]; total: number }>(`/api/v1/requests${qs}`)
+}
+
+export function getRequest(id: string): Promise<{
+  request: WorkflowRequest
+  approvals: any[]
+  audit: WorkflowAuditEntry[]
+}> {
+  return apiRequest<any>(`/api/v1/requests/${id}`)
+}
+
+// ─── Approval Routing (Phase 2.2) ─────────────────────────
+
+export interface Approval {
+  id: string
+  request_id: string
+  level: number
+  approver_id?: string
+  approver_email: string
+  approver_role: string
+  status: string
+  comment?: string
+  decided_at?: string
+  due_at?: string
+  created_at: string
+}
+
+export function listPendingApprovals(params?: {
+  approver_id?: string
+}): Promise<{ approvals: Approval[]; total: number }> {
+  const q = new URLSearchParams()
+  if (params?.approver_id) q.set("approver_id", params.approver_id)
+  const qs = q.toString() ? `?${q.toString()}` : ""
+  return apiRequest<{ approvals: Approval[]; total: number }>(`/api/v1/approvals/queue${qs}`)
+}
+
+export function decideApproval(approvalId: string, data: {
+  approver_id: string
+  approved: boolean
+  comment?: string
+}): Promise<any> {
+  return apiRequest<any>(`/api/v1/approvals/${approvalId}/decide`, { method: "POST", body: data })
+}
+
+// ─── Self-Service Catalog (Phase 2.4) ───────────────────────
+
+export interface CatalogRole {
+  id: string
+  tenant_id: string
+  name: string
+  description: any
+  role_type: string
+  approval_required: boolean
+  max_duration_hours: number | null
+}
+
+export function listRoleCatalog(): Promise<{ roles: CatalogRole[]; total: number }> {
+  return apiRequest<{ roles: CatalogRole[]; total: number }>("/api/v1/catalog/roles")
+}
+
+export function requestRoleAccess(data: {
+  identity_id: string
+  role_id: string
+  requested_by: string
+  reason: string
+  duration_hours?: number
+}): Promise<any> {
+  return apiRequest<any>("/api/v1/access/request-role", { method: "POST", body: data })
+}
+
 // ─── CAEP ────────────────────────────────────────────────
 
 export function fetchCAEPEvents(): Promise<any> {
@@ -472,6 +787,8 @@ async function gqlRequest<T>(
   if (token) {
     authHeaders["Authorization"] = `Bearer ${token}`
   }
+  const tenantId = getTenantId()
+  if (tenantId) authHeaders["X-Tenant-ID"] = tenantId
 
   const res = await fetch(`${base}${GQL_ENDPOINT}`, {
     method: "POST",

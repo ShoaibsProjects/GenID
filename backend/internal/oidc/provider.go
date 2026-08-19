@@ -9,8 +9,10 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"strings"
 	"sync"
@@ -32,19 +34,66 @@ type Provider struct {
 	idTokenTTL time.Duration
 }
 
-// NewProvider creates a new OIDC provider with generated RSA keys.
+// NewProvider creates a new OIDC provider, loading or generating RSA keys.
+// Keys are persisted in PostgreSQL (jwt_signing_keys) to survive restarts.
 func NewProvider(pgPool *pgxpool.Pool, issuer string) (*Provider, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, fmt.Errorf("oidc: key generation: %w", err)
+	ctx := context.Background()
+
+	// Ensure the signing key table exists (best-effort — DBA creates in prod).
+	_, _ = pgPool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS jwt_signing_keys (
+			kid         TEXT PRIMARY KEY,
+			private_pem BYTEA NOT NULL,
+			public_pem  BYTEA NOT NULL,
+			created_at  TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+
+	// Try to load the latest key from Postgres.
+	var privPEM, pubPEM []byte
+	var kid string
+	err := pgPool.QueryRow(ctx, `
+		SELECT kid, private_pem, public_pem FROM jwt_signing_keys ORDER BY created_at DESC LIMIT 1
+	`).Scan(&kid, &privPEM, &pubPEM)
+
+	var signingKey *rsa.PrivateKey
+
+	if err == nil && len(privPEM) > 0 {
+		// Loaded from Postgres.
+		block, _ := pem.Decode(privPEM)
+		if block != nil {
+			key, parseErr := x509.ParsePKCS1PrivateKey(block.Bytes)
+			if parseErr == nil {
+				signingKey = key
+			}
+		}
 	}
 
-	h := sha256.Sum256([]byte(time.Now().String()))
-	kid := fmt.Sprintf("genid-%x", h[:8])
+	if signingKey == nil {
+		// Generate a new key.
+		key, genErr := rsa.GenerateKey(rand.Reader, 2048)
+		if genErr != nil {
+			return nil, fmt.Errorf("oidc: key generation: %w", genErr)
+		}
+		signingKey = key
+
+		h := sha256.Sum256([]byte(time.Now().String()))
+		kid = fmt.Sprintf("genid-%x", h[:8])
+
+		// Persist to Postgres.
+		privDER := x509.MarshalPKCS1PrivateKey(key)
+		privBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: privDER})
+		pubDER, _ := x509.MarshalPKIXPublicKey(&key.PublicKey)
+		pubBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: pubDER})
+
+		_, _ = pgPool.Exec(ctx, `
+			INSERT INTO jwt_signing_keys (kid, private_pem, public_pem) VALUES ($1, $2, $3)
+		`, kid, privBytes, pubBytes)
+	}
 
 	return &Provider{
 		pgPool:     pgPool,
-		signingKey: key,
+		signingKey: signingKey,
 		keyID:      kid,
 		issuer:     issuer,
 		accessTTL:  5 * time.Minute,
