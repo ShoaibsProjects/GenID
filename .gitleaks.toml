@@ -1,11 +1,42 @@
 # ─── Gitleaks Configuration ────────────────────────────────
 # Excludes known false positives and test fixtures.
 
+[extend]
+  useDefault = true
+
 [allowlist]
   description = "Global allowlist"
   paths = [
     '''backend/\.env\.example$''',
     '''deploy/terraform/\.gitignore$''',
     '''\.gitleaks\.toml$''',
-    '''infrastructure/docker-compose\.yml$''',
+    '''infrastructure/\.env\.example$''',
+    '''frontend/\.env\.example$''',
+    # Documentation prose (false positives from natural language)
+    '''CONTRIBUTING\.md$''',
+    '''docs/GAP_ANALYSIS_AND_USECASES\.md$''',
+    # Historical build artifact (removed from tree; present in old commits)
+    '''graphify-out/''',
   ]
+  regexes = [
+    # Dev/test-only Neo4j credentials used in CI service containers and compose defaults
+    '''(?i)neo4j/observeid123''',
+    # Test fixture API key (backend/internal/middleware/middleware_test.go)
+    '''valid-key-123''',
+  ]
+
+# ─── Custom rules (regression guards) ──────────────────────
+# Gmail App Passwords — 4 groups of 4 lowercase letters assigned to an
+# SMTP/password key (e.g. SMTP_PASS: ryfu fdmn tnlv plbz).
+[[rules]]
+  id = "gmail-app-password"
+  description = "Gmail app password (16 chars in 4x4 groups)"
+  regex = '''(?i)(?:SMTP[_ -]?PASS|PASSWORD|password)\s*[:=]\s*["']?(?:[a-z]{4}\s){3}[a-z]{4}\b'''
+  keywords = ["smtp", "password", "pass"]
+
+# Generic SMTP credentials block — catches non-Gmail mail servers too.
+[[rules]]
+  id = "smtp-credentials-block"
+  description = "SMTP credentials set (user + password in env context)"
+  regex = '''(?i)SMTP_(?:USER|PASS)\s*[:=]\s*["']?[^\s"']+'''
+  keywords = ["smtp"]

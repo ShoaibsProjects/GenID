@@ -92,3 +92,6 @@ media/*.png
 
 # TypeScript incremental build info
 **/*.tsbuildinfo
+
+# Local SSH signing allowlist
+**/.githooks/allowed_signers

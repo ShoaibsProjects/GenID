@@ -1,4 +1,7 @@
-# version removed - obsolete
+# x-logging: &default-logging removed - obsolete
+# GenID local development stack.
+# Secrets come from infrastructure/.env (gitignored) or the environment.
+# Copy infrastructure/.env.example → infrastructure/.env and fill in values.
 
 x-logging: &default-logging
   driver: "json-file"
@@ -26,9 +29,9 @@ services:
     image: postgres:16-alpine
     container_name: genid-postgres
     environment:
-      POSTGRES_DB: observeid
-      POSTGRES_USER: observeid
-      POSTGRES_PASSWORD: observeid
+      POSTGRES_DB: ${POSTGRES_DB:-observeid}
+      POSTGRES_USER: ${POSTGRES_USER:-observeid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-observeid}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "127.0.0.1:5433:5432"
@@ -38,7 +41,7 @@ services:
     networks:
       - genid-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U observeid"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-observeid}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -49,7 +52,7 @@ services:
     image: neo4j:5-community
     container_name: genid-neo4j
     environment:
-      NEO4J_AUTH: neo4j/observeid123
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-observeid123}
       NEO4J_dbms_memory_pagecache_size: "512M"
       NEO4J_dbms_memory_heap_initial__size: "512M"
       NEO4J_dbms_memory_heap_max__size: "1G"
@@ -60,7 +63,7 @@ services:
       - "127.0.0.1:7687:7687"  # Bolt
     volumes:
       - neo4j-data:/data
-      - ./neo4j/init.cypher:/init.cypher
+      - ./neo4j/init.cypher:/docker-entrypoint-initdb.d/init.cypher
     networks:
       - genid-net
     healthcheck:
@@ -91,7 +94,7 @@ services:
   nats:
     image: nats:2.10-alpine
     container_name: genid-nats
-    command: ["-js"]
+    command: ["-js", "--http_port", "8222"]
     ports:
       - "127.0.0.1:4222:4222"
       - "127.0.0.1:8222:8222"
@@ -100,7 +103,7 @@ services:
     networks:
       - genid-net
     healthcheck:
-      test: ["CMD", "nats-server", "--signal", "ldm=nats"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -117,9 +120,9 @@ services:
       DB: postgres12
       DB_PORT: 5432
       POSTGRES_SEEDS: postgres
-      POSTGRES_USER: observeid
-      POSTGRES_PWD: observeid
-      POSTGRES_DB: observeid
+      POSTGRES_USER: ${POSTGRES_USER:-observeid}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-observeid}
+      POSTGRES_DB: ${POSTGRES_DB:-observeid}
       DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/config/dynamic.yaml
       LOG_LEVEL: "info"
     ports:
@@ -172,11 +175,12 @@ services:
       - "4318:4318"  # OTLP HTTP
     networks:
       - genid-net
+    # No healthcheck — distroless image has no shell for wget/curl
     logging: *default-logging
 
   # ─── Temporal Web UI ───────────────────────────────────────
   temporal-ui:
-    image: temporalio/ui:latest
+    image: temporalio/ui:1.25
     container_name: genid-temporal-ui
     depends_on:
       temporal:
@@ -195,8 +199,8 @@ services:
     image: grafana/grafana:11.1.0
     container_name: genid-grafana
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: observeid123
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-observeid123}
       GF_INSTALL_PLUGINS: grafana-piechart-panel
     ports:
       - "127.0.0.1:3000:3000"
@@ -204,11 +208,15 @@ services:
       - ../grafana:/etc/grafana/provisioning
     networks:
       - genid-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     logging: *default-logging
 
   # ─── Identity Service (Go) ─────────────────────────────────
   # Build context is the repo root (one level up from infrastructure/).
-  # For local dev you can still use `make backend` instead.
   identity-service:
     build:
       context: ..
@@ -231,23 +239,73 @@ services:
 # non-secret defaults that boot the stack locally. In production they MUST be overridden with
 # `openssl rand -hex 32` values injected via environment / Docker secrets — see DEPLOYMENT.md §3.
     environment:
-      DATABASE_URL: postgresql://observeid:observeid@postgres:5432/observeid?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:-postgresql://observeid:observeid@postgres:5432/observeid?sslmode=disable}
       NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: observeid123
-      REDIS_ADDR: redis:6379
-      TEMPORAL_HOST: temporal:7233
-      TEMPORAL_NAMESPACE: critical-offboarding
-      NATS_URL: nats://nats:4222
-      JWKS_URL: http://localhost:8080/.well-known/jwks.json
-      API_KEYS: admin-key:admin-secret-key-please-change   # dev-only; rotated in prod
-      MASTER_KEY: dev-only-master-key-32-bytes-long-x      # dev-only; rotated in prod
-      JWT_SIGNING_KEY: dev-only-hs256-signing-key-replaced-by-rsa  # dev-only; rotated in prod
-      DEV_LOGIN_ENABLED: "true"
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-observeid123}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      TEMPORAL_HOST: ${TEMPORAL_HOST:-temporal:7233}
+      TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-critical-offboarding}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      JWKS_URL: ${JWKS_URL:-http://localhost:8080/.well-known/jwks.json}
+      API_KEYS: ${API_KEYS:-admin-key:admin-secret-key-please-change}
+      MASTER_KEY: ${MASTER_KEY:-dev-only-master-key-32-bytes-long-x}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-dev-only-hs256-signing-key-replaced-by-rsa}
+      DEV_LOGIN_ENABLED: ${DEV_LOGIN_ENABLED:-true}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:3001}
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY:-production-vault-master-key-32-chars-minimum-length-required}
+      VAULT_PATH: ${VAULT_PATH:-/data/genid-vault.json}
+      VAULT_BACKEND: ${VAULT_BACKEND:-postgres}
     ports:
       - "127.0.0.1:8080:8080"
     networks:
       - genid-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+    restart: unless-stopped
+
+  # ─── Event Processor (Go) ─────────────────────────────────
+  # Consumes identity events from NATS and updates risk scores in Neo4j
+  event-processor:
+    build:
+      context: ..
+      dockerfile: docker/event-processor.Dockerfile
+    container_name: genid-event-processor
+    depends_on:
+      nats:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    environment:
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-observeid123}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://localhost:3001}
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY:-production-vault-master-key-32-chars-minimum-length-required}
+      VAULT_PATH: ${VAULT_PATH:-/data/genid-vault.json}
+      VAULT_BACKEND: ${VAULT_BACKEND:-postgres}
+    networks:
+      - genid-net
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep event-processor || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     logging: *default-logging
     restart: unless-stopped
 
@@ -258,7 +316,8 @@ services:
       dockerfile: docker/frontend.Dockerfile
     container_name: genid-frontend
     depends_on:
-      - identity-service
+      identity-service:
+        condition: service_healthy
     ports:
       - "127.0.0.1:3001:3000"
     networks:
