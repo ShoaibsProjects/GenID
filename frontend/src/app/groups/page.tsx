@@ -134,27 +134,27 @@ export default function GroupsPage() {
   }
 
   // Search entitlements
-  async function searchEntitlements() {
+  const searchEntitlements = useCallback(async () => {
     try {
       const params = new URLSearchParams({ search: entSearch, limit: "30" })
       const res = await authFetch("/api/v1/entitlements?" + params.toString())
       const d = await res.json()
       setEntResults(d.entitlements || [])
     } catch { setEntResults([]) }
-  }
-  useEffect(() => { if (showAttachEnt && entSearch) { searchEntitlements() } }, [entSearch, showAttachEnt])
+  }, [entSearch])
+  useEffect(() => { if (showAttachEnt && entSearch) { searchEntitlements() } }, [entSearch, showAttachEnt, searchEntitlements])
 
   // Search identities for assignment
-  async function searchIdentities() {
+  const searchIdentities = useCallback(async () => {
     try {
       const params = new URLSearchParams({ search: assignSearch, limit: "20" })
       const res = await authFetch("/api/v1/identities?" + params.toString())
       const d = await res.json()
       setAssignResults(d.identities || [])
     } catch { setAssignResults([]) }
-  }
+  }, [assignSearch])
 
-  useEffect(() => { if (showAssign && assignSearch) { searchIdentities() } }, [assignSearch, showAssign])
+  useEffect(() => { if (showAssign && assignSearch) { searchIdentities() } }, [assignSearch, showAssign, searchIdentities])
 
   const filtered = roles
 

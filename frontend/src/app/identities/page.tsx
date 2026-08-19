@@ -121,7 +121,7 @@ export default function IdentitiesPage() {
   const hasFilters = !!(statusFilter || typeFilter || deptFilter || sourceFilter || search)
 
   // ── Build params & fetch ──────────────────────────────
-  function buildParams(overridePage?: number) {
+  const buildParams = useCallback((overridePage?: number) => {
     const p = new URLSearchParams()
     p.set("limit", String(pageSize))
     p.set("offset", String((overridePage ?? page) * pageSize))
@@ -133,7 +133,7 @@ export default function IdentitiesPage() {
     p.set("sort_by", sortBy)
     p.set("sort_dir", sortDir)
     return p.toString()
-  }
+  }, [pageSize, page, search, statusFilter, typeFilter, deptFilter, sourceFilter, sortBy, sortDir])
 
   const fetchIdentities = useCallback(async () => {
     setLoading(true)
@@ -148,7 +148,7 @@ export default function IdentitiesPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, typeFilter, deptFilter, sourceFilter, sortBy, sortDir, pageSize, page])
+  }, [buildParams])
 
   useEffect(() => { fetchIdentities() }, [fetchIdentities])
 

@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { authFetch } from "@/lib/api"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card"
 import { Badge } from "@/components/ui/Badge"
@@ -64,6 +64,13 @@ const mockIdentities = [
   { id: "8", email: "henry@company.com", display_name: "Henry Chen", department: "Security", risk_score: 680, risk_band: "high", last_event: "auth.failed_login", last_event_at: "2024-01-21T13:10:00Z", status: "active" },
 ]
 
+function getRiskBand(score: number): string {
+  if (score >= 800) return "critical"
+  if (score >= 600) return "high"
+  if (score >= 300) return "elevated"
+  return "low"
+}
+
 export default function RiskDashboardPage() {
   const [summary, setSummary] = useState<RiskSummary>({ critical: 0, high: 0, elevated: 0, low: 0, total: 0 })
   const [identities, setIdentities] = useState<RiskIdentity[]>([])
@@ -74,11 +81,7 @@ export default function RiskDashboardPage() {
   const [sortBy, setSortBy] = useState<"risk_score" | "last_event_at" | "email">("risk_score")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       const [summaryRes, identitiesRes] = await Promise.all([
@@ -104,14 +107,11 @@ export default function RiskDashboardPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const getRiskBand = (score: number): string => {
-    if (score >= 800) return "critical"
-    if (score >= 600) return "high"
-    if (score >= 300) return "elevated"
-    return "low"
-  }
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const filteredIdentities = identities
     .filter(i => {

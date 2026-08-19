@@ -235,7 +235,7 @@ export default function AuditPage() {
   const [showTimeMenu, setShowTimeMenu] = useState(false)
 
   // Build query params
-  function buildParams(pageOverride?: number, limitOverride?: number) {
+  const buildParams = useCallback((pageOverride?: number, limitOverride?: number) => {
     const params = new URLSearchParams()
     const limit = limitOverride ?? pageSize
     const offset = (pageOverride ?? page) * limit
@@ -256,7 +256,7 @@ export default function AuditPage() {
     }
 
     return params.toString()
-  }
+  }, [pageSize, page, filterLevel, filterMethod, filterStatus, filterPath, filterSourceIP, filterTimePreset])
 
   // Fetch
   const fetchLogs = useCallback(async () => {
@@ -274,7 +274,7 @@ export default function AuditPage() {
     }
     // Chain integrity check (non-blocking — pill updates independently)
     fetchAuditVerify().then(setIntegrity).catch(() => {})
-  }, [filterLevel, filterMethod, filterStatus, filterPath, filterSourceIP, filterTimePreset, pageSize, page])
+  }, [buildParams])
 
   // Polling
   useEffect(() => {
