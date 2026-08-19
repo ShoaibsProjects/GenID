@@ -95,3 +95,7 @@ media/*.png
 
 # Local SSH signing allowlist
 **/.githooks/allowed_signers
+
+# Build binaries (except pkg/)
+**/event-processor
+backend/test_email.go

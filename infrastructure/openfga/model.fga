@@ -1,0 +1,55 @@
+# OpenFGA model for GenID authorization
+# Schema version 1.1
+# Types: user, role, resource, approval
+# Relations:
+#   user: member (org), has_role (role), can_access (resource), can_approve (approval)
+#   role: member (user), grants (entitlement)
+#   resource: viewer (user), editor (user), admin (user)
+#   approval: approver (user), delegate (user)
+
+model
+  schema 1.1
+
+type user
+  relations
+    define member: [user]  # org membership (for multi-tenancy)
+    define has_role: [role]  # user has a role
+    define can_access: [resource]  # user can access resource (computed)
+    define can_approve: [approval]  # user can approve this request
+  metadata
+    relations
+      can_access: { directly_related_user_types: [user], ttls: [] }
+      can_approve: { directly_related_user_types: [user], ttls: [] }
+
+type role
+  relations
+    define member: [user]  # users who have this role
+    define grants: [resource]  # resources this role grants access to
+    define parent: [role]  # role hierarchy
+  metadata
+    relations
+      member: { directly_related_user_types: [user], ttls: [] }
+      grants: { directly_related_user_types: [resource], ttls: [] }
+
+type resource
+  relations
+    define viewer: [user, role#member]
+    define editor: [user, role#member]
+    define admin: [user, role#member]
+    define parent: [resource]  # resource hierarchy
+  metadata
+    relations
+      viewer: { directly_related_user_types: [user], ttls: [] }
+      editor: { directly_related_user_types: [user], ttls: [] }
+      admin: { directly_related_user_types: [user], ttls: [] }
+
+type approval
+  relations
+    define approver: [user]
+    define delegate: [user]  # delegation chain
+    define target: [user]  # identity requesting access
+    define resource: [resource]  # resource being requested
+  metadata
+    relations
+      approver: { directly_related_user_types: [user], ttls: [] }
+      delegate: { directly_related_user_types: [user], ttls: [] }
