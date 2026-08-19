@@ -98,4 +98,5 @@ media/*.png
 
 # Build binaries (except pkg/)
 **/event-processor
+!**/event-processor/
 backend/test_email.go
