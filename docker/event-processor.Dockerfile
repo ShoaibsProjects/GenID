@@ -1,8 +1,7 @@
 # syntax=docker/dockerfile:1
-# ─── GenID Reimagined Identity Service (Go) ───────────────
+# ─── GenID Event Processor (Go) ────────────────────────────
 # Multi-stage: build with pinned Go (CGO off, stripped), run as non-root
-# on minimal Alpine. Generated protobuf code is committed under
-# backend/pkg/proto, so no protoc toolchain is needed in the build.
+# on minimal Alpine.
 
 FROM golang:1.26.6-alpine AS builder
 
@@ -15,7 +14,7 @@ RUN go mod download
 # Build
 COPY backend/ .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
-    -o /app/identity-service ./cmd/identity-service
+    -o /app/event-processor ./cmd/event-processor
 
 # ─── Runtime ──────────────────────────────────────────────
 FROM alpine:3.21
@@ -26,17 +25,15 @@ RUN apk add --no-cache ca-certificates tzdata \
 USER genid
 WORKDIR /app
 
-COPY --from=builder /app/identity-service .
+COPY --from=builder /app/event-processor .
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.source="https://github.com/ShoaibsProjects/GenID" \
-      org.opencontainers.image.title="genid-identity-service" \
-      org.opencontainers.image.description="GenID reimagined identity service" \
+      org.opencontainers.image.title="genid-event-processor" \
+      org.opencontainers.image.description="GenID event processor" \
       org.opencontainers.image.version="${VERSION}"
 
-HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
-    CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 \
+    CMD pgrep event-processor || exit 1
 
-EXPOSE 8080 8081 9090
-
-ENTRYPOINT ["/app/identity-service"]
+ENTRYPOINT ["/app/event-processor"]

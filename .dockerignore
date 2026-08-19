@@ -1,0 +1,39 @@
+# Build context for compose is the repo root; keep the payload minimal.
+.git
+.github
+.gitattributes
+.gitignore
+.githooks
+.gitleaks.toml
+.graphifyignore
+.agents
+.opencode
+
+**/node_modules
+**/.next
+**/out
+**/.DS_Store
+**/*.log
+
+# Local build artifacts (large binaries)
+build
+
+# Unused in containers
+docs
+media
+policies
+samples
+scripts
+discussionswithTeam
+v2-archive
+workers
+grafana
+deploy
+fly.toml
+test-dockerfile
+test-dockerfile2
+
+# Secrets / env
+**/.env
+**/.env.*
+!**/.env.example
