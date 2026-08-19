@@ -2351,7 +2351,7 @@ services:
   neo4j:
     image: neo4j:5.20-community
     environment:
-      NEO4J_AUTH: neo4j/genid123
+      NEO4J_AUTH: neo4j/change-me
       NEO4J_PLUGINS: '["apoc", "gds"]'
     volumes:
       - neo4j_data:/data

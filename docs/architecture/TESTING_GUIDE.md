@@ -24,7 +24,7 @@ Expected: `{"status":"ok","service":"genid-identity"}`
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/events/ingest \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: admin-secret-key-please-change" \
+  -H "X-API-Key: <your-api-key>" \
   -d '{
     "event_type": "auth.failed_login",
     "identity_id": "test-identity-001",
@@ -207,7 +207,7 @@ Dashboard
 ### Event Ingestion
 ```
 POST /api/v1/events/ingest
-Headers: X-API-Key: admin-secret-key-please-change
+Headers: X-API-Key: <your-api-key>
 Body: {"event_type": "auth.failed_login", "identity_id": "...", "source": "azure_ad", "severity": "medium"}
 ```
 
