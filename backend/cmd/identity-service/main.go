@@ -800,6 +800,23 @@ func main() {
 	sources.NewHandler(sourceRegistry, natsBus).RegisterRoutes(api)
 
 	// Risk Intelligence API
+	api.HandleFunc("/risk/summary", func(w http.ResponseWriter, r *http.Request) {
+		dashboard := risk.NewDashboard(h.Neo4j())
+		data, err := dashboard.GetDashboard(r.Context())
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]int64{
+			"critical": data.CriticalCount,
+			"high":     data.HighCount,
+			"elevated": data.ElevatedCount,
+			"low":      data.LowCount + data.MinimalCount,
+			"total":    data.TotalIdentities,
+		})
+	}).Methods("GET")
+
 	api.HandleFunc("/risk/dashboard", func(w http.ResponseWriter, r *http.Request) {
 		dashboard := risk.NewDashboard(h.Neo4j())
 		data, err := dashboard.GetDashboard(r.Context())

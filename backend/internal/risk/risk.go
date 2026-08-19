@@ -227,39 +227,22 @@ func persistRiskScore(
 	score float64,
 	factors []string,
 ) error {
-	if pgPool != nil {
-		tx, err := pgPool.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("persist identity risk begin: %w", err)
-		}
-		defer tx.Rollback(ctx)
-
-		if tenantID != "" {
-			if _, err := tx.Exec(ctx, `SELECT set_config('app.current_tenant', $1, true)`, tenantID); err != nil {
-				return fmt.Errorf("persist identity risk set tenant: %w", err)
-			}
-		}
-
-		_, err = tx.Exec(ctx, `
-			UPDATE identities
-			SET risk_score = $1, risk_factors = $2, updated_at = NOW()
-			WHERE id = $3 AND tenant_id = $4
-		`, score, factors, identityID, tenantID)
-		if err != nil {
-			return fmt.Errorf("persist identity risk: %w", err)
-		}
-
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("persist identity risk commit: %w", err)
-		}
-	}
+	// PG risk_score is intentionally left untouched: the event-processor owns
+	// the live risk_score, and the static access-path score computed here lives
+	// on the Neo4j node as risk_static (see below).
+	_ = pgPool
+	_ = tenantID
 
 	if neo4jDriver != nil {
 		session := neo4jDriver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 		defer session.Close(ctx)
+		// Static access-path risk is stored on a dedicated property so it never
+		// clobbers the live event-driven risk_score/risk_band that the
+		// event-processor maintains. Combined views can fuse the two later.
 		_, err := session.Run(ctx, `
 			MATCH (i {uuid: $identityId}) WHERE i:Identity OR i:NonHumanIdentity
-			SET i.risk_score = $score, i.risk_factors = $factors, i.updated_at = datetime()
+			SET i.risk_static = $score, i.risk_static_factors = $factors,
+			    i.risk_static_calculated_at = datetime(), i.updated_at = datetime()
 		`, map[string]any{
 			"identityId": identityID,
 			"score":      score,

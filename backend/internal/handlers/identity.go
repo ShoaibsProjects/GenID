@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -9,6 +10,28 @@ import (
 	"net/http"
 	"time"
 )
+
+type identityItem struct {
+	ID             string   `json:"id"`
+	TenantID       string   `json:"tenant_id"`
+	Type           string   `json:"type"`
+	Status         string   `json:"status"`
+	Email          string   `json:"email"`
+	DisplayName    string   `json:"display_name"`
+	Department     *string  `json:"department"`
+	EmployeeID     *string  `json:"employee_id"`
+	ManagerID      *string  `json:"manager_id"`
+	Source         string   `json:"source"`
+	RiskScore      float64  `json:"risk_score"`
+	RiskBand       string   `json:"risk_band"`
+	RiskFactors    []string `json:"risk_factors"`
+	AssuranceLevel string   `json:"assurance_level"`
+	Attributes     string   `json:"attributes"`
+	CreatedAt      string   `json:"created_at"`
+	UpdatedAt      string   `json:"updated_at"`
+	LastAccessedAt *string  `json:"last_accessed_at"`
+	LastReviewedAt *string  `json:"last_reviewed_at"`
+}
 
 func (h *Handler) ListIdentities(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -98,27 +121,6 @@ func (h *Handler) ListIdentities(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	type identityItem struct {
-		ID             string   `json:"id"`
-		TenantID       string   `json:"tenant_id"`
-		Type           string   `json:"type"`
-		Status         string   `json:"status"`
-		Email          string   `json:"email"`
-		DisplayName    string   `json:"display_name"`
-		Department     *string  `json:"department"`
-		EmployeeID     *string  `json:"employee_id"`
-		ManagerID      *string  `json:"manager_id"`
-		Source         string   `json:"source"`
-		RiskScore      float64  `json:"risk_score"`
-		RiskFactors    []string `json:"risk_factors"`
-		AssuranceLevel string   `json:"assurance_level"`
-		Attributes     string   `json:"attributes"`
-		CreatedAt      string   `json:"created_at"`
-		UpdatedAt      string   `json:"updated_at"`
-		LastAccessedAt *string  `json:"last_accessed_at"`
-		LastReviewedAt *string  `json:"last_reviewed_at"`
-	}
-
 	identities := []identityItem{}
 	for rows.Next() {
 		var i identityItem
@@ -162,10 +164,83 @@ func (h *Handler) ListIdentities(w http.ResponseWriter, r *http.Request) {
 		identities = []identityItem{}
 	}
 
+	// Merge risk scores from Neo4j — the authoritative risk store (the event
+	// processor writes there, Postgres risk_score is stale). Single batched
+	// query so a page of identities is one graph round-trip.
+	h.mergeNeo4jRisk(r.Context(), identities)
+
 	respondJSON(w, http.StatusOK, map[string]any{
 		"identities": identities,
 		"total":      total,
 	})
+}
+
+// mergeNeo4jRisk overlays risk_score/risk_band/risk_factors from Neo4j onto a
+// page of identities fetched from Postgres. Neo4j is authoritative for risk;
+// the event processor writes there and the PG column is only set at create.
+// Failures are non-fatal — the caller still gets PG data.
+func (h *Handler) mergeNeo4jRisk(ctx context.Context, identities []identityItem) {
+	if len(identities) == 0 || h.Neo4j() == nil {
+		return
+	}
+	ids := make([]string, len(identities))
+	for i, id := range identities {
+		ids[i] = id.ID
+	}
+	session := h.Neo4j().NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	result, err := session.Run(ctx, `
+		MATCH (i:Identity) WHERE i.uuid IN $ids
+		RETURN i.uuid AS uuid, coalesce(i.risk_score, 0) AS risk_score,
+		       coalesce(i.risk_band, '') AS risk_band,
+		       coalesce(i.risk_factors, []) AS risk_factors
+	`, map[string]any{"ids": ids})
+	if err != nil {
+		return
+	}
+
+	riskByID := make(map[string]identityItem, len(identities))
+	for result.Next(ctx) {
+		rec := result.Record()
+		uuid, _ := rec.Get("uuid")
+		id, ok := uuid.(string)
+		if !ok {
+			continue
+		}
+		var entry identityItem
+		if score, ok := rec.Get("risk_score"); ok {
+			switch v := score.(type) {
+			case float64:
+				entry.RiskScore = v
+			case int64:
+				entry.RiskScore = float64(v)
+			}
+		}
+		if band, ok := rec.Get("risk_band"); ok {
+			entry.RiskBand = band.(string)
+		}
+		if factors, ok := rec.Get("risk_factors"); ok {
+			if arr, ok := factors.([]any); ok {
+				for _, f := range arr {
+					if s, ok := f.(string); ok {
+						entry.RiskFactors = append(entry.RiskFactors, s)
+					}
+				}
+			}
+		}
+		riskByID[id] = entry
+	}
+
+	for i := range identities {
+		if r, ok := riskByID[identities[i].ID]; ok {
+			identities[i].RiskScore = r.RiskScore
+			identities[i].RiskBand = r.RiskBand
+			if len(r.RiskFactors) > 0 {
+				identities[i].RiskFactors = r.RiskFactors
+			}
+		}
+	}
 }
 
 func (h *Handler) GetIdentity(w http.ResponseWriter, r *http.Request) {
